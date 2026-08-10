@@ -25,14 +25,11 @@ jobs:
       run: |
         echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/NOVAMessenger/app/google-services.json
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-
     - name: Build with Gradle
       run: |
         cd android/NOVAMessenger
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace --info
+        ./gradlew assembleDebug --no-daemon
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
