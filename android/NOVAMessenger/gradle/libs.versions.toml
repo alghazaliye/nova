@@ -3,6 +3,7 @@ agp = "8.6.1"
 kotlin = "2.0.21"
 composePlugin = "2.0.21"
 hilt = "2.52"
+googleServices = "4.4.2"
 core = "1.15.0"
 lifecycle = "2.8.7"
 activity = "1.10.0"
@@ -26,6 +27,7 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "composePlugin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
