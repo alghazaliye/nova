@@ -1,5 +1,15 @@
 <?php
 // Get pending reports count for badge
+
+// Polyfill: avoid fatal error when php-mbstring is not installed
+if (!function_exists('mb_substr')) {
+    function mb_substr($str, $start, $length = null) {
+        if ($length === null) {
+            return substr($str, $start);
+        }
+        return substr($str, $start, $length);
+    }
+}
 $pdo = getAdminDB();
 $pendingReports = 0;
 try {

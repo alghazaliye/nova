@@ -1,6 +1,16 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
+
+// Polyfill: avoid fatal error when php-mbstring is not installed
+if (!function_exists('mb_substr')) {
+    function mb_substr($str, $start, $length = null) {
+        if ($length === null) {
+            return substr($str, $start);
+        }
+        return substr($str, $start, $length);
+    }
+}
 $admin     = requireAdminLogin();
 $pageTitle = 'لوحة التحكم';
 $pdo       = getAdminDB();
