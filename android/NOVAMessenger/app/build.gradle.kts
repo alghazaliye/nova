@@ -20,7 +20,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // API Base URL — override in local.properties or CI/CD
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/nova-messenger/backend/public/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"https://8000-ipeqv5sdkktftfy00es9j-df9ba396.us2.manus.computer/api/v1/\"")
         buildConfigField("String", "WS_URL",       "\"wss://your-server.com:8080\"")
     }
 
