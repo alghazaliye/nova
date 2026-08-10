@@ -34,8 +34,17 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x android/NOVAMessenger/gradlew
 
+    - name: Debug Info
+      run: |
+        ls -R android/NOVAMessenger
+        java -version
+        gradle -version || echo "Gradle not in PATH"
+        
     - name: Build with Gradle
-      run: cd android/NOVAMessenger && ./gradlew assembleDebug
+      run: |
+        cd android/NOVAMessenger
+        chmod +x gradlew
+        ./gradlew assembleDebug --stacktrace --info
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
