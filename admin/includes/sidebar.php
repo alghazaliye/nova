@@ -61,6 +61,9 @@ function navActive(string $page, string $current): string {
     </a>
 
     <div class="navtitle">النظام</div>
+    <a href="monitoring.php" class="<?= navActive('monitoring', $currentPage) ?>">
+      <span>📊</span> المراقبة الحية
+    </a>
     <a href="admins.php" class="<?= navActive('admins', $currentPage) ?>">
       <span>♙</span> المشرفون والصلاحيات
     </a>
