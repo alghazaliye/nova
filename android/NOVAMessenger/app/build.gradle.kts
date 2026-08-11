@@ -21,7 +21,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // API Base URL — override in local.properties or CI/CD
-        buildConfigField("String", "API_BASE_URL", "\"https://8000-ipeqv5sdkktftfy00es9j-df9ba396.us2.manus.computer/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"https://8000-iy2t8j95c5m14qbmqwrjs-fda61887.us2.manus.computer/api/v1/\"")
         buildConfigField("String", "WS_URL",       "\"wss://your-server.com:8080\"")
     }
 
@@ -41,7 +41,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        freeCompilerArgs += listOf("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
+    }
 
     buildFeatures {
         compose = true

@@ -16,7 +16,7 @@ firebaseBom = "33.7.0"
 coil = "2.7.0"
 datastore = "1.1.1"
 coroutines = "1.9.0"
-webrtc = "1.0.32006"
+webrtc = "144.7559.09"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
@@ -60,7 +60,7 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
-webrtc = { module = "org.webrtc:google-webrtc", version.ref = "webrtc" }
+webrtc = { module = "io.github.webrtc-sdk:android", version.ref = "webrtc" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-junit = { module = "androidx.test.ext:junit", version.ref = "androidxJunit" }
