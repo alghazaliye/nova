@@ -67,8 +67,11 @@ function navActive(string $page, string $current): string {
     <a href="admins.php" class="<?= navActive('admins', $currentPage) ?>">
       <span>♙</span> المشرفون والصلاحيات
     </a>
+    <a href="services.php" class="<?= navActive('services', $currentPage) ?>">
+      <span>🔧</span> إعدادات الخدمات
+    </a>
     <a href="audit.php" class="<?= navActive('audit', $currentPage) ?>">
-      <span>☷</span> سجل العمليات
+      <span>␷</span> سجل العمليات
     </a>
     <a href="storage.php" class="<?= navActive('storage', $currentPage) ?>">
       <span>▤</span> التخزين والوسائط

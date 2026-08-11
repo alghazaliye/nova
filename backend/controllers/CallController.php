@@ -41,6 +41,9 @@ class CallController
         $this->pdo->prepare('INSERT INTO call_participants (call_id, user_id) VALUES (?, ?)')
                   ->execute([$callId, $calleeId]);
 
+        // Send FCM notification to callee
+        $this->sendCallNotification($callerId, $calleeId, $uuid, $callType);
+
         Response::success([
             'call_id'   => $callId,
             'call_uuid' => $uuid,
@@ -152,4 +155,33 @@ class CallController
         }
         $this->pdo->prepare('UPDATE calls SET status = ? WHERE id = ?')->execute([$status, $callId]);
     }
+}
+
+    private function sendCallNotification(int $callerId, int $calleeId, string $callUuid, string $callType): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT name, avatar FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$callerId]);
+            $caller = $stmt->fetch();
+            if (!$caller) return;
+
+            $stmt = $this->pdo->prepare(
+                'SELECT fcm_token FROM user_devices WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ""'
+            );
+            $stmt->execute([$calleeId]);
+            $devices = $stmt->fetchAll();
+
+            if (empty($devices)) return;
+
+            foreach ($devices as $device) {
+                FCMHelper::sendCallNotification(
+                    $device['fcm_token'],
+                    $caller['name'],
+                    $callUuid,
+                    $caller['avatar']
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('Call FCM notification error: ' . $e->getMessage());
+        }
 }

@@ -65,6 +65,10 @@ class StoryController
         )->execute([$uuid, $userId, $type, $text, $fileId, $privacy, $expiresAt]);
 
         $storyId = (int)$this->pdo->lastInsertId();
+        
+        // Send FCM notifications to followers
+        $this->sendStoryNotifications($userId, $storyId, $privacy);
+        
         Response::success($this->getStoryById($storyId), 'تم نشر الحالة', 201);
     }
 
@@ -124,5 +128,44 @@ class StoryController
         );
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
+    }
+
+    private function sendStoryNotifications(int $authorId, int $storyId, string $privacy): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT name, avatar FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$authorId]);
+            $author = $stmt->fetch();
+            if (!$author) return;
+
+            // Get contacts or all users based on privacy
+            if ($privacy === 'all') {
+                $stmt = $this->pdo->prepare(
+                    'SELECT DISTINCT ud.fcm_token FROM user_devices ud WHERE ud.fcm_token IS NOT NULL AND ud.fcm_token != ""'
+                );
+                $stmt->execute();
+            } else {
+                $stmt = $this->pdo->prepare(
+                    'SELECT DISTINCT ud.fcm_token FROM user_devices ud
+                     JOIN contacts c ON c.contact_user_id = ud.user_id
+                     WHERE c.user_id = ? AND ud.fcm_token IS NOT NULL AND ud.fcm_token != ""'
+                );
+                $stmt->execute([$authorId]);
+            }
+            
+            $devices = $stmt->fetchAll();
+            if (empty($devices)) return;
+
+            foreach ($devices as $device) {
+                FCMHelper::sendStoryNotification(
+                    $device['fcm_token'],
+                    $author['name'],
+                    (string)$storyId,
+                    $author['avatar']
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('Story FCM notification error: ' . $e->getMessage());
+        }
     }
 }
