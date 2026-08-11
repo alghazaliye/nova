@@ -5,15 +5,14 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch:
+  workflow_dispatch: # يسمح لك بتشغيل البناء يدوياً
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -23,23 +22,16 @@ jobs:
         cache: gradle
 
     - name: Create google-services.json
-      run: |
-        mkdir -p android/NOVAMessenger/app
-        if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-          echo "$GOOGLE_SERVICES_JSON" > android/NOVAMessenger/app/google-services.json
-          echo "Using google-services.json from secret"
-        else
-          cp google-services.json android/NOVAMessenger/app/google-services.json
-          echo "Using google-services.json from the repository"
-        fi
       env:
         GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      run: |
+        echo $GOOGLE_SERVICES_JSON > android/NOVAMessenger/app/google-services.json
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x android/NOVAMessenger/gradlew
 
     - name: Build with Gradle
-      run: |
-        cd android/NOVAMessenger
-        chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace --no-daemon
+      run: cd android/NOVAMessenger && ./gradlew assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
