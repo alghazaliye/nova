@@ -21,7 +21,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // API Base URL — override in local.properties or CI/CD
-        buildConfigField("String", "API_BASE_URL", "\"https://8000-iy2t8j95c5m14qbmqwrjs-fda61887.us2.manus.computer/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"https://8000-incp2njpequzqz8xw04yd-a06015b4.us2.manus.computer/api/v1/\"")
         buildConfigField("String", "WS_URL",       "\"wss://your-server.com:8080\"")
     }
 
