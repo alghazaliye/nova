@@ -113,6 +113,9 @@ class MessageController
 
             $this->pdo->commit();
 
+            // Send FCM notifications to other members
+            $this->sendMessageNotifications($convId, $userId, $messageBody);
+
             $message = $this->getMessageById($messageId);
             Response::success($message, 'تم إرسال الرسالة', 201);
         } catch (\Throwable $e) {
@@ -257,5 +260,42 @@ class MessageController
         );
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
+    }
+
+    private function sendMessageNotifications(int $convId, int $senderId, string $messagePreview): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT name, avatar FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$senderId]);
+            $sender = $stmt->fetch();
+            if (!$sender) return;
+
+            $stmt = $this->pdo->prepare(
+                'SELECT DISTINCT ud.fcm_token FROM user_devices ud
+                 JOIN conversation_members cm ON cm.user_id = ud.user_id
+                 WHERE cm.conversation_id = ? AND ud.user_id != ? AND ud.fcm_token IS NOT NULL AND ud.fcm_token != ""'
+            );
+            $stmt->execute([$convId, $senderId]);
+            $devices = $stmt->fetchAll();
+
+            if (empty($devices)) return;
+
+            $title = $sender['name'];
+            $body = mb_substr($messagePreview, 0, 100);
+            $data = ['conversation_id' => (string)$convId];
+            $avatar = $sender['avatar'];
+
+            foreach ($devices as $device) {
+                FCMHelper::sendMessageNotification(
+                    $device['fcm_token'],
+                    $title,
+                    $body,
+                    (string)$convId,
+                    $avatar
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('FCM notification error: ' . $e->getMessage());
+        }
     }
 }
