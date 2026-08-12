@@ -210,8 +210,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _startCall(String type) async {
+    final calleeId = widget.conv.otherUserId;
     final res = await ApiService.post('/calls', body: {
-      'contact_phone': widget.conv.phone.isNotEmpty ? widget.conv.phone : widget.conv.name,
+      'callee_id': calleeId,
       'call_type': type,
     });
     if (!mounted) return;

@@ -50,6 +50,7 @@ class Conversation {
   final List<NovaUser> members;
   final bool isVerified;
   final String phone;
+  final int otherUserId;
 
   Conversation({
     required this.id,
@@ -62,6 +63,7 @@ class Conversation {
     required this.members,
     this.isVerified = false,
     this.phone = '',
+    this.otherUserId = 0,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
@@ -81,6 +83,7 @@ class Conversation {
             : [],
         isVerified: (j['is_verified'] ?? 0) == 1,
         phone: _memberPhone(j),
+        otherUserId: _otherUserId(j),
       );
 
   static String _memberPhone(Map<String, dynamic> j) {
@@ -91,6 +94,16 @@ class Conversation {
       }
     } catch (_) {}
     return '';
+  }
+
+  static int _otherUserId(Map<String, dynamic> j) {
+    try {
+      final ou = j['other_user'];
+      if (ou is Map && ou['id'] != null) {
+        return ou['id'] is int ? ou['id'] as int : int.parse(ou['id'].toString());
+      }
+    } catch (_) {}
+    return 0;
   }
 }
 
