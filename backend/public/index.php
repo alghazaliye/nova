@@ -18,6 +18,8 @@ require_once __DIR__ . '/../controllers/MessageController.php';
 require_once __DIR__ . '/../controllers/StoryController.php';
 require_once __DIR__ . '/../controllers/CallController.php';
 require_once __DIR__ . '/../controllers/NotificationController.php';
+require_once __DIR__ . '/../controllers/AdminController.php';
+require_once __DIR__ . '/../controllers/DeviceController.php';
 
 // Parse request
 $method = $_SERVER['REQUEST_METHOD'];
@@ -49,6 +51,8 @@ if ($uri === '/auth/verify-otp' && $method === 'POST') {
 }
 if ($uri === '/auth/logout' && $method === 'POST') {
     (new AuthController())->logout();
+    file_put_contents('/tmp/nova_logout.log', date('H:i:s')." POST logout ".$_SERVER['REMOTE_ADDR']." token=".(substr(getallheaders()['Authorization'] ?? '',7,20))."
+", FILE_APPEND);
 }
 if ($uri === '/auth/me' && $method === 'GET') {
     (new AuthController())->me();
@@ -172,6 +176,65 @@ if (preg_match('#^/notifications/(\d+)/read$#', $uri, $m) && $method === 'POST')
 }
 if ($uri === '/notifications/read-all' && $method === 'POST') {
     (new NotificationController())->markAllRead();
+}
+
+// Admin Routes (admin-level access)
+if ($uri === '/admin/plans' && $method === 'GET') {
+    (new AdminController())->plansIndex();
+}
+if ($uri === '/admin/plans' && $method === 'POST') {
+    (new AdminController())->plansCreate();
+}
+if (preg_match('#^/admin/plans/(\d+)$#', $uri, $m) && $method === 'PUT') {
+    (new AdminController())->plansUpdate((int)$m[1]);
+}
+if (preg_match('#^/admin/plans/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new AdminController())->plansDelete((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/verify$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->verifyUser((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/ban$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->banUser((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/unban$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->unbanUser((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/subscribe$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->subscribeUser((int)$m[1]);
+}
+if (preg_match('#^/admin/subscriptions/(\d+)/cancel$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->cancelSubscription((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/admin$#', $uri, $m) && $method === 'GET') {
+    (new AdminController())->userAdmin((int)$m[1]);
+}
+if ($uri === '/admin/devices' && $method === 'GET') {
+    (new AdminController())->devicesIndex();
+}
+if (preg_match('#^/admin/devices/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new AdminController())->deviceDelete((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/devices/(\d+)$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->deactivateDevice((int)$m[1], (int)$m[2]);
+}
+
+// Device Routes (authenticated users)
+if ($uri === '/devices/register' && $method === 'POST') {
+    (new DeviceController())->register();
+}
+if ($uri === '/devices' && $method === 'GET') {
+    (new DeviceController())->index();
+}
+if (preg_match('#^/devices/(\d+)/toggle$#', $uri, $m) && $method === 'POST') {
+    (new DeviceController())->toggleDevice((int)$m[1]);
+}
+
+// Public plans list (for app pricing screen)
+if ($uri === '/plans' && $method === 'GET') {
+    Response::success(Database::getInstance()
+        ->query('SELECT id, name, description, price, currency, period, max_devices, features FROM plans WHERE is_active = 1 ORDER BY price ASC')
+        ->fetchAll() ?: []);
 }
 
 // Health check

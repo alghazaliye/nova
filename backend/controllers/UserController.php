@@ -174,11 +174,32 @@ class UserController
     {
         $stmt = $this->pdo->prepare(
             'SELECT id, uuid, phone, email, name, username, bio, avatar, status_text,
-                    is_online, last_seen, is_verified, created_at, updated_at
+                    is_online, last_seen, is_verified, is_blocked, created_at, updated_at
              FROM users WHERE id = ? LIMIT 1'
         );
         $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        $user = $stmt->fetch() ?: null;
+        if ($user) {
+            // Active subscription plan (if any)
+            $subStmt = $this->pdo->prepare(
+                'SELECT p.id, p.name, p.price, p.currency, p.period, p.max_devices, p.badge_color
+                 FROM user_subscriptions us
+                 JOIN plans p ON p.id = us.plan_id
+                 WHERE us.user_id = ? AND us.status = "active"
+                 ORDER BY us.id DESC LIMIT 1'
+            );
+            $subStmt->execute([$id]);
+            $user['plan'] = $subStmt->fetch() ?: null;
+
+            // Device quota info
+            $devStmt = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM device_registrations WHERE user_id = ? AND is_active = 1'
+            );
+            $devStmt->execute([$id]);
+            $user['active_devices_count'] = (int)$devStmt->fetchColumn();
+            $user['max_devices_allowed'] = $user['plan']['max_devices'] ?? 1;
+        }
+        return $user;
     }
 
     private function getPublicProfile(int $id): ?array

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
 import 'chats_screen.dart';
@@ -77,6 +79,7 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final c = NovaColors.of(context);
+    final me = context.watch<AuthProvider>().user;
     final activeCount = _devices.where((d) => (d['is_active'] ?? 0) == 1).length;
     final isNearLimit = activeCount >= _maxDevices;
 

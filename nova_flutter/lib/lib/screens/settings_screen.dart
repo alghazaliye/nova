@@ -214,9 +214,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               RowItem(
                                 leading: _iconBox(icon: Icons.info_outline),
                                 title: 'حول التطبيق',
-                                subtitle: 'NOVA Messenger v3.6.0 (Flutter)',
+                                subtitle: 'NOVA Messenger v3.2 (Flutter)',
                                 onTap: () => _infoDialog('حول NOVA Messenger',
-                                    'الإصدار: 3.6.0 (Flutter)\n\n• رسائل فورية مع تعديل وحذف لدى الطرفين\n• مكالمات صوتية وفيديو\n• القصص (الحالة)\n• الأجهزة المرتبطة (QR) بحدود الباقة\n• حسابات موثّقة بعلامة زرقاء\n• باقات الاشتراك (مجانية/ذهبية/بلاتينية)\n• نظام حظر الحسابات من لوحة الإدارة\n• إشعارات فورية FCM'),
+                                    'الإصدار: 3.2 (Flutter)\n\n• رسائل فورية مع تعديل وحذف لدى الطرفين\n• مكالمات صوتية وفيديو\n• القصص (الحالة)\n• الأجهزة المرتبطة (QR)\n• حسابات موثّقة بعلامة زرقاء\n• إشعارات فورية FCM'),
                               ),
                             ],
                           ),
