@@ -22,19 +22,30 @@ class AuthController
         $this->assertOtpProviderAvailable();
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
         $v = Validator::make($body)
             ->required('phone', 'رقم الهاتف')
-            ->phone('phone', 'رقم الهاتف')
-            ->required('name', 'الاسم')
-            ->minLength('name', 2, 'الاسم')
-            ->maxLength('name', 150, 'الاسم');
+            ->phone('phone', 'رقم الهاتف');
+
+        $countryCode = ($body['country_code'] ?? '') !== '' ? trim((string)$body['country_code'], '+') : null;
+        if (isset($body['name']) && trim((string)$body['name']) !== '') {
+            $v->minLength('name', 2, 'الاسم')->maxLength('name', 150, 'الاسم');
+        }
 
         if ($v->fails()) {
             Response::validationError($v->errors());
         }
 
+        // WhatsApp-style flow: phone + optional country_code; name/email optional
+        $countryCode = $v->sanitizeString('country_code');
+        $countryCode = ($countryCode !== '') ? trim($countryCode, '+') : null;
         $phone = $v->sanitizeString('phone');
-        $name  = $v->sanitizeString('name');
+        if ($countryCode !== null) {
+            $phone = '+' . $countryCode . ltrim($phone, '+0');
+        }
+        $name = isset($body['name']) && trim((string)$body['name']) !== ''
+            ? $v->sanitizeString('name')
+            : 'مستخدم NOVA';
 
         // Check if phone already exists
         $stmt = $this->pdo->prepare('SELECT id FROM users WHERE phone = ? LIMIT 1');
@@ -48,9 +59,6 @@ class AuthController
         $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
         $expiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
 
-        // Store OTP in a temp table or cache (using sessions table with special type)
-        // For simplicity: store in app_settings with phone as key (dev only)
-        // In production: use a dedicated otp_requests table
         $this->storeOtp($phone, $otpHash, $expiresAt, $name);
 
         // Send OTP (in dev mode, return it directly)
@@ -70,8 +78,7 @@ class AuthController
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $v = Validator::make($body)
             ->required('phone', 'رقم الهاتف')
-            ->required('otp', 'رمز التحقق')
-            ->required('name', 'الاسم');
+            ->required('otp', 'رمز التحقق');
 
         if ($v->fails()) {
             Response::validationError($v->errors());
@@ -79,7 +86,10 @@ class AuthController
 
         $phone = trim($body['phone']);
         $otp   = trim($body['otp']);
-        $name  = $v->sanitizeString('name');
+        // WhatsApp-style: name is supplied later via profile setup (optional here)
+        $name  = isset($body['name']) && trim((string)$body['name']) !== ''
+            ? $v->sanitizeString('name')
+            : null;
 
         // Verify OTP
         $otpData = $this->getStoredOtp($phone);
@@ -102,18 +112,21 @@ class AuthController
 
         if (!$user) {
             $uuid = UuidHelper::generate();
+            $displayName = $name ?? $otpData['name'];
             $stmt = $this->pdo->prepare(
                 'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
                  VALUES (?, ?, ?, 1, NOW(), NOW())'
             );
-            $stmt->execute([$uuid, $phone, $name]);
+            $stmt->execute([$uuid, $phone, $displayName]);
             $userId = (int)$this->pdo->lastInsertId();
         } else {
             $userId = (int)$user['id'];
             $uuid   = $user['uuid'];
-            // Mark as verified
-            $this->pdo->prepare('UPDATE users SET is_verified = 1, updated_at = NOW() WHERE id = ?')
-                      ->execute([$userId]);
+            // Update name if provided, and mark as verified
+            $stmt = $this->pdo->prepare($name !== null
+                ? 'UPDATE users SET is_verified = 1, name = ?, updated_at = NOW() WHERE id = ?'
+                : 'UPDATE users SET is_verified = 1, updated_at = NOW() WHERE id = ?');
+            $stmt->execute($name !== null ? [$name, $userId] : [$userId]);
         }
 
         // Clear OTP

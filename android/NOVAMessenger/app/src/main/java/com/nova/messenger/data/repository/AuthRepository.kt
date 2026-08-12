@@ -16,9 +16,9 @@ class AuthRepository @Inject constructor(
     private val apiClient: ApiClient,
     private val tokenManager: TokenManager
 ) {
-    suspend fun requestOtp(phone: String, name: String): Result<Unit> {
+    suspend fun requestOtp(phone: String, countryCode: String? = null): Result<Unit> {
         return try {
-            val response = apiClient.service.register(RegisterRequest(phone, name))
+            val response = apiClient.service.register(RegisterRequest(phone, countryCode))
             if (response.isSuccessful && response.body()?.success == true) {
                 Result.Success(Unit)
             } else {
@@ -29,7 +29,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun verifyOtp(phone: String, otp: String, name: String, deviceUuid: String, fcmToken: String?): Result<AuthResponse> {
+    suspend fun verifyOtp(phone: String, otp: String, deviceUuid: String, fcmToken: String?, name: String? = null): Result<AuthResponse> {
         return try {
             val response = apiClient.service.verifyOtp(
                 VerifyOtpRequest(phone, otp, name, deviceUuid, fcmToken)
@@ -59,4 +59,18 @@ class AuthRepository @Inject constructor(
     }
 
     fun isLoggedIn() = tokenManager.isLoggedIn()
+
+    suspend fun updateProfile(name: String, email: String?): Result<User> {
+        return try {
+            val response = apiClient.service.updateMe(UpdateProfileRequest(name = name, email = email))
+            val body = response.body()
+            if (response.isSuccessful && body?.success == true && body.data != null) {
+                Result.Success(body.data)
+            } else {
+                Result.Error(body?.message ?: "فشل في تحديث الملف الشخصي")
+            }
+        } catch (e: Exception) {
+            Result.Error("تعذر الاتصال بالخادم")
+        }
+    }
 }
