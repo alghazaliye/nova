@@ -24,7 +24,12 @@ class NovaApp extends StatelessWidget {
         title: 'NOVA Messenger',
         debugShowCheckedModeBanner: false,
         theme: baseTheme,
-        home: const _WebFrame(child: AppRouter()),
+        // RTL إجباري: المحادثات أولًا يمين، الإعدادات آخر يسار (مثل واتساب)
+        builder: (context, child) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: _WebFrame(child: child ?? const SizedBox.shrink()),
+        ),
+        home: const AppRouter(),
       ),
     );
   }
@@ -115,6 +120,3 @@ class _AppRouterState extends State<AppRouter> {
     return _target!;
   }
 }
-
-// للوصول لشاشة الويب لاحقًا:
-// Navigator.push(context, MaterialPageRoute(builder: (_) => const WebLoginScreen()));

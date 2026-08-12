@@ -5,7 +5,7 @@ import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
 import 'call_screen.dart';
 
-/// تبويب المكالمات: قائمة المكالمات السابقة + بدء مكالمة جديدة (صوت/فيديو)
+/// تبويب المكالمات — تصميم القالب مع chips + بطاقات + أزرار الاتصال
 class CallsScreen extends StatefulWidget {
   const CallsScreen({super.key});
 
@@ -16,6 +16,7 @@ class CallsScreen extends StatefulWidget {
 class _CallsScreenState extends State<CallsScreen> {
   List<Map<String, dynamic>> _calls = [];
   bool _loading = true;
+  String _chip = 'الكل';
 
   @override
   void initState() {
@@ -72,8 +73,7 @@ class _CallsScreenState extends State<CallsScreen> {
               builder: (_) => CallScreen(callData: Map<String, dynamic>.from(
                   res['data'] as Map<String, dynamic>))));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message'] ?? 'فشل بدء المكالمة')));
+      showToast(context, res['message'] ?? 'فشل بدء المكالمة');
     }
   }
 
@@ -152,150 +152,159 @@ class _CallsScreenState extends State<CallsScreen> {
     }
   }
 
+  List<Map<String, dynamic>> get _filtered {
+    switch (_chip) {
+      case 'الفائتة':
+        return _calls.where((c) => c['status'] == 'missed').toList();
+      case 'الواردة':
+        return _calls.where((c) => c['caller_id'].toString() != (context.read<AuthProvider>().user?.id ?? -1).toString()).toList();
+      default:
+        return _calls;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
     final me = auth.user;
-    return Scaffold(
-      body: Column(
-        children: [
-          // شريط العنوان
-          Container(
-            color: c.surface,
-            child: SafeArea(
-              bottom: false,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(18, 13, 18, 13),
-                decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: c.line))),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text('المكالمات',
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: c.text)),
-                    ),
-                  ],
+    return Column(
+      children: [
+        novaTopBar(context,
+            title: 'المكالمات',
+            actions: [
+              PressScale(
+                onTap: () => _startCall('video'),
+                child: Container(
+                  decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(13)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.videocam, size: 17, color: Colors.white),
+                      SizedBox(width: 5),
+                      Text('فيديو', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                    ],
+                  ),
                 ),
               ),
-            ),
+              PressScale(
+                onTap: () => _startCall('voice'),
+                child: Container(
+                  decoration: BoxDecoration(color: c.green, borderRadius: BorderRadius.circular(13)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.call, size: 17, color: Colors.white),
+                      SizedBox(width: 5),
+                      Text('صوت', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            ]),
+        // chips
+        Container(
+          color: c.surface,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              TabChip(label: 'الكل', active: _chip == 'الكل', onTap: () => setState(() => _chip = 'الكل')),
+              const SizedBox(width: 8),
+              TabChip(label: 'الفائتة', active: _chip == 'الفائتة', onTap: () => setState(() => _chip = 'الفائتة')),
+              const SizedBox(width: 8),
+              TabChip(label: 'الواردة', active: _chip == 'الواردة', onTap: () => setState(() => _chip = 'الواردة')),
+            ],
           ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _calls.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.call_missed_outlined,
-                                size: 72, color: c.muted.withOpacity(0.45)),
-                            const SizedBox(height: 12),
-                            Text('لا توجد مكالمات بعد',
-                                style: TextStyle(fontSize: 16, color: c.muted)),
-                            const SizedBox(height: 8),
-                            Text('استخدم الزر لبدء مكالمة صوتية أو فيديو',
-                                style: TextStyle(fontSize: 13, color: c.muted)),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _load,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 160),
-                          itemCount: _calls.length,
-                          itemBuilder: (_, i) {
-                            final call = _calls[i];
-                            final incoming =
-                                call['caller_id'].toString() != (me?.id ?? -1).toString();
-                            final isVideo =
-                                (call['call_type'] ?? '').toString() == 'video';
-                            final missed = call['status'] == 'missed';
-                            return PressScale(
-                              onTap: () => _showCallMenu(call),
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: NovaCard(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 50,
-                                        height: 50,
-                                        decoration: BoxDecoration(
-                                          color: c.surface2,
-                                          borderRadius: BorderRadius.circular(15),
-                                        ),
-                                        child: Icon(
-                                            isVideo ? Icons.videocam : Icons.call,
-                                            color: missed
-                                                ? Colors.redAccent
-                                                : incoming
-                                                    ? Colors.green
-                                                    : c.accent,
-                                            size: 22),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.call_missed_outlined,
+                              size: 72, color: c.muted.withOpacity(0.45)),
+                          const SizedBox(height: 12),
+                          Text('لا توجد مكالمات بعد',
+                              style: TextStyle(fontSize: 16, color: c.muted)),
+                          const SizedBox(height: 8),
+                          Text('استخدم الأزرار لبدء مكالمة صوتية أو فيديو',
+                              style: TextStyle(fontSize: 13, color: c.muted)),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 160),
+                        itemCount: _filtered.length,
+                        itemBuilder: (_, i) {
+                          final call = _filtered[i];
+                          final incoming =
+                              call['caller_id'].toString() != (me?.id ?? -1).toString();
+                          final isVideo =
+                              (call['call_type'] ?? '').toString() == 'video';
+                          final missed = call['status'] == 'missed';
+                          final label = incoming
+                              ? 'مكالمة ${call['caller_name'] ?? 'واردة'}'
+                              : 'مكالمة إلى ${call['receiver_name'] ?? 'صادر'}';
+                          return PressScale(
+                            onTap: () => _showCallMenu(call),
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: NovaCard(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 54,
+                                      height: 54,
+                                      decoration: BoxDecoration(
+                                        color: c.surface2,
+                                        borderRadius: BorderRadius.circular(17),
                                       ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                                incoming
-                                                    ? 'مكالمة ${call['caller_name'] ?? 'واردة'}'
-                                                    : 'مكالمة إلى ${call['receiver_name'] ?? 'صادر'}',
-                                                style: TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: missed
-                                                        ? Colors.redAccent
-                                                        : c.text)),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                                '${_statusLabel(call)} • ${(call['created_at'] ?? '').toString().length >= 16 ? (call['created_at'] ?? '').toString().substring(0, 16) : (call['created_at'] ?? '')}',
-                                                style: TextStyle(
-                                                    fontSize: 13, color: c.muted)),
-                                          ],
-                                        ),
+                                      child: Icon(
+                                          isVideo ? Icons.videocam : Icons.call,
+                                          color: missed
+                                              ? Colors.redAccent
+                                              : incoming
+                                                  ? Colors.green
+                                                  : c.accent,
+                                          size: 23),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(label,
+                                              style: TextStyle(
+                                                  fontSize: 15.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: missed ? Colors.redAccent : c.text)),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                              '${_statusLabel(call)} • ${timeShort(call['created_at'] ?? '')}',
+                                              style: TextStyle(fontSize: 13, color: c.muted)),
+                                        ],
                                       ),
-                                      IconBtn(
-                                          icon: Icons.call,
-                                          color: c.accent,
-                                          onTap: () => _showCallMenu(call)),
-                                    ],
-                                  ),
+                                    ),
+                                    IconBtn(
+                                        icon: Icons.call,
+                                        color: c.accent,
+                                        onTap: () => _showCallMenu(call)),
+                                  ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
                       ),
-          ),
-        ],
-      ),
-      floatingActionButton: NovaCard(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconBtn(
-              icon: Icons.videocam,
-              color: c.accent,
-              onTap: () => _startCall('video'),
-            ),
-            const SizedBox(width: 6),
-            IconBtn(
-              icon: Icons.call,
-              color: c.accent,
-              onTap: () => _startCall('voice'),
-            ),
-          ],
+                    ),
         ),
-      ),
+      ],
     );
   }
 }
