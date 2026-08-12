@@ -27,8 +27,10 @@ INSERT INTO `permissions` (`name`, `description`) VALUES
   ('reports.view',    'عرض البلاغات'),
   ('reports.resolve', 'معالجة البلاغات'),
   ('admins.manage',   'إدارة المشرفين'),
-  ('settings.manage', 'إدارة الإعدادات'),
-  ('audit.view',      'عرض سجل العمليات');
+  ('settings.manage',   'إدارة الإعدادات'),
+  ('audit.view',      'عرض سجل العمليات'),
+  ('subscriptions.manage', 'إدارة الاشتراكات المميزة'),
+  ('users.manage',    'إدارة المستخدمين والصلاحيات');
 
 -- Grant all permissions to super_admin (role_id = 1)
 INSERT INTO `role_permissions` (`role_id`, `permission_id`)

@@ -147,8 +147,17 @@ class MessageController
             Response::error('نص الرسالة لا يمكن أن يكون فارغاً', 'EMPTY_MESSAGE', 400);
         }
 
+        // Save edit history (before/after) for admin tracking
+        $this->pdo->prepare(
+            'INSERT INTO message_edits (message_id, conversation_id, user_id, old_body, new_body, edited_at)
+             VALUES (?, ?, ?, ?, ?, NOW())'
+        )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'], $newBody]);
+
         $this->pdo->prepare('UPDATE messages SET body = ?, updated_at = NOW() WHERE id = ?')
                   ->execute([$newBody, $id]);
+
+        // Notify other members (for both-parties update sync)
+        $this->notifyMessageEvent((int)$msg['conversation_id'], $id, 'edited', (int)$msg['sender_id']);
 
         Response::success($this->getMessageById($id), 'تم تعديل الرسالة');
     }
@@ -168,11 +177,35 @@ class MessageController
             Response::forbidden('لا يمكنك حذف رسالة شخص آخر');
         }
 
-        $this->pdo->prepare(
-            'UPDATE messages SET status = "deleted", deleted_at = NOW(), body = NULL, updated_at = NOW() WHERE id = ?'
-        )->execute([$id]);
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $forAll = filter_var($body['for_all'] ?? $body['everyone'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $scope = $forAll ? 'everyone' : 'self';
 
-        Response::success(null, 'تم حذف الرسالة');
+        // Save deletion record with original content for admin tracking (before deletion)
+        $this->pdo->prepare(
+            'INSERT INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW())'
+        )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'], $msg['type'], $scope]);
+
+        if ($forAll) {
+            // Delete for everyone: mark deleted server-side for all members
+            $this->pdo->prepare(
+                'UPDATE messages SET status = "deleted", deleted_at = NOW(), body = NULL, updated_at = NOW() WHERE id = ?'
+            )->execute([$id]);
+        } else {
+            // Delete for self only: update per-user read state, keep message visible to others
+            $this->pdo->prepare(
+                'UPDATE conversation_members SET last_read_message_id = 0, left_at = left_at WHERE conversation_id = ? AND user_id = ?'
+            )->execute([(int)$msg['conversation_id'], $userId]);
+            $this->pdo->prepare(
+                'INSERT INTO message_reads (message_id, user_id, read_at, deleted_for_me) VALUES (?, ?, NOW(), 1) ON DUPLICATE KEY UPDATE deleted_for_me = 1'
+            )->execute([$id, $userId]);
+        }
+
+        // Notify other members to sync deletion on their devices
+        $this->notifyMessageEvent((int)$msg['conversation_id'], $id, $forAll ? 'deleted' : 'deleted_for_me', (int)$msg['sender_id']);
+
+        Response::success(null, $forAll ? 'تم حذف الرسالة لدى الجميع' : 'تم حذف الرسالة لديك');
     }
 
     // POST /api/v1/messages/{id}/read
@@ -235,6 +268,38 @@ class MessageController
     // =====================================================
     // Private Helpers
     // =====================================================
+
+    /**
+     * Send FCM data notification to other members when a message is edited or deleted (sync for both parties).
+     */
+    private function notifyMessageEvent(int $convId, int $messageId, string $event, int $exceptUserId): void
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT DISTINCT ud.fcm_token FROM user_devices ud
+                 JOIN conversation_members cm ON cm.user_id = ud.user_id
+                 WHERE cm.conversation_id = ? AND ud.user_id != ? AND ud.fcm_token IS NOT NULL AND ud.fcm_token != ""'
+            );
+            $stmt->execute([$convId, $exceptUserId]);
+            $devices = $stmt->fetchAll();
+            if (empty($devices)) return;
+            foreach ($devices as $device) {
+                FCMHelper::sendToDevice(
+                    $device['fcm_token'],
+                    'NOVA Messenger',
+                    $event === 'edited' ? 'تم تعديل رسالة' : 'تم حذف رسالة',
+                    [
+                        'type' => 'message_event',
+                        'event' => $event,
+                        'message_id' => (string)$messageId,
+                        'conversation_id' => (string)$convId,
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('Message event notification error: ' . $e->getMessage());
+        }
+    }
 
     private function requireMember(int $convId, int $userId): void
     {

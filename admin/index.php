@@ -85,11 +85,11 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <!-- حالة النظام الحية -->
-<div style="margin: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
+<div style="margin: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; min-width: 0; width: 100%;">
     <div style="padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9;">قاعدة البيانات</h4>
         <p style="font-size: 20px; font-weight: bold; margin: 0;">✓ متصل</p>
-        <small style="opacity: 0.8;">حجم: <?= number_format($dbSize, 2) ?> MB</small>
+        <small style="opacity: 0.8;">حجم: <?= number_format((float)$dbSize, 2) ?> MB</small>
     </div>
     <div style="padding: 15px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9;">الخادم</h4>
@@ -109,7 +109,7 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <!-- الإحصائيات الرئيسية -->
-<div class="stats" style="margin: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
+<div class="stats" style="margin: 20px 0; gap: 14px;">
   <div class="card stat" style="padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
     <div style="font-size: 32px; margin-bottom: 10px;">👥</div>
     <div>
@@ -145,7 +145,7 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <!-- الإحصائيات الإضافية -->
-<div style="margin: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+<div style="margin: 0 0 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; width: 100%; min-width: 0;">
   <div style="padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
     <h4 style="margin-top: 0; color: #333;">💬 المحادثات</h4>
     <p style="font-size: 28px; font-weight: bold; color: #667eea; margin: 10px 0;"><?= number_format($totalConversations) ?></p>
@@ -163,7 +163,7 @@ include __DIR__ . '/includes/sidebar.php';
   </div>
 </div>
 
-<div class="grid2" style="margin: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+<div class="grid2" style="margin: 20px 0; gap: 18px;">
   <!-- نشاط الرسائل -->
   <div class="card panel" style="background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px;">
     <h3 style="margin-top: 0; color: #333;">📈 نشاط الرسائل — آخر 7 أيام</h3>
@@ -208,7 +208,7 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <!-- المستخدمون الأخيرون -->
-<div class="card panel" style="margin: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px;">
+<div class="card panel" style="margin: 20px 0; background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); padding: 18px;">
   <h3 style="margin-top: 0; color: #333;">👥 المستخدمون الأخيرون</h3>
   <table style="width: 100%; border-collapse: collapse;">
     <thead style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
@@ -238,7 +238,7 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <!-- نصائح وإجراءات سريعة -->
-<div style="margin: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+<div style="margin: 0 0 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; width: 100%; min-width: 0;">
   <div style="padding: 15px; background: #e7f3ff; border-left: 4px solid #0066cc; border-radius: 4px;">
     <h4 style="margin: 0 0 10px 0; color: #0066cc;">💡 نصيحة</h4>
     <p style="margin: 0; color: #004085; font-size: 12px;">تحقق من <a href="monitoring.php" style="color: #0066cc; text-decoration: none;">المراقبة الحية</a> للحصول على معلومات مفصلة عن الأداء</p>

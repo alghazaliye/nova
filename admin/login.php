@@ -16,13 +16,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['login_csrf'] ?? '', $csrf)) {
         $error = 'انتهت صلاحية النموذج، أعد المحاولة';
     }
-    $email    = trim($_POST['email'] ?? '');
+    $login    = trim($_POST['login'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
-    if (!$error && $email && $password) {
+    if (!$error && $login && $password) {
         $pdo  = getAdminDB();
-        $stmt = $pdo->prepare('SELECT id, name, password_hash, is_active FROM admins WHERE email = ? LIMIT 1');
-        $stmt->execute([$email]);
+        // القبول بالاسم أو البريد الإلكتروني
+        $stmt = $pdo->prepare('SELECT id, name, password_hash, is_active FROM admins WHERE email = ? OR name = ? LIMIT 1');
+        $stmt->execute([$login, $login]);
         $admin = $stmt->fetch();
 
         if ($admin && $admin['is_active'] && password_verify($password, $admin['password_hash'])) {
@@ -34,10 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: index.php');
             exit;
         } else {
-            $error = 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+            $error = 'بيانات الدخول أو كلمة المرور غير صحيحة';
         }
     } else {
-        $error = 'يرجى إدخال البريد الإلكتروني وكلمة المرور';
+        $error = 'يرجى إدخال الاسم أو البريد الإلكتروني وكلمة المرور';
     }
 }
 ?>
@@ -119,9 +120,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <form method="POST">
     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($_SESSION['login_csrf'], ENT_QUOTES, 'UTF-8') ?>">
     <div class="form-group">
-      <label>البريد الإلكتروني</label>
-      <input type="email" name="email" required placeholder="admin@example.com"
-             value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+      <label>الاسم أو البريد الإلكتروني</label>
+      <input type="text" name="login" required placeholder="محمد أو admin@example.com"
+             value="<?= htmlspecialchars($_POST['login'] ?? '') ?>">
     </div>
     <div class="form-group">
       <label>كلمة المرور</label>

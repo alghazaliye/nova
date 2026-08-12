@@ -1,0 +1,5 @@
+package com.nova.nova_flutter
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity: FlutterActivity()

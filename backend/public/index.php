@@ -156,6 +156,12 @@ if (preg_match('#^/calls/(\d+)/reject$#', $uri, $m) && $method === 'POST') {
 if (preg_match('#^/calls/(\d+)/end$#', $uri, $m) && $method === 'POST') {
     (new CallController())->end((int)$m[1]);
 }
+if (preg_match('#^/calls/(\d+)/signal$#', $uri, $m) && $method === 'POST') {
+    (new CallController())->signal((int)$m[1]);
+}
+if (preg_match('#^/calls/(\d+)/signals$#', $uri, $m) && $method === 'GET') {
+    (new CallController())->signals((int)$m[1]);
+}
 
 // Notification Routes
 if ($uri === '/notifications' && $method === 'GET') {

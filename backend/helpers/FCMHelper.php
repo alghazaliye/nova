@@ -32,16 +32,26 @@ class FCMHelper
     /**
      * Send notification to a single device
      */
-    public static function sendToDevice(
+        public static function sendToDevice(
         string $deviceToken,
         string $title,
         string $body,
         array $data = [],
-        ?string $imageUrl = null
+        ?string $imageUrl = null,
+        bool $highPriority = false
     ): bool {
         if (!self::isEnabled()) {
             error_log('FCM is not enabled or configured');
             return false;
+        }
+        if ($highPriority) {
+            // Data-only high-priority message for instant WebRTC signaling delivery
+            return self::sendRequest([
+                'to' => $deviceToken,
+                'data' => array_map(fn($v) => is_string($v) ? $v : json_encode($v), $data),
+                'priority' => 'high',
+                'content_available' => true,
+            ]);
         }
 
         $payload = [
@@ -52,7 +62,7 @@ class FCMHelper
                 'sound' => 'default',
                 'priority' => 'high',
             ],
-            'data' => $data,
+            'data' => array_map(fn($v) => is_string($v) ? $v : json_encode($v), $data),
         ];
 
         if ($imageUrl) {
@@ -154,6 +164,31 @@ class FCMHelper
                 'action' => 'answer_call',
             ],
             $callerAvatar
+        );
+    }
+
+    /**
+     * Send a high-priority WebRTC call signaling data message
+     */
+    public static function sendCallSignalNotification(
+        string $deviceToken,
+        string $callId,
+        string $signalType,
+        string $payloadJson,
+        ?string $senderName = null
+    ): bool {
+        $payload = json_decode($payloadJson, true);
+        if (!is_array($payload)) {
+            $payload = ['raw' => $payloadJson];
+        }
+
+        return self::sendToDevice(
+            $deviceToken,
+            $senderName ? "إشارة مكالمة من $senderName" : 'إشارة مكالمة',
+            '',
+            array_merge(['type' => 'call_signal', 'call_id' => $callId, 'signal_type' => $signalType], $payload),
+            null,
+            true
         );
     }
 

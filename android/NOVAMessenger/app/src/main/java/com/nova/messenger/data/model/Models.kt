@@ -118,7 +118,9 @@ data class Message(
     @SerializedName("sender_name") val senderName: String,
     @SerializedName("sender_avatar") val senderAvatar: String? = null,
     @SerializedName("created_at") val createdAt: String,
-    @SerializedName("deleted_at") val deletedAt: String? = null
+    @SerializedName("deleted_at") val deletedAt: String? = null,
+    @SerializedName("edited_at") val editedAt: String? = null,
+    @SerializedName("edited_by") val editedBy: Long? = null
 )
 
 data class SendMessageRequest(
