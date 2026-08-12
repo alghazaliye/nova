@@ -79,7 +79,26 @@ class _AppRouterState extends State<AppRouter> {
   @override
   void initState() {
     super.initState();
+    context.read<AuthProvider>().addListener(_onAuthChanged);
     _init();
+  }
+
+  @override
+  void dispose() {
+    context.read<AuthProvider>().removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    // إعادة توجيه فورية عند تسجيل خروج/دخول (بدون إعادة تحميل)
+    final token = AuthProvider.currentToken;
+    if (_checked) {
+      if (token == null && _target is! PhoneScreen) {
+        if (mounted) setState(() { _target = const PhoneScreen(); });
+      } else if (token != null && _target is PhoneScreen) {
+        if (mounted) setState(() { _target = const ChatsScreen(); });
+      }
+    }
   }
 
   Future<void> _init() async {
@@ -101,6 +120,7 @@ class _AppRouterState extends State<AppRouter> {
     if (token != null) {
       final ok = await context.read<AuthProvider>().fetchMe();
       target = ok ? const ChatsScreen() : const PhoneScreen();
+      _onAuthChanged();
     } else {
       target = const PhoneScreen();
     }

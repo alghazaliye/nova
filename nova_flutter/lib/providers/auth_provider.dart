@@ -20,6 +20,9 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isLoggedIn => _user != null;
 
+  /// التوكن الحالي في الذاكرة (لقراءة فورية دون await)
+  static String? get currentToken => ApiService.token;
+
   /// حفظ رمز التحقق
   static Future<void> saveToken(String token) async {
     ApiService.token = token;
