@@ -14,6 +14,8 @@ sealed class AuthUiState {
     object Idle    : AuthUiState()
     object Loading : AuthUiState()
     object OtpSent : AuthUiState()
+    // Name/email profile setup is done after OTP verification (WhatsApp-style)
+    object VerifySuccess : AuthUiState()
     object Success : AuthUiState()
     data class Error(val message: String) : AuthUiState()
 }
@@ -26,31 +28,47 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState
 
-    fun requestOtp(phone: String, name: String) {
+    fun requestOtp(phone: String, countryCode: String? = null) {
         if (phone.isBlank()) {
             _uiState.value = AuthUiState.Error("يرجى إدخال رقم الهاتف")
-            return
-        }
-        if (name.isBlank()) {
-            _uiState.value = AuthUiState.Error("يرجى إدخال اسمك")
             return
         }
 
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            when (val result = authRepository.requestOtp(phone, name)) {
+            when (val result = authRepository.requestOtp(phone, countryCode)) {
                 is Result.Success -> _uiState.value = AuthUiState.OtpSent
                 is Result.Error   -> _uiState.value = AuthUiState.Error(result.message)
             }
         }
     }
 
-    fun verifyOtp(phone: String, otp: String, name: String, deviceUuid: String, fcmToken: String?) {
+    // Re-send OTP (WhatsApp-style "use a different number" flow)
+    fun resendOtp(phone: String, countryCode: String? = null) = requestOtp(phone, countryCode)
+
+    fun verifyOtp(phone: String, otp: String, deviceUuid: String, fcmToken: String?) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            when (val result = authRepository.verifyOtp(phone, otp, name, deviceUuid, fcmToken)) {
-                is Result.Success -> _uiState.value = AuthUiState.Success
+            when (val result = authRepository.verifyOtp(phone, otp, deviceUuid, fcmToken)) {
+                is Result.Success -> _uiState.value = AuthUiState.VerifySuccess
                 is Result.Error   -> _uiState.value = AuthUiState.Error(result.message)
+            }
+        }
+    }
+
+    fun updateProfile(name: String, email: String?, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Loading
+            val result = authRepository.updateProfile(name, email)
+            when (result) {
+                is Result.Success -> {
+                    _uiState.value = AuthUiState.Success
+                    onDone(true)
+                }
+                is Result.Error -> {
+                    _uiState.value = AuthUiState.Error(result.message)
+                    onDone(false)
+                }
             }
         }
     }
