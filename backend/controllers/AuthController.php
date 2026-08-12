@@ -40,8 +40,14 @@ class AuthController
         $countryCode = $v->sanitizeString('country_code');
         $countryCode = ($countryCode !== '') ? trim($countryCode, '+') : null;
         $phone = $v->sanitizeString('phone');
-        if ($countryCode !== null) {
-            $phone = '+' . $countryCode . ltrim($phone, '+0');
+        if ($countryCode !== null && $phone !== '') {
+            $phone = ltrim($phone, '+0');
+            // Avoid duplicating the country code if the phone already starts with it
+            if (str_starts_with($phone, $countryCode)) {
+                $phone = '+' . $phone;
+            } else {
+                $phone = '+' . $countryCode . $phone;
+            }
         }
         $name = isset($body['name']) && trim((string)$body['name']) !== ''
             ? $v->sanitizeString('name')
@@ -129,8 +135,10 @@ class AuthController
             $stmt->execute($name !== null ? [$name, $userId] : [$userId]);
         }
 
-        // Clear OTP
-        $this->clearOtp($phone);
+        // Clear OTP (in dev mode keep it alive so test users can re-login with the same code)
+        if (!($this->isDevelopmentOtp() && ($_ENV['APP_ENV'] ?? 'production') === 'development')) {
+            $this->clearOtp($phone);
+        }
 
         // Create session token
         $token    = $this->createSession($userId, $body['device_uuid'] ?? null, $body['fcm_token'] ?? null);

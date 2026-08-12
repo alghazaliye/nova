@@ -1,6 +1,9 @@
 package com.nova.messenger.ui.chat
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,11 +13,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,15 +30,24 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.inject.Inject
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     conversationId: Long,
     onNavigateBack: () -> Unit,
+    onNavigateToCall: (callType: String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+
+    // Message edit dialog
+    var editingMessage by remember { mutableStateOf<Message?>(null) }
+    var editDraft by remember { mutableStateOf("") }
+    var editDialogOpen by remember { mutableStateOf(false) }
+    var showDeleteOptions by remember { mutableStateOf<Message?>(null) }
 
     LaunchedEffect(conversationId) {
         viewModel.loadMessages(conversationId)
@@ -44,6 +58,64 @@ fun ChatScreen(
         val messages = (uiState as? ChatUiState.Success)?.messages
         if (!messages.isNullOrEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    if (editDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { editDialogOpen = false },
+            title = { Text("تعديل الرسالة") },
+            text = {
+                OutlinedTextField(
+                    value = editDraft,
+                    onValueChange = { editDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = editDraft.isNotBlank(),
+                    onClick = {
+                        editingMessage?.let { viewModel.editMessage(it.id, editDraft.trim()) }
+                        editDialogOpen = false
+                        editingMessage = null
+                    }
+                ) { Text("حفظ") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editDialogOpen = false }) { Text("إلغاء") }
+            }
+        )
+    }
+
+    showDeleteOptions?.let { target ->
+        Dialog(onDismissRequest = { showDeleteOptions = null }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(20.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("حذف الرسالة", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("كيف تريد حذف هذه الرسالة؟", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = {
+                        viewModel.deleteMessage(target.id, forAll = false)
+                        Toast.makeText(context, "تم حذف الرسالة لديك", Toast.LENGTH_SHORT).show()
+                        showDeleteOptions = null
+                    }) { Text("حذف لديّ") }
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteMessage(target.id, forAll = true)
+                            Toast.makeText(context, "تم حذف الرسالة لدى الجميع", Toast.LENGTH_SHORT).show()
+                            showDeleteOptions = null
+                        }
+                    ) { Text("حذف لدى الجميع", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { showDeleteOptions = null }) { Text("إلغاء") }
+                }
+            }
         }
     }
 
@@ -66,11 +138,21 @@ fun ChatScreen(
                             )
                         }
                         Column {
-                            Text(
-                                (uiState as? ChatUiState.Success)?.conversationTitle ?: "محادثة",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    (uiState as? ChatUiState.Success)?.conversationTitle ?: "محادثة",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                if ((uiState as? ChatUiState.Success)?.isVerified == true) {
+                                    Icon(
+                                        Icons.Default.Verified,
+                                        contentDescription = "حساب موثق",
+                                        tint = Color(0xFF2563EB),
+                                        modifier = Modifier.size(18.dp).padding(start = 4.dp)
+                                    )
+                                }
+                            }
                             Text("متصل الآن", fontSize = 12.sp, color = Color(0xFF22C55E))
                         }
                     }
@@ -81,10 +163,10 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* Voice call */ }) {
+                    IconButton(onClick = { onNavigateToCall("voice") }) {
                         Icon(Icons.Default.Phone, contentDescription = "مكالمة صوتية")
                     }
-                    IconButton(onClick = { /* Video call */ }) {
+                    IconButton(onClick = { onNavigateToCall("video") }) {
                         Icon(Icons.Default.Videocam, contentDescription = "مكالمة فيديو")
                     }
                     IconButton(onClick = { /* More options */ }) {
@@ -123,7 +205,16 @@ fun ChatScreen(
                         items(state.messages, key = { it.id }) { message ->
                             MessageBubble(
                                 message = message,
-                                isMe = message.senderId == state.myUserId
+                                isMe = message.senderId == state.myUserId,
+                                isEditable = message.senderId == state.myUserId && message.deletedAt == null,
+                                onLongPress = {
+                                    showDeleteOptions = it
+                                },
+                                onEditRequest = {
+                                    editingMessage = it
+                                    editDraft = it.body ?: ""
+                                    editDialogOpen = true
+                                }
                             )
                         }
                     }
@@ -139,10 +230,14 @@ fun ChatScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     message: Message,
-    isMe: Boolean
+    isMe: Boolean,
+    isEditable: Boolean,
+    onLongPress: (Message) -> Unit,
+    onEditRequest: (Message) -> Unit
 ) {
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor   = if (isMe) Color.White else MaterialTheme.colorScheme.onSurface
@@ -168,6 +263,8 @@ private fun MessageBubble(
         return
     }
 
+    val showMenu = isMe
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = alignment
@@ -178,6 +275,10 @@ private fun MessageBubble(
                 .clip(shape)
                 .background(bubbleColor)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { if (showMenu) onLongPress(message) }
+                )
         ) {
             Column {
                 Text(
@@ -191,6 +292,13 @@ private fun MessageBubble(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (message.editedAt != null) {
+                        Text(
+                            text = "(معدلة)",
+                            fontSize = 10.sp,
+                            color = if (isMe) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Text(
                         text = message.createdAt.take(16).takeLast(5),
                         fontSize = 10.sp,
@@ -207,6 +315,29 @@ private fun MessageBubble(
                             fontSize = 11.sp,
                             color = if (message.status == "read") Color(0xFF60A5FA) else Color.White.copy(alpha = 0.7f)
                         )
+                    }
+                }
+                if (isEditable) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        TextButton(
+                            onClick = { onEditRequest(message) },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "تعديل", modifier = Modifier.size(13.dp))
+                            Text("تعديل", fontSize = 11.sp)
+                        }
+                        TextButton(
+                            onClick = { onLongPress(message) },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "حذف", modifier = Modifier.size(13.dp))
+                            Text("حذف", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }

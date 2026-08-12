@@ -10,6 +10,32 @@ import javax.inject.Singleton
 class MessageRepository @Inject constructor(
     private val apiClient: ApiClient
 ) {
+    data class ConversationInfo(val title: String, val isVerified: Boolean)
+    suspend fun getConversationInfo(conversationId: Long): Result<ConversationInfo> {
+        return try {
+            val response = apiClient.service.getConversation(conversationId)
+            val body = response.body()
+            if (response.isSuccessful && body?.success == true && body.data != null) {
+                val conv = body.data
+                val title = if (conv.type == "private" && conv.otherUser != null) {
+                    conv.otherUser.name
+                } else {
+                    conv.title ?: "محادثة"
+                }
+                Result.Success(
+                    ConversationInfo(
+                        title = title,
+                        isVerified = conv.otherUser?.isVerified == true
+                    )
+                )
+            } else {
+                Result.Error("فشل في جلب معلومات المحادثة")
+            }
+        } catch (e: Exception) {
+            Result.Error("تعذر الاتصال بالخادم")
+        }
+    }
+
     suspend fun getConversations(): Result<List<Conversation>> {
         return try {
             val response = apiClient.service.getConversations()
@@ -74,11 +100,25 @@ class MessageRepository @Inject constructor(
         }
     }
 
-    suspend fun deleteMessage(messageId: Long): Result<Unit> {
+    suspend fun deleteMessage(messageId: Long, forAll: Boolean = false): Result<Unit> {
         return try {
-            val response = apiClient.service.deleteMessage(messageId)
+            val response = apiClient.service.deleteMessage(messageId, mapOf("for_all" to forAll))
             if (response.isSuccessful) Result.Success(Unit)
             else Result.Error("فشل في حذف الرسالة")
+        } catch (e: Exception) {
+            Result.Error("تعذر الاتصال بالخادم")
+        }
+    }
+
+    suspend fun editMessage(messageId: Long, body: String): Result<Message> {
+        return try {
+            val response = apiClient.service.updateMessage(messageId, UpdateMessageRequest(body))
+            val respBody = response.body()
+            if (response.isSuccessful && respBody?.success == true && respBody.data != null) {
+                Result.Success(respBody.data)
+            } else {
+                Result.Error("فشل في تعديل الرسالة")
+            }
         } catch (e: Exception) {
             Result.Error("تعذر الاتصال بالخادم")
         }

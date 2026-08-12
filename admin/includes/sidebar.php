@@ -42,6 +42,15 @@ function navActive(string $page, string $current): string {
     <a href="chats.php" class="<?= navActive('chats', $currentPage) ?>">
       <span>✉</span> المحادثات
     </a>
+    <a href="message-edits.php" class="<?= navActive('message-edits', $currentPage) ?>">
+      <span>✎</span> الرسائل المعدلة
+    </a>
+    <a href="message-deletions.php" class="<?= navActive('message-deletions', $currentPage) ?>">
+      <span>🗑</span> الرسائل المحذوفة
+    </a>
+    <a href="subscriptions.php" class="<?= navActive('subscriptions', $currentPage) ?>">
+      <span>✓</span> الحسابات المميزة
+    </a>
 
     <div class="navtitle">التفاعل</div>
     <a href="calls.php" class="<?= navActive('calls', $currentPage) ?>">
@@ -74,7 +83,7 @@ function navActive(string $page, string $current): string {
       <span>␷</span> سجل العمليات
     </a>
     <a href="storage.php" class="<?= navActive('storage', $currentPage) ?>">
-      <span>▤</span> التخزين والوسائط
+      <span>▤</span> إحصائيات الوسائط
     </a>
     <a href="settings.php" class="<?= navActive('settings', $currentPage) ?>">
       <span>⚙</span> الإعدادات
@@ -88,7 +97,7 @@ function navActive(string $page, string $current): string {
         <div style="font-size:12px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?= htmlspecialchars($admin['name']) ?></div>
         <div style="font-size:10px; color:var(--muted);"><?= htmlspecialchars($admin['role_name']) ?></div>
       </div>
-      <a href="/admin/logout.php" style="color:var(--muted); font-size:16px;" title="تسجيل الخروج">⏻</a>
+      <a href="logout.php" style="color:var(--muted); font-size:16px;" title="تسجيل الخروج">⏻</a>
     </div>
   </div>
 </aside>
@@ -104,7 +113,7 @@ function navActive(string $page, string $current): string {
     <div class="top-actions">
       <button class="icon" onclick="alert('لا توجد إشعارات جديدة')">♢</button>
       <button class="icon" onclick="toggleTheme()">☾</button>
-      <a href="/admin/settings.php" class="icon" style="text-decoration:none;">⚙</a>
+      <a href="settings.php" class="icon" style="text-decoration:none;">⚙</a>
     </div>
   </header>
   <div class="content">

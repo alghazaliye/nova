@@ -40,8 +40,8 @@ date_default_timezone_set('Asia/Riyadh');
 header('Content-Type: application/json; charset=utf-8');
 $requestOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowedOrigins = array_filter(array_map('trim', explode(',', $_ENV['CORS_ALLOWED_ORIGINS'] ?? '')));
-if ($requestOrigin !== '' && in_array($requestOrigin, $allowedOrigins, true)) {
-    header('Access-Control-Allow-Origin: ' . $requestOrigin);
+if ($requestOrigin !== '' && (in_array('*', $allowedOrigins, true) || in_array($requestOrigin, $allowedOrigins, true))) {
+    header('Access-Control-Allow-Origin: ' . (in_array('*', $allowedOrigins, true) ? '*' : $requestOrigin));
     header('Vary: Origin');
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');

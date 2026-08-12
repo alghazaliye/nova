@@ -100,7 +100,10 @@ interface ApiService {
     ): Response<ApiResponse<Message>>
 
     @DELETE("messages/{id}")
-    suspend fun deleteMessage(@Path("id") id: Long): Response<ApiResponse<Unit>>
+    suspend fun deleteMessage(
+        @Path("id") id: Long,
+        @Body body: Map<String, Boolean> = emptyMap()
+    ): Response<ApiResponse<Unit>>
 
     @POST("messages/{id}/read")
     suspend fun markMessageRead(@Path("id") id: Long): Response<ApiResponse<Unit>>
@@ -137,6 +140,9 @@ interface ApiService {
     @GET("calls")
     suspend fun getCalls(): Response<ApiResponse<List<Call>>>
 
+    @GET("calls/{id}")
+    suspend fun showCall(@Path("id") id: Long): Response<ApiResponse<Call>>
+
     @POST("calls/{id}/answer")
     suspend fun answerCall(@Path("id") id: Long): Response<ApiResponse<Unit>>
 
@@ -145,6 +151,19 @@ interface ApiService {
 
     @POST("calls/{id}/end")
     suspend fun endCall(@Path("id") id: Long): Response<ApiResponse<Unit>>
+
+    // WebRTC signaling (offer / answer / ICE candidate)
+    @POST("calls/{id}/signal")
+    suspend fun sendSignal(
+        @Path("id") id: Long,
+        @Body body: Map<String, Any>
+    ): Response<ApiResponse<Unit>>
+
+    @GET("calls/{id}/signals")
+    suspend fun getSignals(
+        @Path("id") id: Long,
+        @Query("since") since: String? = null
+    ): Response<ApiResponse<List<Map<String, Any>>>>
 
     // =====================================================
     // Notifications

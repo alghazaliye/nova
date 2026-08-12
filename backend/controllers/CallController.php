@@ -52,6 +52,104 @@ class CallController
         ], 'تم بدء الاتصال', 201);
     }
 
+    // POST /api/v1/calls/{id}/signal (WebRTC: offer / answer / candidate)
+    public function signal(int $id): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM call_participants WHERE call_id = ? AND user_id = ? LIMIT 1'
+        );
+        $stmt->execute([$id, $userId]);
+        if (!$stmt->fetch()) {
+            Response::forbidden('لست مشاركًا في هذه المكالمة');
+        }
+
+        $signalType = in_array($body['signal_type'] ?? '', ['offer', 'answer', 'candidate'], true) ? $body['signal_type'] : 'candidate';
+        $payload    = json_encode($body['payload'] ?? $body);
+
+        $this->pdo->prepare(
+            'INSERT INTO call_signals (call_id, sender_id, signal_type, payload, created_at) VALUES (?, ?, ?, ?, NOW())'
+        )->execute([$id, $userId, $signalType, $payload]);
+
+        // Push the signal to the peer devices via FCM (high-priority data message)
+        $this->notifyPeerSignal($id, $userId, $signalType, $payload);
+
+        Response::success(null, 'تم إرسال الإشارة', 201);
+    }
+
+    // GET /api/v1/calls/{id}/signals?since=2026-01-01 00:00:00
+    public function signals(int $id): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM call_participants WHERE call_id = ? AND user_id = ? LIMIT 1'
+        );
+        $stmt->execute([$id, $userId]);
+        if (!$stmt->fetch()) {
+            Response::forbidden('لست مشاركًا في هذه المكالمة');
+        }
+
+        $since  = $_GET['since'] ?? null;
+        $sql    = 'SELECT cs.id, cs.sender_id, cs.signal_type, cs.payload, cs.created_at
+                   FROM call_signals cs
+                   WHERE cs.call_id = ? AND cs.sender_id != ?';
+        $params = [$id, $userId];
+        if ($since) {
+            $sql .= ' AND cs.created_at > ?';
+            $params[] = $since;
+        }
+        $sql .= ' ORDER BY cs.created_at ASC LIMIT 100';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) {
+            $row['payload'] = json_decode($row['payload'], true);
+        }
+        Response::success($rows);
+    }
+
+    private function notifyPeerSignal(int $callId, int $senderId, string $signalType, string $payloadJson): void
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT user_id FROM call_participants WHERE call_id = ? AND user_id != ?'
+            );
+            $stmt->execute([$callId, $senderId]);
+            $peers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            if (empty($peers)) return;
+
+            $stmt = $this->pdo->prepare('SELECT name FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$senderId]);
+            $sender = $stmt->fetch();
+            if (!$sender) return;
+
+            $stmt = $this->pdo->prepare(
+                'SELECT fcm_token FROM user_devices WHERE user_id = ? AND fcm_token IS NOT NULL AND fcm_token != ""'
+            );
+
+            foreach ($peers as $peerId) {
+                $stmt->execute([$peerId]);
+                foreach ($stmt->fetchAll() as $device) {
+                    FCMHelper::sendCallSignalNotification(
+                        $device['fcm_token'],
+                        (string)$callId,
+                        $signalType,
+                        $payloadJson,
+                        $sender['name']
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('Call signal notification error: ' . $e->getMessage());
+        }
+    }
+
     // GET /api/v1/calls
     public function index(): void
     {
