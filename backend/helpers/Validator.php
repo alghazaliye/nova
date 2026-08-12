@@ -84,6 +84,12 @@ class Validator
         return $this->errors;
     }
 
+    public function setError(string $field, string $message): self
+    {
+        $this->errors[$field] = $message;
+        return $this;
+    }
+
     public function get(string $field, mixed $default = null): mixed
     {
         return $this->data[$field] ?? $default;

@@ -113,7 +113,7 @@ class AuthController
         }
 
         // Create or update user
-        $stmt = $this->pdo->prepare('SELECT id, uuid FROM users WHERE phone = ? LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT id, uuid, is_blocked FROM users WHERE phone = ? LIMIT 1');
         $stmt->execute([$phone]);
         $user = $stmt->fetch();
 
@@ -122,18 +122,30 @@ class AuthController
             $displayName = $name ?? $otpData['name'];
             $stmt = $this->pdo->prepare(
                 'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, 1, NOW(), NOW())'
+                 VALUES (?, ?, ?, 0, NOW(), NOW())'
             );
             $stmt->execute([$uuid, $phone, $displayName]);
             $userId = (int)$this->pdo->lastInsertId();
         } else {
             $userId = (int)$user['id'];
             $uuid   = $user['uuid'];
-            // Update name if provided, and mark as verified
-            $stmt = $this->pdo->prepare($name !== null
-                ? 'UPDATE users SET is_verified = 1, name = ?, updated_at = NOW() WHERE id = ?'
-                : 'UPDATE users SET is_verified = 1, updated_at = NOW() WHERE id = ?');
-            $stmt->execute($name !== null ? [$name, $userId] : [$userId]);
+
+            // Global ban check BEFORE allowing any login
+            if ((int)$user['is_blocked']) {
+                $banStmt = $this->pdo->prepare(
+                    'SELECT reason FROM user_bans WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
+                );
+                $banStmt->execute([$userId]);
+                $ban = $banStmt->fetch();
+                $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
+                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يرجى التواصل مع إدارة التطبيق');
+            }
+
+            // Update name if provided WITHOUT auto-verifying (verification is admin-controlled)
+            if ($name !== null) {
+                $stmt = $this->pdo->prepare('UPDATE users SET name = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$name, $userId]);
+            }
         }
 
         // Clear OTP (in dev mode keep it alive so test users can re-login with the same code)
@@ -322,12 +334,11 @@ class AuthController
 
     private function getUserById(int $id): ?array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT id, uuid, phone, email, name, username, bio, avatar, status_text,
-                    is_online, last_seen, is_verified, created_at
-             FROM users WHERE id = ? LIMIT 1'
-        );
-        $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        // Reuse the full profile builder from UserController (plan, device quota,
+        // blocked flag, updated_at) so /auth/me, verify-otp and me return complete data.
+        $uc  = new UserController();
+        $ref = new \ReflectionMethod($uc, 'getUserById');
+        $ref->setAccessible(true);
+        return $ref->invoke($uc, $id);
     }
 }

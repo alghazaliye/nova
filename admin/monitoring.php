@@ -77,10 +77,12 @@ $active_users = $pdo->query(
 
 // الأجهزة المتصلة
 $connected_devices = $pdo->query(
-    'SELECT ud.id, ud.device_name, ud.platform, ud.app_version, ud.last_active_at, u.name as user_name
-     FROM user_devices ud
-     JOIN users u ON u.id = ud.user_id
-     ORDER BY ud.last_active_at DESC LIMIT 20'
+    'SELECT dr.id, COALESCE(dr.device_model, dr.os_name) as device_name, dr.platform,
+            dr.app_version, COALESCE(dr.last_seen, dr.first_seen) as last_active_at, u.name as user_name
+     FROM device_registrations dr
+     JOIN users u ON u.id = dr.user_id
+     WHERE dr.is_active = 1
+     ORDER BY dr.last_seen DESC LIMIT 20'
 )->fetchAll() ?: [];
 
 // استخدام قاعدة البيانات

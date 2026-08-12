@@ -26,13 +26,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $userId = (int)($_POST['user_id'] ?? 0);
 
     if ($action === 'block' && hasPermission($admin, 'users.block')) {
+        $reason = trim((string)($_POST['ban_reason'] ?? ''));
+        // Kill all live sessions so the banned user is kicked out immediately
+        $pdo->prepare('UPDATE sessions SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL')->execute([$userId]);
+        $pdo->prepare('UPDATE device_registrations SET is_active = 0 WHERE user_id = ?')->execute([$userId]);
+        try {
+            $pdo->prepare('INSERT INTO user_bans (user_id, reason, banned_by) VALUES (?, ?, ?)')->execute([$userId, $reason ?: null, $admin['id']]);
+        } catch (\Throwable $e) {}
         $pdo->prepare('UPDATE users SET is_blocked = 1, blocked_at = NOW() WHERE id = ?')->execute([$userId]);
-        logAudit($admin, 'USER_BLOCK', 'user', $userId, "حظر المستخدم #{$userId}");
-        $message = 'تم حظر المستخدم بنجاح';
+        logAudit($admin, 'USER_BLOCK', 'user', $userId, "حظر المستخدم #{$userId}" . ($reason ? " : {$reason}" : ''));
+        $message = 'تم حظر المستخدم ومنع الدخول للتطبيق';
     } elseif ($action === 'unblock' && hasPermission($admin, 'users.block')) {
+        try {
+            $pdo->prepare('UPDATE user_bans SET unbanned_at = NOW(), unbanned_by = ? WHERE user_id = ? AND unbanned_at IS NULL')->execute([$admin['id'], $userId]);
+        } catch (\Throwable $e) {}
         $pdo->prepare('UPDATE users SET is_blocked = 0, blocked_at = NULL WHERE id = ?')->execute([$userId]);
         logAudit($admin, 'USER_UNBLOCK', 'user', $userId, "فك حظر المستخدم #{$userId}");
         $message = 'تم فك الحظر بنجاح';
+    } elseif ($action === 'verify' && hasPermission($admin, 'users.manage')) {
+        $pdo->prepare('UPDATE users SET is_verified = IF(is_verified = 1, 0, 1), updated_at = NOW() WHERE id = ?')->execute([$userId]);
+        $row = $pdo->prepare('SELECT is_verified FROM users WHERE id = ? LIMIT 1');
+        $row->execute([$userId]);
+        $isV = (int)($row->fetch()['is_verified'] ?? 0);
+        logAudit($admin, $isV ? 'USER_VERIFY' : 'USER_UNVERIFY', 'user', $userId, $isV ? 'توثيق الحساب (العلامة الزرقاء)' : 'إلغاء التوثيق');
+        $message = $isV ? 'تم توثيق الحساب — ستظهر العلامة الزرقاء في التطبيق' : 'تم إلغاء التوثيق';
     } elseif ($action === 'delete' && hasPermission($admin, 'users.delete')) {
         $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
         logAudit($admin, 'USER_DELETE', 'user', $userId, "حذف المستخدم #{$userId}");
@@ -62,7 +79,18 @@ $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE {$where}");
 $countStmt->execute($params);
 $total = (int)$countStmt->fetchColumn();
 
-$stmt = $pdo->prepare("SELECT * FROM users WHERE {$where} ORDER BY created_at DESC LIMIT {$limit} OFFSET {$offset}");
+$stmt = $pdo->prepare("
+    SELECT u.*, p.name plan_name, p.max_devices plan_max_devices,
+           (SELECT COUNT(*) FROM device_registrations d WHERE d.user_id = u.id AND d.is_active = 1) active_devices
+    FROM users u
+    LEFT JOIN (
+        SELECT us.user_id, p.name, p.max_devices
+        FROM user_subscriptions us
+        JOIN plans p ON p.id = us.plan_id
+        WHERE us.status = 'active'
+        GROUP BY us.user_id
+    ) p ON p.user_id = u.id
+    WHERE {$where} ORDER BY u.created_at DESC LIMIT {$limit} OFFSET {$offset}");
 $stmt->execute($params);
 $users = $stmt->fetchAll();
 
@@ -102,7 +130,9 @@ include __DIR__ . '/includes/sidebar.php';
       <tr>
         <th>المستخدم</th>
         <th>الهاتف</th>
-        <th>آخر ظهور</th>
+        <th>التوثيق</th>
+        <th>الباقة</th>
+        <th>الأجهزة</th>
         <th>الحالة</th>
         <th>تاريخ التسجيل</th>
         <th>الإجراءات</th>
@@ -119,12 +149,15 @@ include __DIR__ . '/includes/sidebar.php';
               <div class="avatar"><?= mb_substr($u['name'], 0, 1) ?></div>
             <?php endif; ?>
             <div>
-              <b><?= htmlspecialchars($u['name']) ?></b>
+              <b><?= htmlspecialchars($u['name']) ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb">✔</span><?php endif; ?></b>
               <small style="display:block; color:var(--muted); font-size:11px;"><?= $u['username'] ? '@'.$u['username'] : '' ?></small>
             </div>
           </div>
         </td>
         <td><?= htmlspecialchars($u['phone']) ?></td>
+        <td style="text-align:center"><?= (int)$u['is_verified'] ? '<span style="color:#2563eb;font-weight:800">✔ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
+        <td><?= $u['plan_name'] ? htmlspecialchars((string)$u['plan_name']) : '<span style="color:var(--muted)">مجاني</span>' ?></td>
+        <td><?= (int)($u['active_devices'] ?? 0) ?><?= $u['plan_max_devices'] ? '/' . (int)$u['plan_max_devices'] : '' ?></td>
         <td><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></td>
         <td>
           <?php if ($u['is_blocked']): ?>
@@ -141,12 +174,19 @@ include __DIR__ . '/includes/sidebar.php';
             <form method="POST" style="display:inline;">
               <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
               <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+              <input type="hidden" name="action" value="verify">
+              <button type="submit" class="btn sm" style="background:<?= (int)$u['is_verified'] ? 'rgba(245,158,11,.1);color:#d97706' : 'rgba(37,99,235,.1);color:#2563eb' ?>" data-confirm="<?= (int)$u['is_verified'] ? 'إلغاء التوثيق؟' : 'توثيق الحساب وإظهار العلامة الزرقاء؟' ?>"><?= (int)$u['is_verified'] ? '✖ إلغاء التوثيق' : '✔ توثيق' ?></button>
+            </form>
+            <form method="POST" style="display:inline;">
+              <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
+              <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
               <?php if ($u['is_blocked']): ?>
                 <input type="hidden" name="action" value="unblock">
                 <button type="submit" class="btn sm">فك الحظر</button>
               <?php else: ?>
                 <input type="hidden" name="action" value="block">
-                <button type="submit" class="btn sm" data-confirm="هل تريد حظر هذا المستخدم؟">حظر</button>
+                <input type="text" name="ban_reason" placeholder="سبب الحظر (اختياري)" style="width:130px;height:34px;border:1px solid var(--line);background:var(--surface2);color:var(--text);border-radius:8px;padding:0 10px" maxlength="200">
+                <button type="submit" class="btn sm" data-confirm="هل تريد حظر هذا المستخدم؟ سيمتنع من الدخول للتطبيق">حظر</button>
               <?php endif; ?>
             </form>
             <form method="POST" style="display:inline;">

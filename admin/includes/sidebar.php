@@ -48,8 +48,14 @@ function navActive(string $page, string $current): string {
     <a href="message-deletions.php" class="<?= navActive('message-deletions', $currentPage) ?>">
       <span>🗑</span> الرسائل المحذوفة
     </a>
+    <a href="plans.php" class="<?= navActive('plans', $currentPage) ?>">
+      <span>💳</span> الباقات والاشتراكات
+    </a>
     <a href="subscriptions.php" class="<?= navActive('subscriptions', $currentPage) ?>">
       <span>✓</span> الحسابات المميزة
+    </a>
+    <a href="devices.php" class="<?= navActive('devices', $currentPage) ?>">
+      <span>📱</span> الأجهزة المسجلة
     </a>
 
     <div class="navtitle">التفاعل</div>
