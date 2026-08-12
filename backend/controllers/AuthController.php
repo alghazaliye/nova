@@ -60,13 +60,11 @@ class AuthController
             Response::error('رقم الهاتف مسجل مسبقاً', 'PHONE_EXISTS', 409);
         }
 
-        // Generate and store OTP
+                // Generate and store OTP (no expiry: remains valid until used/replaced)
         $otp       = $this->generateOtp();
         $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
-        $devMinutes = $this->isDevelopmentOtp() ? 30 * 24 * 60 : 5;
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $devMinutes . ' minutes'));
-
-        $this->storeOtp($phone, $otpHash, $expiresAt, $name);
+        $neverExpires = '2099-12-31 23:59:59';
+        $this->storeOtp($phone, $otpHash, $neverExpires, $name);
 
         // Send OTP (in dev mode, return it directly)
         $responseData = ['message' => 'تم إرسال رمز التحقق'];
@@ -101,12 +99,9 @@ class AuthController
         // Verify OTP
         $otpData = $this->getStoredOtp($phone);
         if (!$otpData) {
-            Response::error('رمز التحقق غير موجود أو انتهت صلاحيته', 'OTP_EXPIRED', 400);
+            Response::error('رمز التحقق غير موجود. اطلب رمزًا جديدًا', 'OTP_EXPIRED', 400);
         }
 
-        if (strtotime($otpData['expires_at']) < time()) {
-            Response::error('انتهت صلاحية رمز التحقق', 'OTP_EXPIRED', 400);
-        }
 
         if (!password_verify($otp, $otpData['otp_hash'])) {
             Response::error('رمز التحقق غير صحيح', 'OTP_INVALID', 400);
@@ -191,9 +186,8 @@ class AuthController
         // Generate OTP
         $otp       = $this->generateOtp();
         $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
-        $devMinutes = $this->isDevelopmentOtp() ? 30 * 24 * 60 : 5;
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $devMinutes . ' minutes'));
-        $this->storeOtp($phone, $otpHash, $expiresAt, '');
+        $neverExpires = '2099-12-31 23:59:59';
+        $this->storeOtp($phone, $otpHash, $neverExpires, '');
 
         $responseData = ['message' => 'تم إرسال رمز التحقق'];
         if ($this->isDevelopmentOtp()) {
