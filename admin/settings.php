@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $editableKeys = [
         'app_name', 'maintenance_mode', 'allow_registration', 'allow_calls',
         'allow_groups', 'allow_stories', 'max_file_size_mb', 'max_image_size_mb',
-        'max_video_size_mb', 'story_duration_hrs', 'otp_expiry_minutes',
+        'max_video_size_mb', 'story_duration_hrs', 'otp_expiry_minutes', 'otp_required',
         'session_duration_days', 'default_language', 'default_timezone',
         'fcm_enabled',
     ];
@@ -90,8 +90,15 @@ include __DIR__ . '/includes/sidebar.php';
           <option value="0" <?= ($settings['allow_registration']??'1')==='0'?'selected':'' ?>>لا</option>
         </select>
       </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div><b>التحقق برمز OTP</b><small style="display:block; color:var(--muted); font-size:11px;">عند الإيقاف يدخل المستخدم مباشرة بدون رمز</small></div>
+        <select name="otp_required" class="select">
+          <option value="1" <?= ($settings['otp_required']??'1')==='1'?'selected':'' ?>>مفعّل</option>
+          <option value="0" <?= ($settings['otp_required']??'1')==='0'?'selected':'' ?>>موقّف (بدون رمز)</option>
+        </select>
+      </div>
       <div class="form-group">
-        <label class="form-label">صلاحية رمز OTP (دقائق)</label>
+        <label class="form-label">صلاحية رمز OTP (دقائق) — تطبّق فقط عند التفعيل</label>
         <input type="number" name="otp_expiry_minutes" class="form-control" value="<?= s($settings, 'otp_expiry_minutes', '5') ?>">
       </div>
       <div class="form-group">
