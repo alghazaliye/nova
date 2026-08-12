@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/nova_ui.dart';
 import 'call_screen.dart';
 
 /// شاشة المحادثة — تدعم التعديل والحذف للطرفين والوسائط والمكالمات
@@ -85,7 +86,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final clientId = _uuid.v4();
     final type = fileContent != null ? _guessType(fileContent) : 'text';
     _ctrl.clear();
-    // رسالة مؤقتة
     final temp = NovaMessage(
       id: -1, uuid: clientId, senderId: context.read<AuthProvider>().user?.id ?? 0,
       type: type, body: text, status: 'sending', createdAt: DateTime.now().toIso8601String(),
@@ -158,6 +158,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final mode = await showDialog<String>(
       context: context,
       builder: (c) => SimpleDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('إضافة وسائط'),
         children: [
           SimpleDialogOption(
@@ -245,6 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final newBody = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('تعديل الرسالة'),
         content: TextField(controller: ctrl),
         actions: [
@@ -282,6 +284,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final isMine = msg.senderId == me?.id;
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (c) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -309,133 +313,225 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = NovaColors.of(context);
     final auth = context.read<AuthProvider>();
     return Scaffold(
-      appBar: AppBar(
-        title: Row(children: [
-          Text(widget.conv.name),
-          if (widget.conv.isVerified)
-            const Padding(
-                padding: EdgeInsets.only(right: 6),
-                child: Icon(Icons.verified, color: Colors.blue, size: 16)),
-        ]),
-        actions: [
-          IconButton(
-              onPressed: () => _startCall('voice'),
-              icon: const Icon(Icons.call)),
-          IconButton(
-              onPressed: () => _startCall('video'),
-              icon: const Icon(Icons.videocam)),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (n) {
-                if (n is ScrollStartNotification && n.metrics.pixels == 0 && !_loading) {
-                  _load();
-                }
-                return false;
-              },
-              child: ListView.builder(
-                controller: _scroll,
-                padding: const EdgeInsets.all(12),
-                itemCount: _messages.length + (_loading ? 1 : 0),
-                itemBuilder: (_, i) {
-                  if (_loading && i == _messages.length) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final msg = _messages[i];
-                  final isMine = msg.senderId == auth.user?.id;
-                  return GestureDetector(
-                    onLongPress: () => _showMessageMenu(msg),
-                    child: Align(
-                      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-                        padding: const EdgeInsets.all(10),
-                        constraints: const BoxConstraints(maxWidth: 280),
-                        decoration: BoxDecoration(
-                          color: isMine ? Colors.green.shade100 : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (msg.isDeleted)
-                              const Text('تم حذف هذه الرسالة',
-                                  style: TextStyle(fontStyle: FontStyle.italic, color: Colors.black54))
-                            else if (msg.type == 'image')
-                              ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: msg.filePath != null
-                                      ? Image.network(msg.filePath!, width: 200)
-                                      : const Icon(Icons.image, size: 48))
-                            else if (msg.type == 'video')
-                              ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: msg.filePath != null
-                                      ? SizedBox(
-                                          width: 240,
-                                          height: 160,
-                                          child: Icon(Icons.videocam, size: 48))
-                                      : const Icon(Icons.videocam, size: 48))
-                            else
-                              Text(msg.body ?? '',
-                                  style: const TextStyle(fontFamily: 'Cairo')),
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                              if (msg.isEdited)
-                                const Text(' (معدلة)',
-                                    style: TextStyle(fontSize: 10, color: Colors.black45)),
-                              const Spacer(),
-                              Text(msg.createdAt.substring(11, 16),
-                                  style: const TextStyle(fontSize: 10, color: Colors.black54)),
-                            ]),
-                          ],
-                        ),
+      backgroundColor: c.bg,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          children: [
+            // شريط العنوان
+            Container(
+              color: c.surface,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 13, 12, 13),
+                decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: c.line))),
+                child: Row(
+                  children: [
+                    IconBtn(icon: Icons.arrow_back_ios_new, size: 19,
+                        onTap: () => Navigator.pop(context)),
+                    PressScale(
+                      onTap: () => _startCall('voice'),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          NovaAvatar(
+                            letter: widget.conv.name.isNotEmpty
+                                ? widget.conv.name[0]
+                                : '?',
+                            size: 44,
+                            radius: 14,
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(widget.conv.name,
+                                      style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w800,
+                                          color: c.text)),
+                                  if (widget.conv.isVerified)
+                                    const Padding(
+                                        padding: EdgeInsets.only(right: 6),
+                                        child: Icon(Icons.verified,
+                                            color: Colors.blue, size: 15)),
+                                ],
+                              ),
+                              Text('اضغط للاتصال',
+                                  style: TextStyle(
+                                      fontSize: 11, color: c.muted)),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                },
+                    const Spacer(),
+                    IconBtn(
+                        icon: Icons.call,
+                        size: 21,
+                        color: c.accent,
+                        onTap: () => _startCall('voice')),
+                    IconBtn(
+                        icon: Icons.videocam,
+                        size: 21,
+                        color: c.accent,
+                        onTap: () => _startCall('video')),
+                  ],
+                ),
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade300)),
+            // قائمة الرسائل
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (n) {
+                  if (n is ScrollStartNotification && n.metrics.pixels == 0 && !_loading) {
+                    _load();
+                  }
+                  return false;
+                },
+                child: ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  itemCount: _messages.length + (_loading ? 1 : 0),
+                  itemBuilder: (_, i) {
+                    if (_loading && i == _messages.length) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final msg = _messages[i];
+                    final isMine = msg.senderId == auth.user?.id;
+                    return GestureDetector(
+                      onLongPress: () => _showMessageMenu(msg),
+                      child: Align(
+                        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                          padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          decoration: BoxDecoration(
+                            color: isMine ? c.mine : c.surface,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(19),
+                              topRight: const Radius.circular(19),
+                              bottomLeft: Radius.circular(isMine ? 19 : 7),
+                              bottomRight: Radius.circular(isMine ? 7 : 19),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (msg.isDeleted)
+                                Text('تم حذف هذه الرسالة',
+                                    style: TextStyle(fontStyle: FontStyle.italic, color: c.muted))
+                              else if (msg.type == 'image')
+                                ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: msg.filePath != null
+                                        ? Image.network(msg.filePath!, width: 200)
+                                        : const Icon(Icons.image, size: 48))
+                              else if (msg.type == 'video')
+                                ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: msg.filePath != null
+                                        ? SizedBox(
+                                            width: 240,
+                                            height: 160,
+                                            child: Icon(Icons.videocam, size: 48))
+                                        : const Icon(Icons.videocam, size: 48))
+                              else
+                                Text(msg.body ?? '',
+                                    style: TextStyle(
+                                        fontFamily: 'Cairo',
+                                        color: isMine ? c.mineText : c.text)),
+                              Row(mainAxisSize: MainAxisSize.min, children: [
+                                if (msg.isEdited)
+                                  Text(' (معدلة)',
+                                      style: TextStyle(fontSize: 10,
+                                          color: isMine
+                                              ? c.mineText.withOpacity(0.65)
+                                              : c.muted)),
+                                const Spacer(),
+                                Text(msg.createdAt.substring(11, 16),
+                                    style: TextStyle(fontSize: 10,
+                                        color: isMine
+                                            ? c.mineText.withOpacity(0.65)
+                                            : c.muted)),
+                              ]),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
-            child: Row(
-              children: [
-                IconButton(
-                    onPressed: _pickMedia,
-                    icon: const Icon(Icons.attach_file, color: Colors.grey)),
-                Expanded(
-                  child: TextField(
-                    controller: _ctrl,
-                    decoration: InputDecoration(
-                      hintText: 'اكتب رسالة',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22)),
-                      filled: true,
-                      fillColor: Colors.grey.shade100,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            // مربع الكتابة
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+              decoration: BoxDecoration(
+                color: c.surface,
+                border: Border(top: BorderSide(color: c.line)),
+              ),
+              child: Row(
+                children: [
+                  PressScale(
+                    onTap: _pickMedia,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                          color: c.surface2,
+                          borderRadius: BorderRadius.circular(14)),
+                      child: Icon(Icons.attach_file,
+                          size: 20, color: c.muted),
                     ),
-                    onSubmitted: (_) => _sendMessage(),
                   ),
-                ),
-                const SizedBox(width: 6),
-                CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  child: IconButton(
-                      onPressed: () => _sendMessage(),
-                      icon: const Icon(Icons.send, color: Colors.white)),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: c.surface2,
+                        borderRadius: BorderRadius.circular(17),
+                      ),
+                      child: TextField(
+                        controller: _ctrl,
+                        decoration: InputDecoration(
+                          hintText: 'اكتب رسالة',
+                          hintStyle: TextStyle(color: c.muted, fontSize: 13),
+                          border: InputBorder.none,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  PressScale(
+                    onTap: _sendMessage,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: c.accent,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.send,
+                          color: Colors.white, size: 19),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

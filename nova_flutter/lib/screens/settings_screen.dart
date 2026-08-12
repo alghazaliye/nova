@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/nova_ui.dart';
 import 'web_login_screen.dart';
 
 /// تبويب الإعدادات: الملف الشخصي، تعديل الاسم والبريد، QR للويب، تسجيل الخروج
@@ -15,6 +16,16 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
 
+  Widget _iconBox({required IconData icon, Color? color}) {
+    final c = NovaColors.of(context);
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(14)),
+      child: Icon(icon, size: 20, color: color ?? c.text),
+    );
+  }
+
   Future<void> _updateProfile() async {
     final auth = context.read<AuthProvider>();
     final me = auth.user;
@@ -24,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('تعديل الملف الشخصي'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -79,6 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('تسجيل الخروج'),
         content: const Text('هل تريد تسجيل الخروج من الحساب؟'),
         actions: [
@@ -97,177 +110,192 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _infoDialog(String title, String body) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('حسنًا')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
     final me = auth.user;
+    final letter = me?.name != null && me!.name!.isNotEmpty ? me.name![0] : '?';
     return Scaffold(
       body: _saving
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                // بطاقة المستخدم
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 32,
-                        backgroundColor:
-                            Theme.of(context).colorScheme.primary,
-                        child: Text(
-                            (me?.name ?? '?').isNotEmpty
-                                ? (me?.name ?? '?')[0]
-                                : '?',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 28)),
+          : SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 96),
+              child: Column(
+                children: [
+                  // شريط العنوان
+                  Container(
+                    color: c.surface,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(18, 13, 18, 13),
+                        decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: c.line))),
+                        child: Text('الإعدادات',
+                            style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: c.text)),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              Expanded(
-                                child: Text(me?.name ?? '-',
-                                    style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        fontFamily: 'Cairo'),
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                              if (me?.isVerified == true)
-                                const Padding(
-                                    padding: EdgeInsets.only(right: 4),
-                                    child: Icon(Icons.verified,
-                                        color: Colors.blue, size: 18)),
-                            ]),
-                            Text(me?.phone ?? '',
-                                style: const TextStyle(
-                                    fontSize: 13, color: Colors.black54)),
-                            if (me?.email != null &&
-                                me!.email.toString().isNotEmpty)
-                              Text(me.email ?? '',
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.black45)),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                          onPressed: _updateProfile,
-                          icon: const Icon(Icons.edit)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // أدوات الإعدادات
-                ListTile(
-                  leading: const Icon(Icons.qr_code_2,
-                      color: Color(0xFF00A884)),
-                  title: const Text('الأجهزة المرتبطة (الويب)'),
-                  subtitle: const Text('امسح رمز QR من nova.computer/web'),
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const WebLoginScreen())),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.edit, color: Color(0xFF00A884)),
-                  title: const Text('تعديل الملف الشخصي'),
-                  subtitle: const Text('الاسم والبريد الإلكتروني'),
-                  onTap: _updateProfile,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.notifications_outlined,
-                      color: Color(0xFF00A884)),
-                  title: const Text('الإشعارات'),
-                  subtitle:
-                      const Text('تصلك عبر الإشعارات الفورية (FCM)'),
-                  onTap: () => showDialog(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('الإشعارات'),
-                      content: const Text(
-                          'تُفعّل الإشعارات تلقائيًا عند تسجيل الدخول وترسل عبر FCM لكل رسالة ومكالمة وقصة.'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(c),
-                            child: const Text('حسنًا')),
-                      ],
                     ),
                   ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.data_saver_on,
-                      color: Color(0xFF00A884)),
-                  title: const Text('استخدام البيانات'),
-                  subtitle: const Text('الرسائل والوسائط تحفظ لدى الطرفين'),
-                  onTap: () => showDialog(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('استخدام البيانات'),
-                      content: const Text(
-                          'الرسائل والوسائط والقصص والمكالمات كلها محفوظة على الخادم، وتظهر لدى الطرفين وفق الصلاحيات.'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(c),
-                            child: const Text('حسنًا')),
-                      ],
-                    ),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.info_outline,
-                      color: Color(0xFF00A884)),
-                  title: const Text('حول التطبيق'),
-                  subtitle: const Text('NOVA Messenger v3.0'),
-                  onTap: () => showDialog(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('حول NOVA Messenger'),
-                      content: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 14),
+                  // بطاقة المستخدم
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: NovaCard(
+                      padding: const EdgeInsets.all(18),
+                      child: Row(
                         children: [
-                          Text('الإصدار: 3.0 (Flutter)'),
-                          SizedBox(height: 8),
-                          Text('المميزات:'),
-                          Text(
-                              '• رسائل فورية مع تعديل وحذف لدى الطرفين'),
-                          Text('• مكالمات صوتية وفيديو'),
-                          Text('• القصص (الحالة)'),
-                          Text('• الأجهزة المرتبطة (QR)'),
-                          Text('• حسابات موثّقة بعلامة زرقاء'),
-                          Text('• إشعارات فورية FCM'),
+                          NovaAvatar(letter: letter, size: 58, radius: 17, online: true),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  Expanded(
+                                    child: Text(me?.name ?? '-',
+                                        style: TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w800,
+                                            fontFamily: 'Cairo',
+                                            color: c.text),
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                                  if (me?.isVerified == true)
+                                    const Padding(
+                                        padding: EdgeInsets.only(right: 4),
+                                        child: Icon(Icons.verified,
+                                            color: Colors.blue, size: 17)),
+                                ]),
+                                const SizedBox(height: 4),
+                                Text(me?.phone ?? '',
+                                    style: TextStyle(
+                                        fontSize: 13, color: c.muted)),
+                                if (me?.email != null &&
+                                    me!.email.toString().isNotEmpty)
+                                  Text(me.email ?? '',
+                                      style: TextStyle(
+                                          fontSize: 12, color: c.muted)),
+                              ],
+                            ),
+                          ),
+                          IconBtn(icon: Icons.edit, onTap: _updateProfile, color: c.accent),
                         ],
                       ),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(c),
-                            child: const Text('حسنًا')),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // أدوات الإعدادات
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle('الحساب'),
+                        NovaCard(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Column(
+                            children: [
+                              RowItem(
+                                leading: _iconBox(icon: Icons.edit),
+                                title: 'تعديل الملف الشخصي',
+                                subtitle: 'الاسم والبريد الإلكتروني',
+                                onTap: _updateProfile,
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.qr_code_2),
+                                title: 'الأجهزة المرتبطة (الويب)',
+                                subtitle: 'امسح رمز QR من nova.computer/web',
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const WebLoginScreen())),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.notifications_outlined),
+                                title: 'الإشعارات',
+                                subtitle: 'تصلك عبر الإشعارات الفورية (FCM)',
+                                onTap: () => _infoDialog('الإشعارات',
+                                    'تُفعّل الإشعارات تلقائيًا عند تسجيل الدخول وترسل عبر FCM لكل رسالة ومكالمة وقصة.'),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.data_saver_on),
+                                title: 'استخدام البيانات',
+                                subtitle: 'الرسائل والوسائط تحفظ لدى الطرفين',
+                                onTap: () => _infoDialog('استخدام البيانات',
+                                    'الرسائل والوسائط والقصص والمكالمات كلها محفوظة على الخادم، وتظهر لدى الطرفين وفق الصلاحيات.'),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.info_outline),
+                                title: 'حول التطبيق',
+                                subtitle: 'NOVA Messenger v3.2 (Flutter)',
+                                onTap: () => showDialog(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(22)),
+                                    title: const Text('حول NOVA Messenger'),
+                                    content: const Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('الإصدار: 3.2 (Flutter)'),
+                                        SizedBox(height: 8),
+                                        Text('المميزات:'),
+                                        Text('• رسائل فورية مع تعديل وحذف لدى الطرفين'),
+                                        Text('• مكالمات صوتية وفيديو'),
+                                        Text('• القصص (الحالة)'),
+                                        Text('• الأجهزة المرتبطة (QR)'),
+                                        Text('• حسابات موثّقة بعلامة زرقاء'),
+                                        Text('• إشعارات فورية FCM'),
+                                      ],
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                          onPressed: () => Navigator.pop(c),
+                                          child: const Text('حسنًا')),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SectionTitle('الحساب'),
+                        NovaCard(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: RowItem(
+                                leading: _iconBox(icon: Icons.logout, color: c.red),
+                            title: 'تسجيل الخروج',
+                            onTap: _confirmLogout,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-                const Divider(height: 24),
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text('تسجيل الخروج',
-                      style: TextStyle(color: Colors.red)),
-                  onTap: _confirmLogout,
-                ),
-                const SizedBox(height: 24),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    'NOVA Messenger © 2026',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.black45),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+                  const SizedBox(height: 24),
+                  Text('NOVA Messenger © 2026',
+                      style: TextStyle(fontSize: 12, color: c.muted)),
+                ],
+              ),
             ),
     );
   }

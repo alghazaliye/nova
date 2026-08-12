@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../utils/nova_ui.dart';
 import '../utils/nova_web_state.dart';
 import 'profile_screen.dart';
 import 'chats_screen.dart';
@@ -48,9 +49,13 @@ class _OtpScreenState extends State<OtpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('رمز التحقق')),
+      appBar: AppBar(
+        title: Text('رمز التحقق', style: TextStyle(color: c.text, fontWeight: FontWeight.w800, fontFamily: 'Cairo')),
+        backgroundColor: c.surface,
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -58,20 +63,21 @@ class _OtpScreenState extends State<OtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              const Text('أدخل رمز التحقق المرسل إلى:',
+              Text('أدخل رمز التحقق المرسل إلى:',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15)),
+                  style: TextStyle(fontSize: 15, color: c.muted)),
               const SizedBox(height: 4),
               Text(widget.phone,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Cairo')),
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Cairo',
+                      color: c.text)),
               const SizedBox(height: 8),
-              const Text('رمز تجريبي: 123456',
+              Text('رمز تجريبي: 123456',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.black45)),
+                  style: TextStyle(fontSize: 13, color: c.muted)),
               const SizedBox(height: 28),
               PinCodeTextField(
                 appContext: context,
@@ -85,10 +91,11 @@ class _OtpScreenState extends State<OtpScreen> {
                   borderRadius: BorderRadius.circular(12),
                   fieldHeight: 54,
                   fieldWidth: 46,
-                  activeFillColor:
-                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-                  selectedFillColor: Colors.grey.shade200,
-                  inactiveFillColor: Colors.grey.shade100,
+                  activeFillColor: c.accent.withValues(alpha: 0.08),
+                  selectedFillColor: c.surface2,
+                  inactiveFillColor: c.surface2,
+                  activeColor: c.accent,
+                  inactiveColor: c.line,
                 ),
                 onCompleted: (v) => _verify(v),
                 onChanged: (v) => setState(() => _otp = v),
@@ -101,20 +108,21 @@ class _OtpScreenState extends State<OtpScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text(auth.error!,
-                        style: const TextStyle(color: Colors.red, fontSize: 13),
+                        style: TextStyle(color: Colors.redAccent, fontSize: 13),
                         textAlign: TextAlign.center),
                   ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundColor: c.accent,
                     foregroundColor: Colors.white,
+                    elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () => _verify(_otp),
                   child: const Text('تحقق',
-                      style: TextStyle(fontSize: 17)),
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                 ),
               ],
             ],

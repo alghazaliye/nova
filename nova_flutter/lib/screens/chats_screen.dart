@@ -1,17 +1,15 @@
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import 'chat_screen.dart';
 import '../utils/nova_web_state.dart';
+import '../utils/nova_ui.dart';
 import 'stories_screen.dart';
 import 'calls_screen.dart';
 import 'settings_screen.dart';
 
-
-
-/// الصفحة الرئيسية بشريط تنقل سفلي: المحادثات، القصص، المكالمات، الإعدادات
+/// الشل الرئيسي بشريط تنقل سفلي زجاجي: المحادثات، الحالة، المكالمات، الإعدادات
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
 
@@ -39,13 +37,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
   }
 
-  static const List<String> _titles = [
-    'المحادثات',
-    'الحالة',
-    'المكالمات',
-    'الإعدادات',
-  ];
-
   final List<Widget> _pages = const [
     ChatsTab(),
     StoriesScreen(),
@@ -56,33 +47,30 @@ class _ChatsScreenState extends State<ChatsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: _pages,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline),
-              selectedIcon: Icon(Icons.chat_bubble),
-              label: 'المحادثات'),
-          NavigationDestination(
-              icon: Icon(Icons.circle_outlined),
-              selectedIcon: Icon(Icons.circle),
-              label: 'الحالة'),
-          NavigationDestination(
-              icon: Icon(Icons.call_outlined),
-              selectedIcon: Icon(Icons.call),
-              label: 'المكالمات'),
-          NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'الإعدادات'),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: IndexedStack(index: _index, children: _pages),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: NovaBottomNav(
+              index: _index,
+              onTap: (i) {
+                if (kIsWeb) {
+                  final names = ['chats', 'stories', 'calls', 'settings'];
+                  if (_index != i) {
+                    setNovaState('tab=${names[i]}');
+                  }
+                }
+                setState(() => _index = i);
+              },
+            ),
+          ),
         ],
       ),
-      appBar: AppBar(title: Text(_titles[_index])),
     );
   }
 }
@@ -140,7 +128,6 @@ class _ChatsTabState extends State<ChatsTab> {
     if (phone == null || !mounted) return;
     _autoChat = null;
     setNovaChats('auto_chat=$phone');
-    // افتح المحادثة إن وجدت، وإلا أنشئها مع جهة الاتصال
     Conversation? conv = _conversations.cast<Conversation?>().firstWhere(
         (c) => c!.phone == phone, orElse: () => null);
     if (conv == null) {
@@ -161,7 +148,7 @@ class _ChatsTabState extends State<ChatsTab> {
     if (mounted && conv != null) {
       await Future.delayed(const Duration(milliseconds: 150));
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(conv: conv!)));
+      pushScreen(context, ChatScreen(conv: conv!));
     }
   }
 
@@ -183,6 +170,7 @@ class _ChatsTabState extends State<ChatsTab> {
     final q = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('بحث عن جهة اتصال'),
         content: TextField(
           controller: ctrl,
@@ -207,6 +195,7 @@ class _ChatsTabState extends State<ChatsTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           content: Text('جهة الاتصال: ${user['name'] ?? user['phone'] ?? '-'}'),
           action: SnackBarAction(
             label: 'محادثة',
@@ -218,8 +207,7 @@ class _ChatsTabState extends State<ChatsTab> {
               if (r['success'] == true && r['data'] != null) {
                 final conv = Conversation.fromJson(
                     Map<String, dynamic>.from(r['data'] as Map<String, dynamic>));
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => ChatScreen(conv: conv)));
+                pushScreen(context, ChatScreen(conv: conv));
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(r['message'] ?? 'فشل في بدء المحادثة')));
@@ -236,103 +224,167 @@ class _ChatsTabState extends State<ChatsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      // شريط البحث
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-        child: TextField(
-          onChanged: (v) {
-            _search = v;
-            _applyFilter();
-          },
-          decoration: InputDecoration(
-            hintText: 'ابحث في المحادثات',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: 'بحث عن جهة اتصال',
-              onPressed: _searchContact,
+    final c = NovaColors.of(context);
+    return Column(
+      children: [
+        // شريط العنوان
+        Container(
+          color: c.surface,
+          child: SafeArea(
+            bottom: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(18, 13, 18, 13),
+              decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: c.line))),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('المحادثات',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: c.text)),
+                  ),
+                  IconBtn(icon: Icons.add_circle_outline,
+                      onTap: _searchContact, color: c.accent),
+                  IconBtn(icon: Icons.search,
+                      onTap: _searchContact, color: c.accent),
+                ],
+              ),
             ),
-            filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceVariant,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(28),
-                borderSide: BorderSide.none),
           ),
         ),
-      ),
-      Expanded(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _filtered.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.chat_bubble_outline,
-                            size: 72, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                            _search.isEmpty
-                                ? 'لا توجد محادثات بعد'
-                                : 'لا نتائج لـ "$_search"',
-                            style: const TextStyle(
-                                fontSize: 16, color: Colors.black54)),
-                        const SizedBox(height: 8),
-                        const Text('اضغط الزر لبدء محادثة جديدة',
-                            style:
-                                TextStyle(fontSize: 13, color: Colors.black45)),
-                      ],
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.builder(
-                      itemCount: _filtered.length,
-                      itemBuilder: (_, i) {
-                        final conv = _filtered[i];
-                        return ListTile(
-                          leading: CircleAvatar(
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                              child: Text(
-                                  conv.name.isNotEmpty ? conv.name[0] : '?')),
-                          title: Row(children: [
-                            Expanded(
-                              child: Text(conv.name.isNotEmpty ? conv.name : conv.phone,
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            if (conv.isVerified)
-                              const Padding(
-                                  padding: EdgeInsets.only(right: 4),
-                                  child: Icon(Icons.verified,
-                                      color: Colors.blue, size: 16)),
-                          ]),
-                          subtitle: conv.lastMessage != null
-                              ? Text(conv.lastMessage!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis)
-                              : Text(conv.phone,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.black45)),
-                          trailing: conv.unreadCount > 0
-                              ? CircleAvatar(
-                                  radius: 10,
-                                  backgroundColor:
-                                      Theme.of(context).colorScheme.primary,
-                                  child: Text('${conv.unreadCount}',
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 11)))
-                              : null,
-                          onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => ChatScreen(conv: conv))),
-                        );
-                      },
+        // شريط البحث
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Container(
+            decoration: BoxDecoration(
+              color: c.surface2,
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 14),
+                Icon(Icons.search, size: 20, color: c.muted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    onChanged: (v) {
+                      _search = v;
+                      _applyFilter();
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'ابحث في المحادثات',
+                      hintStyle: TextStyle(color: c.muted, fontSize: 13),
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
-      ),
-    ]);
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chat_bubble_outline,
+                              size: 72, color: c.muted.withOpacity(0.45)),
+                          const SizedBox(height: 12),
+                          Text(
+                              _search.isEmpty
+                                  ? 'لا توجد محادثات بعد'
+                                  : 'لا نتائج لـ "$_search"',
+                              style: TextStyle(fontSize: 16, color: c.muted)),
+                          const SizedBox(height: 8),
+                          Text('اضغط الزر لبدء محادثة جديدة',
+                              style: TextStyle(fontSize: 13, color: c.muted)),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                        itemCount: _filtered.length,
+                        itemBuilder: (_, i) {
+                          final conv = _filtered[i];
+                          final letter =
+                              conv.name.isNotEmpty ? conv.name[0] : '?';
+                          return PressScale(
+                            onTap: () =>
+                                pushScreen(context, ChatScreen(conv: conv)),
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: NovaCard(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    NovaAvatar(
+                                        letter: letter,
+                                        size: 52,
+                                        radius: 16,
+                                        online: false),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                    conv.name.isNotEmpty
+                                                        ? conv.name
+                                                        : conv.phone,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: c.text)),
+                                              ),
+                                              if (conv.isVerified)
+                                                const Icon(Icons.verified,
+                                                    color: Colors.blue,
+                                                    size: 16),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            conv.lastMessage != null &&
+                                                    conv.lastMessage!
+                                                        .isNotEmpty
+                                                ? conv.lastMessage!
+                                                : conv.phone,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                fontSize: 13, color: c.muted),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (conv.unreadCount > 0)
+                                      UnreadBadge(count: conv.unreadCount),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
   }
 }
