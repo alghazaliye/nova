@@ -68,6 +68,8 @@ class Conversation {
   final int otherUserId;
   final bool isOnline;
   final String? lastSeen;
+  final String? lastMessageType;
+  final int? disappearAfter;
 
   Conversation({
     required this.id,
@@ -83,6 +85,8 @@ class Conversation {
     this.otherUserId = 0,
     this.isOnline = false,
     this.lastSeen,
+    this.lastMessageType,
+    this.disappearAfter,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
@@ -90,8 +94,9 @@ class Conversation {
         uuid: j['uuid'] ?? '',
         name: j['name'] ?? j['title'] ?? 'محادثة',
         avatar: j['avatar'],
-        lastMessage: j['last_message'],
-        lastMessageAt: j['updated_at'],
+        lastMessage: j['last_message'] ?? j['last_message_body'],
+        lastMessageType: j['type'] == 'private' ? (j['last_message_type'] ?? 'text') : 'text',
+        lastMessageAt: j['last_message_at'] ?? j['updated_at'],
         unreadCount: j['unread_count'] is int
             ? j['unread_count']
             : int.parse((j['unread_count'] ?? 0).toString()),
@@ -103,8 +108,9 @@ class Conversation {
         isVerified: (j['is_verified'] ?? 0) == 1,
         phone: _memberPhone(j),
         otherUserId: _otherUserId(j),
-        isOnline: (j['is_online'] ?? 0) == 1,
-        lastSeen: j['last_seen'],
+        isOnline: _otherIsOnline(j),
+        lastSeen: _otherLastSeen(j),
+        disappearAfter: j['disappear_after'] is int ? j['disappear_after'] as int : int.tryParse((j['disappear_after'] ?? 0).toString()),
       );
 
   static String _memberPhone(Map<String, dynamic> j) {
@@ -115,6 +121,22 @@ class Conversation {
       }
     } catch (_) {}
     return '';
+  }
+
+  static bool _otherIsOnline(Map<String, dynamic> j) {
+    try {
+      final ou = j['other_user'];
+      if (ou is Map) return (ou['is_online'] ?? 0) == 1;
+    } catch (_) {}
+    return false;
+  }
+
+  static String? _otherLastSeen(Map<String, dynamic> j) {
+    try {
+      final ou = j['other_user'];
+      if (ou is Map) return ou['last_seen']?.toString();
+    } catch (_) {}
+    return null;
   }
 
   static int _otherUserId(Map<String, dynamic> j) {
