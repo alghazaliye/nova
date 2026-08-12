@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <!--
+    If you are serving the web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="NOVA Messenger — محادثات آمنة وسريعة">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="NOVA">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>NOVA Messenger</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- شاشة التحميل: تُظهر حتى اكتمال تحميل Flutter -->
+  <style>
+    body { margin: 0; background: #f6f6fb; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+    #nova-loading {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(160deg, #f6f6fb 0%, #eeecfc 100%);
+      transition: opacity .45s ease;
+    }
+    #nova-loading.hidden { opacity: 0; pointer-events: none; }
+    .nova-logo {
+      width: 96px; height: 96px; border-radius: 26px;
+      background: linear-gradient(135deg, #7c5cff 0%, #4d36e8 100%);
+      color: #fff; font-size: 54px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 18px 44px rgba(77,54,232,.32);
+      animation: novaPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes novaPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    #nova-loading h2 { margin: 18px 0 4px; color: #2b2850; font-size: 20px; }
+    #nova-loading p { margin: 0; color: #8b87b3; font-size: 14px; }
+    .nova-bar { width: 200px; height: 6px; border-radius: 3px; background: #e4e2f2; margin-top: 22px; overflow: hidden; }
+    .nova-bar::after {
+      content: ""; display: block; width: 40%; height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, #7c5cff, #4d36e8);
+      animation: novaSlide 1.1s ease-in-out infinite;
+    }
+    @keyframes novaSlide {
+      0% { margin-right: 100%; }
+      100% { margin-right: -100%; }
+    }
+    #nova-loading #nova-fallback { display: none; margin-top: 16px; font-size: 13px; color: #7c5cff; }
+    #nova-loading #nova-error { display: none; margin-top: 18px; text-align: center; }
+    #nova-loading #nova-error button {
+      margin-top: 10px; padding: 9px 26px; border: 0; border-radius: 999px;
+      background: #4d36e8; color: #fff; font-size: 14px; cursor: pointer;
+      box-shadow: 0 8px 18px rgba(77,54,232,.28);
+    }
+    #flutter-view { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <!-- شاشة التحميل -->
+  <div id="nova-loading">
+    <div class="nova-logo">N</div>
+    <h2>NOVA Messenger</h2>
+    <p>جاري تحميل التطبيق...</p>
+    <div class="nova-bar"></div>
+    <p id="nova-fallback">التحميل يستغرق وقتًا أطول من المعتاد، لحظة من فضلك...</p>
+    <div id="nova-error">
+      <p style="color:#b3261e; margin:0;">تعذّر تحميل التطبيق. تحقق من اتصالك بالإنترنت.</p>
+      <button onclick="location.reload()">إعادة المحاولة</button>
+    </div>
+  </div>
+
+  <script>
+    // إخفاء شاشة التحميل عند ظهور canvas أو flutter-view
+    (function () {
+      var loader = document.getElementById('nova-loading');
+      var fallback = document.getElementById('nova-fallback');
+      var errorEl = document.getElementById('nova-error');
+      var hidden = false;
+      function hideLoader() {
+        if (hidden) return; hidden = true;
+        loader.classList.add('hidden');
+        setTimeout(function () { loader.remove(); }, 500);
+      }
+      // fallback بعد 8 ثوانٍ + رسالة خطأ بعد 30 ثانية
+      setTimeout(function () { if (!hidden) fallback.style.display = 'block'; }, 8000);
+      setTimeout(function () {
+        if (!hidden) { errorEl.style.display = 'block'; fallback.style.display = 'none'; }
+      }, 30000);
+      var obs = new MutationObserver(function () {
+        if (document.querySelector('flutter-view') ||
+            document.querySelector('flt-glass-pane') ||
+            (document.body && document.body.style.opacity === '0' === false && document.querySelector('canvas'))) {
+          hideLoader(); obs.disconnect();
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+      // احتياط: الفحص المتكرر
+      var t = setInterval(function () {
+        if (document.querySelector('flutter-view, flt-glass-pane, canvas.flutter-view')) { hideLoader(); clearInterval(t); obs.disconnect(); }
+      }, 600);
+      setTimeout(function () { clearInterval(t); }, 35000);
+    })();
+
+    // تجاوز كاش Service Worker عند كل إصدار جديد
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) {
+          if (r.active && r.active.scriptURL.indexOf('serviceWorkerVersion=') !== -1) {
+            // تسجيل الخدمة موجود مسبقًا؛ تركها تعمل (لا إلغاء قسري كي لا تنكسر جلسة جارية)
+          }
+        });
+      });
+    }
+  </script>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
