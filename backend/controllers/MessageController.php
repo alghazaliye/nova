@@ -432,12 +432,10 @@ class MessageController
             $stmt->execute([$convId, $senderId]);
             $devices = $stmt->fetchAll();
 
-            if (empty($devices)) return;
-
             $title = $sender['name'];
             $body = mb_substr($messagePreview, 0, 100);
             $data = ['conversation_id' => (string)$convId];
-            $avatar = $sender['avatar'];
+	            $avatar = $sender['avatar'];
 
             foreach ($devices as $device) {
                 FCMHelper::sendMessageNotification(
@@ -450,6 +448,7 @@ class MessageController
             }
 
             // In-app notification (real-time polling fallback): store in notifications table
+            // MUST run regardless of FCM devices (no Service Account configured)
             $stmt = $this->pdo->prepare(
                 'SELECT DISTINCT cm.user_id FROM conversation_members cm WHERE cm.conversation_id = ? AND cm.user_id != ?'
             );

@@ -468,7 +468,16 @@ class _ChatsTabState extends State<ChatsTab> {
                                           Text(
                                             conv.lastMessage != null &&
                                                     conv.lastMessage!.isNotEmpty
-                                                ? conv.lastMessage!
+                                                ? (conv.lastMessageType == 'image'
+                                                        ? 'صورة  '
+                                                        : conv.lastMessageType == 'audio'
+                                                                ? 'رسالة صوتية  '
+                                                                : conv.lastMessageType == 'video'
+                                                                        ? 'فيديو  '
+                                                                        : conv.lastMessageType == 'document'
+                                                                                ? 'ملف  '
+                                                                                : '') +
+                                                    conv.lastMessage!
                                                 : conv.phone,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
