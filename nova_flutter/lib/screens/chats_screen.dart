@@ -9,7 +9,7 @@ import 'stories_screen.dart';
 import 'calls_screen.dart';
 import 'settings_screen.dart';
 
-/// الشل الرئيسي بشريط تنقل سفلي زجاجي: الإعدادات، الحالة، المكالمات، المحادثات
+/// الشل الرئيسي بشريط تنقل سفلي زجاجي RTL: المحادثات (يمين) ... الإعدادات (يسار)
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
 
@@ -38,10 +38,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   final List<Widget> _pages = const [
-    SettingsScreen(),
-    StoriesScreen(),
-    CallsScreen(),
     ChatsTab(),
+    CallsScreen(),
+    StoriesScreen(),
+    SettingsScreen(),
   ];
 
   @override
@@ -60,7 +60,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
               index: _index,
               onTap: (i) {
                 if (kIsWeb) {
-                  final names = ['settings', 'stories', 'calls', 'chats'];
+                  final names = ['chats', 'calls', 'stories', 'settings'];
                   if (_index != i) {
                     setNovaState('tab=${names[i]}');
                   }
