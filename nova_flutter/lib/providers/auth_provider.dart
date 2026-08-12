@@ -105,9 +105,25 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    // Admin disabled OTP: the response returns token directly
+    final data = res['data'] as Map<String, dynamic>? ?? {};
+    final bypass = data['otp_bypass'] == true;
+    _lastLoginBypass = bypass;
+    if (bypass) {
+      final token = data['token'] as String?;
+      if (token != null) {
+        _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
+        await saveToken(token);
+        registerCurrentDevice();
+      }
+    }
     notifyListeners();
     return true;
   }
+
+  /// هل عاد الدخول بدون OTP (التحقق معطّل من لوحة التحكم)
+  bool _lastLoginBypass = false;
+  bool get lastLoginBypass => _lastLoginBypass;
 
   /// POST /auth/verify-otp
   Future<bool> verifyOtp(String phone, String otp) async {

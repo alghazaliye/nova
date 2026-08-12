@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../utils/nova_ui.dart';
 import '../utils/nova_web_state.dart';
 import 'otp_screen.dart';
+import 'chats_screen.dart';
 
 /// شاشة إدخال رقم الهاتف — نمط WhatsApp بالتصميم الجديد
 class PhoneScreen extends StatefulWidget {
@@ -176,6 +177,15 @@ class _PhoneScreenState extends State<PhoneScreen> {
                     }
                     final ok = await auth.login(_phone);
                     if (ok && context.mounted) {
+                      if (auth.lastLoginBypass) {
+                        // التحقق معطّل من لوحة التحكم: الانتقال مباشرة إلى المحادثات
+                        Navigator.of(context)
+                            .pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                    builder: (_) => const ChatsScreen()),
+                                (route) => false);
+                        return;
+                      }
                       Navigator.push(
                           context,
                           MaterialPageRoute(
