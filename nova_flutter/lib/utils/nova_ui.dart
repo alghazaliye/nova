@@ -372,10 +372,10 @@ class NovaBottomNav extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   static const items = [
-    ('المحادثات', Icons.chat_bubble_outline, Icons.chat_bubble),
+    ('الإعدادات', Icons.settings_outlined, Icons.settings),
     ('الحالة', Icons.circle_outlined, Icons.circle),
     ('المكالمات', Icons.call_outlined, Icons.call),
-    ('الإعدادات', Icons.settings_outlined, Icons.settings),
+    ('المحادثات', Icons.chat_bubble_outline, Icons.chat_bubble),
   ];
 
   @override
