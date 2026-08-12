@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import '../providers/auth_provider.dart';
+import '../utils/nova_ui.dart';
 import '../utils/nova_web_state.dart';
 import 'otp_screen.dart';
 
-/// شاشة إدخال رقم الهاتف — نمط WhatsApp
+/// شاشة إدخال رقم الهاتف — نمط WhatsApp بالتصميم الجديد
 class PhoneScreen extends StatefulWidget {
   const PhoneScreen({super.key});
 
@@ -31,20 +32,20 @@ class _PhoneScreenState extends State<PhoneScreen> {
       if (p != null && p.length >= 7) {
         _autoPhone = p;
         setNovaState('phone_param=$p');
-      final otpAuto = uri.queryParameters['otp'];
-      // ملء الحقل تلقائياً بعد بناء الإطار
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setNovaState('postframe_filling');
-        _fillAuto();
-        // تخطي login والانتقال المباشر إلى OTP إذا أُعطى otp في الرابط
-        if (mounted && otpAuto != null && otpAuto.length >= 4) {
-          setNovaState('auto_jump_otp');
-          Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => OtpScreen(phone: _phone, isRegister: false)));
-        }
-      });
+        final otpAuto = uri.queryParameters['otp'];
+        // ملء الحقل تلقائياً بعد بناء الإطار
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          setNovaState('postframe_filling');
+          _fillAuto();
+          // تخطي login والانتقال المباشر إلى OTP إذا أُعطي otp في الرابط
+          if (mounted && otpAuto != null && otpAuto.length >= 4) {
+            setNovaState('auto_jump_otp');
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => OtpScreen(phone: _phone, isRegister: false)));
+          }
+        });
       } else {
         setNovaState('no_phone_param');
       }
@@ -61,7 +62,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
       _phoneController.text = raw;
       _phoneController.selection = TextSelection.fromPosition(
           TextPosition(offset: _autoPhone!.length));
-      // النقر على التالي بعد ثانية لالتقاط شاشة OTP
+      // الانتقال إلى OTP بعد ثانية لالتقاط الشاشة
       Future.delayed(const Duration(seconds: 1), () async {
         if (!mounted) return;
         try {
@@ -87,6 +88,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
     return Scaffold(
       body: SafeArea(
@@ -103,21 +105,22 @@ class _PhoneScreenState extends State<PhoneScreen> {
                       width: 96,
                       height: 96,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
+                        color: c.accent,
                         borderRadius: BorderRadius.circular(28),
                       ),
                       child: const Icon(Icons.chat_bubble,
                           color: Colors.white, size: 52),
                     ),
                     const SizedBox(height: 20),
-                    const Text('NOVA Messenger',
+                    Text('NOVA Messenger',
                         style: TextStyle(
                             fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Cairo')),
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Cairo',
+                            color: c.text)),
                     const SizedBox(height: 8),
-                    const Text('أدخل رقم هاتفك للمتابعة',
-                        style: TextStyle(fontSize: 15, color: Colors.black54)),
+                    Text('أدخل رقم هاتفك للمتابعة',
+                        style: TextStyle(fontSize: 15, color: c.muted)),
                   ],
                 ),
               ),
@@ -126,10 +129,16 @@ class _PhoneScreenState extends State<PhoneScreen> {
                 controller: _phoneController,
                 decoration: InputDecoration(
                   labelText: 'رقم الهاتف',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14)),
                   filled: true,
-                  fillColor: Colors.grey.shade100,
+                  fillColor: c.surface2,
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: c.line)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: c.accent)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 14),
                 ),
                 initialCountryCode: 'SA',
                 languageCode: 'ar',
@@ -146,13 +155,14 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text(auth.error!,
-                        style: const TextStyle(color: Colors.red, fontSize: 13),
+                        style: TextStyle(color: Colors.redAccent, fontSize: 13),
                         textAlign: TextAlign.center),
                   ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundColor: c.accent,
                     foregroundColor: Colors.white,
+                    elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
@@ -174,14 +184,19 @@ class _PhoneScreenState extends State<PhoneScreen> {
                     }
                   },
                   child: const Text('التالي',
-                      style: TextStyle(fontSize: 17)),
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                 ),
               ],
               const SizedBox(height: 24),
-              const Text(
-                'الحسابات التجريبية: +966599995001، +966599995002، +966599991001\nرمز التحقق التجريبي: 123456',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.black45),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Text(
+                    'الحسابات التجريبية: +966599995001، +966599995002، +966599991001\nرمز التحقق التجريبي: 123456',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: c.muted),
+                  ),
+                ),
               ),
             ],
           ),

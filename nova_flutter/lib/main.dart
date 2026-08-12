@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'utils/nova_ui.dart';
 import 'screens/phone_screen.dart';
 import 'screens/otp_screen.dart';
 import 'screens/chats_screen.dart';
@@ -16,41 +17,43 @@ class NovaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTheme = buildNovaTheme(Brightness.light, NovaColors.light);
     return ChangeNotifierProvider(
       create: (_) => AuthProvider(),
       child: MaterialApp(
         title: 'NOVA Messenger',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF2563EB),
-            brightness: Brightness.light,
-          ),
-          fontFamily: 'Cairo',
-          useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-          appBarTheme: const AppBarTheme(
-            elevation: 0,
-            scrolledUnderElevation: 1,
-            centerTitle: true,
-          ),
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              elevation: 2,
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 28),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+        theme: baseTheme,
+        home: const _WebFrame(child: AppRouter()),
+      ),
+    );
+  }
+}
+
+/// إطار الهاتف العريض في الويب: خلفية داكنة عريضة مع منطقة 480px في المنتصف
+class _WebFrame extends StatelessWidget {
+  final Widget child;
+  const _WebFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb) return child;
+    return Container(
+      color: const Color(0xFF0B0F1A),
+      child: Center(
+        child: Container(
+          width: 480,
+          decoration: BoxDecoration(
+            color: NovaColors.dark.surface,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.6),
+                blurRadius: 40,
               ),
-            ),
+            ],
           ),
-          floatingActionButtonTheme: FloatingActionButtonThemeData(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
-            ),
-          ),
+          child: child,
         ),
-        home: const AppRouter(),
       ),
     );
   }
