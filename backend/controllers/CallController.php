@@ -155,7 +155,6 @@ class CallController
         }
         $this->pdo->prepare('UPDATE calls SET status = ? WHERE id = ?')->execute([$status, $callId]);
     }
-}
 
     private function sendCallNotification(int $callerId, int $calleeId, string $callUuid, string $callType): void
     {
@@ -184,4 +183,5 @@ class CallController
         } catch (\Throwable $e) {
             error_log('Call FCM notification error: ' . $e->getMessage());
         }
+    }
 }

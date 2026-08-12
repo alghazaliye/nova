@@ -18,19 +18,21 @@ data class ApiResponse<T>(
 // Auth Models
 // =====================================================
 
+// WhatsApp-style: first step only needs the phone number (+ optional country code)
 data class RegisterRequest(
     val phone: String,
-    val name: String
+    @SerializedName("country_code") val countryCode: String? = null
 )
 
 data class LoginRequest(
     val phone: String
 )
 
+// WhatsApp-style: OTP verification does not require a name (profile setup comes next)
 data class VerifyOtpRequest(
     val phone: String,
     val otp: String,
-    val name: String,
+    val name: String? = null,
     @SerializedName("device_uuid") val deviceUuid: String,
     @SerializedName("fcm_token") val fcmToken: String? = null
 )

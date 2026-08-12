@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -16,18 +15,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 
+// =====================================================
+// WhatsApp-style step 3: Name (required) + Email (optional)
+// =====================================================
+
 @Composable
-fun LoginScreen(
-    onNavigateToOtp: (phone: String, name: String) -> Unit,
+fun ProfileScreen(
+    phone: String,
+    onNavigateToHome: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
-    var phone by remember { mutableStateOf("") }
-    var name  by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState) {
-        if (uiState is AuthUiState.OtpSent) {
-            onNavigateToOtp(phone, name)
+        if (uiState is AuthUiState.Success) {
+            onNavigateToHome()
         }
     }
 
@@ -39,46 +43,45 @@ fun LoginScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Logo
+        // Avatar placeholder
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(88.dp)
                 .background(
-                    brush = Brush.linearGradientBrush(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
-                        )
-                    ),
-                    shape = RoundedCornerShape(24.dp)
+                    MaterialTheme.colorScheme.primaryContainer,
+                    RoundedCornerShape(44.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Text("N", fontSize = 36.sp, fontWeight = FontWeight.Black, color = androidx.compose.ui.graphics.Color.White)
+            Text(
+                "👤",
+                fontSize = 40.sp
+            )
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
         Text(
-            text = "NOVA Messenger",
-            fontSize = 28.sp,
+            text = "البيانات الشخصية",
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
 
         Text(
-            text = "تواصل مع العالم بأمان وسرعة",
+            text = "أدخل اسمك ليتمكن أصدقاؤك من التعرف عليك\n(البريد الإلكتروني اختياري)",
             fontSize = 15.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 40.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
         )
 
-        // Name Field
+        // Name field (required)
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("الاسم الكامل") },
+            label = { Text("الاسم *") },
+            placeholder = { Text("اسمك الكامل") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             singleLine = true
@@ -86,38 +89,40 @@ fun LoginScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // Phone Field
+        // Email field (optional)
         OutlinedTextField(
-            value = phone,
-            onValueChange = { phone = it },
-            label = { Text("رقم الهاتف") },
-            placeholder = { Text("+966XXXXXXXXX") },
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("البريد الإلكتروني (اختياري)") },
+            placeholder = { Text("example@mail.com") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             singleLine = true
         )
 
         Spacer(Modifier.height(24.dp))
 
-        // Error message
         if (uiState is AuthUiState.Error) {
             Text(
                 text = (uiState as AuthUiState.Error).message,
                 color = MaterialTheme.colorScheme.error,
                 fontSize = 14.sp,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
         }
 
-        // Submit Button
         Button(
-            onClick = { viewModel.requestOtp(phone.trim(), name.trim()) },
+            onClick = {
+                val emailOrNull = email.trim().takeIf { it.isNotBlank() }
+                viewModel.updateProfile(name.trim(), emailOrNull, onDone = {})
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
             shape = RoundedCornerShape(16.dp),
-            enabled = phone.isNotBlank() && name.isNotBlank() && uiState !is AuthUiState.Loading
+            enabled = name.trim().length >= 2 && uiState !is AuthUiState.Loading
         ) {
             if (uiState is AuthUiState.Loading) {
                 CircularProgressIndicator(
@@ -126,12 +131,16 @@ fun LoginScreen(
                     strokeWidth = 2.dp
                 )
             } else {
-                Text("إرسال رمز التحقق", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("حفظ والمتابعة", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            text = phone,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
-
-// Helper extension for gradient brush
-fun Brush.Companion.linearGradientBrush(colors: List<androidx.compose.ui.graphics.Color>) =
-    linearGradient(colors)
