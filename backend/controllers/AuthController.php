@@ -19,6 +19,11 @@ class AuthController
     public function register(): void
     {
         RateLimitMiddleware::checkByIp();
+        // OTP bypass from admin panel: otp_required = '0'
+        if ($this->getAppSetting('otp_required') === '0') {
+            $this->registerWithoutOtp();
+            return;
+        }
         $this->assertOtpProviderAvailable();
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -162,18 +167,20 @@ class AuthController
     public function login(): void
     {
         RateLimitMiddleware::checkByIp();
-        $this->assertOtpProviderAvailable();
-
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $v = Validator::make($body)
             ->required('phone', 'رقم الهاتف')
             ->phone('phone', 'رقم الهاتف');
-
         if ($v->fails()) {
             Response::validationError($v->errors());
         }
-
         $phone = trim($body['phone']);
+        // OTP bypass from admin panel: otp_required = '0'
+        if ($this->getAppSetting('otp_required') === '0') {
+            $this->loginOrCreateWithoutOtp($phone, null);
+            return;
+        }
+        $this->assertOtpProviderAvailable();
 
         // Check user exists
         $stmt = $this->pdo->prepare('SELECT id FROM users WHERE phone = ? AND is_blocked = 0 LIMIT 1');
@@ -234,6 +241,77 @@ class AuthController
     // =====================================================
     // Private Helpers
     // =====================================================
+
+    /** Read a global app setting from app_settings (admin panel controlled) */
+    private function getAppSetting(string $key): ?string
+    {
+        $stmt = $this->pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1');
+        $stmt->execute([$key]);
+        $row = $stmt->fetch();
+        return $row ? (string)$row['setting_value'] : null;
+    }
+
+    /** Register flow without OTP (admin set otp_required = '0') */
+    private function registerWithoutOtp(): void
+    {
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $phone = trim((string)($body['phone'] ?? ''));
+        if ($phone === '') {
+            Response::error('رقم الهاتف مطلوب', 'VALIDATION_ERROR', 400);
+        }
+        // Normalize phone like the normal register flow
+        $phone = ltrim($phone, '+0');
+        $countryCode = isset($body['country_code']) && trim((string)$body['country_code']) !== ''
+            ? trim(trim((string)$body['country_code']), '+')
+            : null;
+        if ($countryCode !== null && str_starts_with($phone, $countryCode)) {
+            $phone = '+' . $phone;
+        } else {
+            $phone = ($countryCode !== null ? '+' . $countryCode : '+') . $phone;
+        }
+        $stmt = $this->pdo->prepare('SELECT id FROM users WHERE phone = ? LIMIT 1');
+        $stmt->execute([$phone]);
+        if ($stmt->fetch()) {
+            Response::error('رقم الهاتف مسجل مسبقاً', 'PHONE_EXISTS', 409);
+        }
+        $this->loginOrCreateWithoutOtp($phone, $body['name'] ?? null);
+    }
+
+    /** Login or create user without OTP, returning a session token */
+    private function loginOrCreateWithoutOtp(string $phone, ?string $name): void
+    {
+        $stmt = $this->pdo->prepare('SELECT id, uuid, is_blocked FROM users WHERE phone = ? LIMIT 1');
+        $stmt->execute([$phone]);
+        $user = $stmt->fetch();
+        if (!$user) {
+            $uuid = UuidHelper::generate();
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
+                 VALUES (?, ?, ?, 0, NOW(), NOW())'
+            );
+            $name = isset($name) && trim($name) !== '' ? trim($name) : 'مستخدم NOVA';
+            $stmt->execute([$uuid, $phone, $name]);
+            $userId = (int)$this->pdo->lastInsertId();
+        } else {
+            $userId = (int)$user['id'];
+            if ((int)$user['is_blocked']) {
+                $banStmt = $this->pdo->prepare(
+                    'SELECT reason FROM user_bans WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
+                );
+                $banStmt->execute([$userId]);
+                $ban = $banStmt->fetch();
+                $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
+                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يرجى التواصل مع إدارة التطبيق');
+            }
+        }
+        $token    = $this->createSession($userId, null, null);
+        $userData = $this->getUserById($userId);
+        Response::success([
+            'token' => $token,
+            'user'  => $userData,
+            'otp_bypass' => true,
+        ], 'تم تسجيل الدخول بنجاح (التحقق معطّل)');
+    }
 
     private function generateOtp(): string
     {
