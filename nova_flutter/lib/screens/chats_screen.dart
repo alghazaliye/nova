@@ -31,7 +31,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
         if (kv.length == 2 && kv[0] == 'tab') {
           if (kv[1] == 'stories' || kv[1] == 'status') _index = 1;
           if (kv[1] == 'calls' || kv[1] == 'call') _index = 2;
-          if (kv[1] == 'settings' || kv[1] == 'setting') _index = 3;
+          if (kv[1] == 'chats' || kv[1] == 'chat' || kv[1] == 'home') _index = 3;
+          if (kv[1] == 'settings' || kv[1] == 'setting') _index = 0;
         }
       }
     }
