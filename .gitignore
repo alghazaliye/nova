@@ -4,3 +4,4 @@ android/NOVAMessenger/local.properties
 android/NOVAMessenger/app/google-services.json
 *.log
 backend/.env
+android/NOVAMessenger/local.properties
