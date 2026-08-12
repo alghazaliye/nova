@@ -66,6 +66,8 @@ class Conversation {
   final bool isVerified;
   final String phone;
   final int otherUserId;
+  final bool isOnline;
+  final String? lastSeen;
 
   Conversation({
     required this.id,
@@ -79,6 +81,8 @@ class Conversation {
     this.isVerified = false,
     this.phone = '',
     this.otherUserId = 0,
+    this.isOnline = false,
+    this.lastSeen,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
@@ -99,6 +103,8 @@ class Conversation {
         isVerified: (j['is_verified'] ?? 0) == 1,
         phone: _memberPhone(j),
         otherUserId: _otherUserId(j),
+        isOnline: (j['is_online'] ?? 0) == 1,
+        lastSeen: j['last_seen'],
       );
 
   static String _memberPhone(Map<String, dynamic> j) {
@@ -189,4 +195,29 @@ class NovaMessage {
 
   bool get isMedia =>
       type == 'image' || type == 'video' || type == 'audio' || type == 'voice' || type == 'file';
+}
+
+/// تنسيق "آخر ظهور" بالعربية
+String formatLastSeen(String? lastSeen, {bool isOnline = false}) {
+  if (isOnline) return 'متصل الآن';
+  if (lastSeen == null || lastSeen.isEmpty) return 'آخر ظهور: مؤخراً';
+  try {
+    final dt = DateTime.parse(lastSeen);
+    final diff = DateTime.now().difference(dt);
+    String label;
+    if (diff.inSeconds < 60) {
+      label = 'منذ لحظات';
+    } else if (diff.inMinutes < 60) {
+      label = 'منذ ${diff.inMinutes} دقيقة';
+    } else if (diff.inHours < 24) {
+      label = 'منذ ${diff.inHours} ساعة';
+    } else if (diff.inDays < 7) {
+      label = 'منذ ${diff.inDays} يوم';
+    } else {
+      label = '${dt.day}/${dt.month}/${dt.year}';
+    }
+    return 'آخر ظهور: $label';
+  } catch (_) {
+    return 'آخر ظهور: مؤخراً';
+  }
 }

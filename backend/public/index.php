@@ -94,6 +94,9 @@ if ($uri === '/conversations' && $method === 'POST') {
 if (preg_match('#^/conversations/(\d+)$#', $uri, $m) && $method === 'GET') {
     (new ConversationController())->show((int)$m[1]);
 }
+if (preg_match('#^/conversations/(\d+)$#', $uri, $m) && $method === 'PUT') {
+    (new ConversationController())->updateDisappearing((int)$m[1]);
+}
 if (preg_match('#^/conversations/(\d+)$#', $uri, $m) && $method === 'DELETE') {
     (new ConversationController())->delete((int)$m[1]);
 }
@@ -147,6 +150,9 @@ if ($uri === '/calls' && $method === 'POST') {
 }
 if ($uri === '/calls' && $method === 'GET') {
     (new CallController())->index();
+}
+if ($uri === '/calls/incoming' && $method === 'GET') {
+    (new CallController())->incoming();
 }
 if (preg_match('#^/calls/(\d+)$#', $uri, $m) && $method === 'GET') {
     (new CallController())->show((int)$m[1]);
@@ -225,6 +231,18 @@ if ($uri === '/devices/register' && $method === 'POST') {
 }
 if ($uri === '/devices' && $method === 'GET') {
     (new DeviceController())->index();
+}
+if ($uri === '/devices/fcm-token' && $method === 'POST') {
+    (new DeviceController())->saveFcmToken();
+}
+if ($uri === '/heartbeat' && $method === 'POST') {
+    (new UserController())->heartbeat();
+}
+if ($uri === '/privacy' && $method === 'GET') {
+    (new UserController())->privacyGet();
+}
+if ($uri === '/privacy' && $method === 'PUT') {
+    (new UserController())->privacyUpdate();
 }
 if (preg_match('#^/devices/(\d+)/toggle$#', $uri, $m) && $method === 'POST') {
     (new DeviceController())->toggleDevice((int)$m[1]);

@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
-import '../models/user_model.dart';
+import '../models/user_model.dart' show NovaMessage, Conversation, formatLastSeen;
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
@@ -27,6 +28,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _loading = false;
   bool _hasMore = true;
   bool _hasText = false;
+  Timer? _pollTimer;
   final ImagePicker _picker = ImagePicker();
   static const Uuid _uuid = Uuid();
 
@@ -38,13 +40,51 @@ class _ChatScreenState extends State<ChatScreen> {
       if (has != _hasText) setState(() => _hasText = has);
     });
     _load();
+    // Polling: تحديث تلقائي للرسائل كل 3 ثوانٍ
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted && !_loading) _refreshSilent();
+    });
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _ctrl.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// تحديث صامت: يجلب أحدث الرسائل الجديدة فقط ويحدّث حالة الرسائل الحالية
+  Future<void> _refreshSilent() async {
+    try {
+      final res = await ApiService.get(
+        '/conversations/${widget.conv.id}/messages',
+        query: {'limit': '50'},
+      );
+      if (!mounted || res['success'] != true || res['data'] is! List) return;
+      final msgs = (res['data'] as List)
+          .map((e) => NovaMessage.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      if (msgs.isEmpty) return;
+      setState(() {
+        // تحديث حالة الرسائل الموجودة (تسليم/قراءة)
+        for (final m in msgs) {
+          final idx = _messages.indexWhere((x) => x.id == m.id);
+          if (idx >= 0) {
+            _messages[idx] = m;
+          }
+        }
+        // إضافة رسائل جديدة لم تصلنا بعد
+        final existingIds = _messages.map((e) => e.id).toSet();
+        for (final m in msgs) {
+          if (!existingIds.contains(m.id)) {
+            _messages.add(m);
+          }
+        }
+      });
+      // تمرير للأسفل إذا وصلت رسائل جديدة
+      _scrollToBottom();
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -262,6 +302,71 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _showDisappearSheet() async {
+    final selected = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.42),
+      builder: (c) {
+        final cl = NovaColors.of(c);
+        return Container(
+          decoration: BoxDecoration(
+            color: cl.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(c).bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                    width: 42, height: 4,
+                    decoration: BoxDecoration(color: cl.line, borderRadius: BorderRadius.circular(5))),
+              ),
+              const SizedBox(height: 15),
+              Text('الرسائل المختفية',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cl.text)),
+              const SizedBox(height: 6),
+              Text('تُطبق على الرسائل الجديدة فقط',
+                  style: TextStyle(fontSize: 12.5, color: cl.muted)),
+              const SizedBox(height: 14),
+              ..._disappearOptions.map((opt) => PressScale(
+                    onTap: () => Navigator.pop(c, opt['value'] as int?),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(children: [
+                        Icon(opt['icon'] as IconData, color: cl.accent, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(opt['label'] as String,
+                              style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
+                        ),
+                      ]),
+                    ),
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    final res = await ApiService.put('/conversations/${widget.conv.id}', body: {'disappear_after': selected});
+    if (mounted) {
+      if (res['success'] == true) {
+        showToast(context, 'تم حفظ الإعداد');
+      } else {
+        showToast(context, res['message'] ?? 'فشل الحفظ');
+      }
+    }
+  }
+
+  static const _disappearOptions = [
+    {'label': 'دائم (لا تختفي)', 'value': 0, 'icon': Icons.inbox},
+    {'label': 'بعد 24 ساعة', 'value': 86400, 'icon': Icons.timelapse},
+    {'label': 'بعد القراءة', 'value': -1, 'icon': Icons.visibility},
+  ];
+
   void _showMessageMenu(NovaMessage msg) {
     final me = context.read<AuthProvider>().user;
     final isMine = msg.senderId == me?.id;
@@ -344,7 +449,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       letter: widget.conv.name.isNotEmpty ? widget.conv.name[0] : '?',
                       size: 42,
                       radius: 14,
-                      online: true,
+                      online: widget.conv.isOnline,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -368,8 +473,14 @@ class _ChatScreenState extends State<ChatScreen> {
                               ],
                             ),
                             Text(
-                              'اضغط للاتصال',
-                              style: TextStyle(fontSize: 12, color: c.muted),
+                              widget.conv.isOnline
+                                  ? 'متصل الآن'
+                                  : formatLastSeen(widget.conv.lastSeen),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: widget.conv.isOnline
+                                      ? const Color(0xFF25D366)
+                                      : c.muted),
                             ),
                           ],
                         ),
@@ -377,6 +488,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     IconBtn(icon: Icons.phone, onTap: () => _startCall('voice')),
                     IconBtn(icon: Icons.videocam, onTap: () => _startCall('video')),
+                    IconBtn(icon: Icons.timer, onTap: () => _showDisappearSheet()),
                     IconBtn(icon: Icons.more_vert, onTap: () => openChatOptionsSheet(context)),
                   ],
                 ),
@@ -546,6 +658,35 @@ class _Bubble extends StatelessWidget {
   final double maxWidth;
   final NovaColors colors;
 
+  /// علامات القراءة: ✓ (أُرسلت) / ✓✓ رمادي (سُلمت) / ✓✓ أزرق (قُرئت)
+  static List<Widget> _statusTicks(String status, NovaColors c) {
+    Color color;
+    String label;
+    switch (status) {
+      case 'read':
+        color = const Color(0xFF3B82F6);
+        label = '✓✓';
+        break;
+      case 'delivered':
+        color = const Color(0xFF6B7280);
+        label = '✓✓';
+        break;
+      case 'deleted':
+        color = const Color(0xFFEF4444);
+        label = '✕';
+        break;
+      default:
+        color = const Color(0xFF9CA3AF);
+        label = '✓';
+    }
+    return [
+      const SizedBox(width: 4),
+      Text(label,
+          style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = colors;
@@ -580,19 +721,48 @@ class _Bubble extends StatelessWidget {
               ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Image.network(msg.filePath!, width: 240, height: 160, fit: BoxFit.cover))
+            else if (msg.type == 'audio' && msg.filePath != null)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: c.accent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                child: Row(children: [
+                  Icon(Icons.audiotrack, color: c.accent, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(msg.body ?? 'رسالة صوتية',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: isMine ? c.mineText : c.text)),
+                  ),
+                ]),
+              )
+            else if (msg.type == 'file' && msg.filePath != null)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: c.accent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                child: Row(children: [
+                  Icon(Icons.attach_file, color: c.accent, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(msg.body ?? 'ملف',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: isMine ? c.mineText : c.text)),
+                  ),
+                ]),
+              )
             else
               Text(msg.body ?? '',
                   style: TextStyle(fontSize: 14.5, height: 1.5, color: isMine ? c.mineText : c.text)),
             const SizedBox(height: 3),
             Row(mainAxisSize: MainAxisSize.min, children: [
               if (msg.isEdited)
-                Text(' (معدلة)',
+                Text('(معدلة)  ',
                     style: TextStyle(fontSize: 10,
                         color: isMine ? c.mineText.withOpacity(0.7) : c.muted)),
               if (time.isNotEmpty)
-                Text('  $time',
+                Text('$time  ',
                     style: TextStyle(fontSize: 10,
                         color: isMine ? c.mineText.withOpacity(0.7) : c.muted)),
+              if (isMine) ..._statusTicks(msg.status, c),
             ]),
           ],
         ),

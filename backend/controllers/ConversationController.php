@@ -23,6 +23,7 @@ class ConversationController
         $stmt = $this->pdo->prepare(
             'SELECT c.id, c.uuid, c.type, c.title, c.avatar, c.updated_at,
                     cm.is_muted, cm.is_pinned, cm.last_read_message_id,
+                    cm.disappear_after,
                     m.body AS last_message_body, m.type AS last_message_type,
                     m.created_at AS last_message_at, m.sender_id AS last_message_sender_id,
                     (SELECT COUNT(*) FROM messages msg
@@ -252,6 +253,32 @@ class ConversationController
         }
 
         return $conv ?: null;
+    }
+
+    // PUT /api/v1/conversations/{id} — ضبط الرسائل المختفية للمستخدم الحالي فقط
+    public function updateDisappearing(int $convId): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $value = $body['disappear_after'] ?? null;
+        if (!in_array($value, [0, 86400, -1], true)) {
+            Response::error('القيمة غير صالحة: 0 (دائم)، 86400 (بعد 24 ساعة)، -1 (بعد القراءة)', 'INVALID_VALUE', 400);
+        }
+
+        $stmt = $this->pdo->prepare(
+            'UPDATE conversation_members SET disappear_after = ?
+             WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL'
+        );
+        $stmt->execute([(int)$value, $convId, $userId]);
+
+        if ($stmt->rowCount() === 0) {
+            Response::error('المحادثة غير موجودة', 'NOT_FOUND', 404);
+        }
+
+        // عند "بعد القراءة": نعلّم فورًا أن هذا الطرف يريد الإخفاء الفوري
+        Response::success(['disappear_after' => (int)$value]);
     }
 
     private function getOtherParticipant(int $convId, int $myId): ?array

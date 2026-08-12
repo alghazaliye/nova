@@ -139,6 +139,71 @@ class UserController
         Response::success($stmt->fetchAll());
     }
 
+    // POST /api/v1/heartbeat — تحديث آخر الظهور وحالة الاتصال (يُستدعى مع كل نبضة من التطبيق)
+    public function heartbeat(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $this->pdo->prepare(
+            'UPDATE users SET is_online = 1, last_seen = NOW(), updated_at = NOW() WHERE id = ?'
+        )->execute([$userId]);
+
+        Response::success(null, 'ok');
+    }
+
+    // GET /api/v1/privacy
+    public function privacyGet(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT last_seen_visibility, photo_visibility, status_visibility, read_receipts
+             FROM privacy_settings WHERE user_id = ? LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            $this->pdo->prepare(
+                'INSERT INTO privacy_settings (user_id) VALUES (?)'
+            )->execute([$userId]);
+            $row = ['last_seen_visibility' => 'contacts', 'photo_visibility' => 'contacts', 'status_visibility' => 'contacts', 'read_receipts' => 1];
+        }
+        Response::success($row);
+    }
+
+    // PUT /api/v1/privacy
+    public function privacyUpdate(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $allowed = ['last_seen_visibility', 'photo_visibility', 'status_visibility', 'read_receipts'];
+        $sets = []; $params = [];
+        foreach ($allowed as $field) {
+            if (array_key_exists($field, $body)) {
+                if ($field === 'read_receipts') {
+                    $val = filter_var($body[$field], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+                } else {
+                    $val = in_array($body[$field], ['everybody', 'contacts', 'nobody'], true) ? $body[$field] : null;
+                    if ($val === null) continue;
+                }
+                $sets[] = "{$field} = ?";
+                $params[] = $val;
+            }
+        }
+        if (empty($sets)) {
+            Response::error('لا توجد بيانات للتحديث', 'NO_DATA', 400);
+        }
+        $params[] = $userId;
+        $this->pdo->prepare('INSERT INTO privacy_settings (user_id) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM privacy_settings WHERE user_id = ?)')->execute([$userId, $userId]);
+        $this->pdo->prepare('UPDATE privacy_settings SET ' . implode(', ', $sets) . ' WHERE user_id = ?')->execute($params);
+
+        Response::success(null, 'تم تحديث إعدادات الخصوصية');
+    }
+
     // POST /api/v1/users/{id}/block
     public function blockUser(int $targetId): void
     {

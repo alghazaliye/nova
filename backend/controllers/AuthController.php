@@ -215,6 +215,9 @@ class AuthController
         $this->pdo->prepare('UPDATE sessions SET revoked_at = NOW() WHERE token_hash = ?')
                   ->execute([$tokenHash]);
 
+        $this->pdo->prepare('UPDATE users SET is_online = 0, last_seen = NOW() WHERE id = ?')
+                  ->execute([(int)$user['user_id']]);
+
         Response::success(null, 'تم تسجيل الخروج بنجاح');
     }
 

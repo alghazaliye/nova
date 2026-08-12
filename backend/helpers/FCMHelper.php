@@ -1,38 +1,105 @@
 <?php
 /**
- * NOVA Messenger - Firebase Cloud Messaging (FCM) Helper
- * Handles sending push notifications to users
+ * NOVA Messenger - Firebase Cloud Messaging (FCM) Helper (v1 API)
+ * Uses Firebase Admin SDK Service Account + OAuth2 JWT bearer token.
  */
 
 declare(strict_types=1);
 
 class FCMHelper
 {
-    private static ?string $serverKey = null;
     private static ?string $projectId = null;
-    private const FCM_API_URL = 'https://fcm.googleapis.com/fcm/send';
+    private static ?string $accessToken = null;
+    private static int $tokenExpireAt = 0;
+    private const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+    private const FCM_API_URL = 'https://fcm.googleapis.com/v1/projects/%s/messages:send';
 
     /**
-     * Initialize FCM with credentials from environment
+     * Load service account from config file
      */
+    private static function getServiceAccount(): ?array
+    {
+        $file = __DIR__ . '/../config/nova-firebase-sa.json';
+        if (!is_file($file)) {
+            $file = $_ENV['FCM_SA_FILE'] ?? '';
+        }
+        if (empty($file) || !is_file($file)) {
+            return null;
+        }
+        $sa = json_decode(file_get_contents($file), true);
+        return is_array($sa) && !empty($sa['client_email']) && !empty($sa['private_key']) ? $sa : null;
+    }
+
     public static function initialize(): void
     {
-        self::$serverKey = $_ENV['FCM_SERVER_KEY'] ?? null;
-        self::$projectId = $_ENV['FCM_PROJECT_ID'] ?? null;
+        $sa = self::getServiceAccount();
+        self::$projectId = $sa['project_id'] ?? $_ENV['FCM_PROJECT_ID'] ?? null;
     }
 
-    /**
-     * Check if FCM is enabled and configured
-     */
     public static function isEnabled(): bool
     {
-        return !empty(self::$serverKey) && !empty(self::$projectId);
+        self::initialize();
+        return self::getServiceAccount() !== null && !empty(self::$projectId);
     }
 
     /**
-     * Send notification to a single device
+     * Obtain an OAuth2 access token via JWT (valid for ~1 hour)
      */
-        public static function sendToDevice(
+    public static function getAccessToken(): ?string
+    {
+        if (self::$accessToken !== null && time() < self::$tokenExpireAt - 60) {
+            return self::$accessToken;
+        }
+
+        $sa = self::getServiceAccount();
+        if (!$sa) return null;
+
+        $now = time();
+        $header = self::base64Url(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $claims = self::base64Url(json_encode([
+            'iss'  => $sa['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+            'aud'  => self::TOKEN_URL,
+            'exp'  => $now + 3600,
+            'iat'  => $now,
+        ]));
+
+        $signature = '';
+        openssl_sign("$header.$claims", $signature, $sa['private_key'], 'SHA256');
+
+        $jwt = "$header.$claims." . self::base64Url($signature);
+
+        $ch = curl_init(self::TOKEN_URL);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query([
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion' => $jwt,
+            ]),
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $data = json_decode($resp, true);
+        if ($code !== 200 || empty($data['access_token'])) {
+            error_log('FCM token exchange failed: ' . $resp);
+            return null;
+        }
+
+        self::$accessToken = $data['access_token'];
+        self::$tokenExpireAt = $now + ($data['expires_in'] ?? 3600);
+        return self::$accessToken;
+    }
+
+    private static function base64Url(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    public static function sendToDevice(
         string $deviceToken,
         string $title,
         string $body,
@@ -40,151 +107,86 @@ class FCMHelper
         ?string $imageUrl = null,
         bool $highPriority = false
     ): bool {
-        if (!self::isEnabled()) {
-            error_log('FCM is not enabled or configured');
-            return false;
-        }
-        if ($highPriority) {
-            // Data-only high-priority message for instant WebRTC signaling delivery
-            return self::sendRequest([
-                'to' => $deviceToken,
-                'data' => array_map(fn($v) => is_string($v) ? $v : json_encode($v), $data),
-                'priority' => 'high',
-                'content_available' => true,
-            ]);
-        }
+        $token = self::getAccessToken();
+        if (!$token) return false;
 
-        $payload = [
-            'to' => $deviceToken,
-            'notification' => [
-                'title' => $title,
-                'body' => $body,
-                'sound' => 'default',
-                'priority' => 'high',
-            ],
+        $message = [
+            'token' => $deviceToken,
             'data' => array_map(fn($v) => is_string($v) ? $v : json_encode($v), $data),
         ];
 
-        if ($imageUrl) {
-            $payload['notification']['image'] = $imageUrl;
+        if ($title !== '' || $body !== '') {
+            $notif = [];
+            if ($title !== '') $notif['title'] = $title;
+            if ($body !== '') $notif['body'] = $body;
+            $message['notification'] = $notif;
+            $message['android'] = [
+                'priority' => 'high',
+                'notification' => ['sound' => 'default', 'default_sound' => true],
+            ];
+            $message['apns'] = [
+                'payload' => ['aps' => ['sound' => 'default']],
+            ];
+        } else {
+            $message['android'] = ['priority' => 'high'];
         }
 
-        return self::sendRequest($payload);
+        return self::sendRequest(['message' => $message]);
     }
 
-    /**
-     * Send notification to multiple devices
-     */
-    public static function sendToDevices(
-        array $deviceTokens,
-        string $title,
-        string $body,
-        array $data = [],
-        ?string $imageUrl = null
-    ): array {
+    public static function sendToDevices(array $deviceTokens, string $title, string $body, array $data = [], ?string $imageUrl = null): array
+    {
         $results = [];
-        foreach ($deviceTokens as $token) {
-            $results[$token] = self::sendToDevice($token, $title, $body, $data, $imageUrl);
+        foreach ($deviceTokens as $t) {
+            $results[$t] = self::sendToDevice($t, $title, $body, $data, $imageUrl);
         }
         return $results;
     }
 
-    /**
-     * Send notification to a topic
-     */
-    public static function sendToTopic(
-        string $topic,
-        string $title,
-        string $body,
-        array $data = [],
-        ?string $imageUrl = null
-    ): bool {
-        if (!self::isEnabled()) {
-            error_log('FCM is not enabled or configured');
-            return false;
-        }
+    public static function sendToTopic(string $topic, string $title, string $body, array $data = [], ?string $imageUrl = null): bool
+    {
+        $token = self::getAccessToken();
+        if (!$token) return false;
 
-        $payload = [
-            'to' => '/topics/' . $topic,
-            'notification' => [
-                'title' => $title,
-                'body' => $body,
-                'sound' => 'default',
-                'priority' => 'high',
-            ],
-            'data' => $data,
+        $message = [
+            'topic' => $topic,
+            'notification' => ['title' => $title, 'body' => $body],
+            'data' => array_map(fn($v) => is_string($v) ? $v : json_encode($v), $data),
         ];
-
-        if ($imageUrl) {
-            $payload['notification']['image'] = $imageUrl;
-        }
-
-        return self::sendRequest($payload);
+        return self::sendRequest(['message' => $message]);
     }
 
-    /**
-     * Send a message notification (for new messages)
-     */
-    public static function sendMessageNotification(
-        string $deviceToken,
-        string $senderName,
-        string $messagePreview,
-        string $conversationId,
-        ?string $senderAvatar = null
-    ): bool {
+    public static function sendMessageNotification(string $deviceToken, string $senderName, string $messagePreview, string $conversationId, ?string $senderAvatar = null): bool
+    {
         return self::sendToDevice(
             $deviceToken,
             $senderName,
             $messagePreview,
-            [
-                'type' => 'message',
-                'conversation_id' => $conversationId,
-                'action' => 'open_conversation',
-            ],
+            ['type' => 'message', 'conversation_id' => $conversationId, 'action' => 'open_conversation'],
             $senderAvatar
         );
     }
 
-    /**
-     * Send a call notification
-     */
-    public static function sendCallNotification(
-        string $deviceToken,
-        string $callerName,
-        string $callId,
-        ?string $callerAvatar = null
-    ): bool {
+    public static function sendCallNotification(string $deviceToken, string $callerName, string $callId, ?string $callerAvatar = null): bool
+    {
         return self::sendToDevice(
             $deviceToken,
             'مكالمة واردة',
             "اتصال من $callerName",
-            [
-                'type' => 'call',
-                'call_id' => $callId,
-                'action' => 'answer_call',
-            ],
+            ['type' => 'call', 'call_id' => $callId, 'action' => 'answer_call'],
             $callerAvatar
         );
     }
 
-    /**
-     * Send a high-priority WebRTC call signaling data message
-     */
-    public static function sendCallSignalNotification(
-        string $deviceToken,
-        string $callId,
-        string $signalType,
-        string $payloadJson,
-        ?string $senderName = null
-    ): bool {
+    public static function sendCallSignalNotification(string $deviceToken, string $callId, string $signalType, string $payloadJson, ?string $senderName = null): bool
+    {
         $payload = json_decode($payloadJson, true);
         if (!is_array($payload)) {
             $payload = ['raw' => $payloadJson];
         }
-
         return self::sendToDevice(
             $deviceToken,
-            $senderName ? "إشارة مكالمة من $senderName" : 'إشارة مكالمة',
+            '',
             '',
             array_merge(['type' => 'call_signal', 'call_id' => $callId, 'signal_type' => $signalType], $payload),
             null,
@@ -192,68 +194,44 @@ class FCMHelper
         );
     }
 
-    /**
-     * Send a story notification
-     */
-    public static function sendStoryNotification(
-        string $deviceToken,
-        string $authorName,
-        string $storyId,
-        ?string $authorAvatar = null
-    ): bool {
+    public static function sendStoryNotification(string $deviceToken, string $authorName, string $storyId, ?string $authorAvatar = null): bool
+    {
         return self::sendToDevice(
             $deviceToken,
             'حالة جديدة',
             "$authorName أضاف حالة جديدة",
-            [
-                'type' => 'story',
-                'story_id' => $storyId,
-                'action' => 'open_story',
-            ],
+            ['type' => 'story', 'story_id' => $storyId, 'action' => 'open_story'],
             $authorAvatar
         );
     }
 
-    /**
-     * Send a group notification
-     */
-    public static function sendGroupNotification(
-        string $deviceToken,
-        string $groupName,
-        string $message,
-        string $groupId,
-        ?string $groupAvatar = null
-    ): bool {
+    public static function sendGroupNotification(string $deviceToken, string $groupName, string $message, string $groupId, ?string $groupAvatar = null): bool
+    {
         return self::sendToDevice(
             $deviceToken,
             $groupName,
             $message,
-            [
-                'type' => 'group_message',
-                'group_id' => $groupId,
-                'action' => 'open_group',
-            ],
+            ['type' => 'group_message', 'group_id' => $groupId, 'action' => 'open_group'],
             $groupAvatar
         );
     }
 
-    /**
-     * Send the actual HTTP request to FCM
-     */
     private static function sendRequest(array $payload): bool
     {
-        $ch = curl_init(self::FCM_API_URL);
-        
+        $token = self::getAccessToken();
+        if (!$token || empty(self::$projectId)) return false;
+
+        $url = sprintf(self::FCM_API_URL, self::$projectId);
+        $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => [
-                'Authorization: key=' . self::$serverKey,
+                'Authorization: Bearer ' . $token,
                 'Content-Type: application/json',
             ],
-            CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => json_encode($payload),
             CURLOPT_TIMEOUT => 10,
-            CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
         $response = curl_exec($ch);
@@ -265,22 +243,12 @@ class FCMHelper
             error_log("FCM Request Error: $error");
             return false;
         }
-
         if ($httpCode !== 200) {
             error_log("FCM Response Error (HTTP $httpCode): $response");
             return false;
         }
-
-        $result = json_decode($response, true);
-        
-        if (isset($result['failure']) && $result['failure'] > 0) {
-            error_log("FCM Delivery Failed: " . json_encode($result));
-            return false;
-        }
-
         return true;
     }
 }
 
-// Initialize FCM on load
 FCMHelper::initialize();

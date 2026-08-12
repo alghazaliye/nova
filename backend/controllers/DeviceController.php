@@ -156,6 +156,50 @@ class DeviceController
         Response::success(['device_id' => $deviceId, 'is_active' => 1], 'تم تفعيل الجهاز');
     }
 
+    // POST /api/v1/devices/fcm-token — حفظ رمز FCM للجهاز الحالي
+    public function saveFcmToken(): void
+    {
+        $user = AuthMiddleware::authenticate();
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $token = trim((string)($body['fcm_token'] ?? ''));
+        if (empty($token)) {
+            Response::error('يجب إرسال رمز الجهاز', 'MISSING_TOKEN', 400);
+        }
+
+        // Register device if not exists (minimal record from fingerprint)
+        $fingerprint = trim((string)($body['device_fingerprint'] ?? ''));
+        if (!empty($fingerprint)) {
+            $this->pdo->prepare(
+                'INSERT INTO device_registrations
+                    (user_id, device_fingerprint, device_model, os_name, os_version, app_version, platform, is_active, first_seen, last_seen)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE last_seen = NOW()'
+            )->execute([
+                (int)$user['user_id'],
+                $fingerprint,
+                $body['device_model'] ?? null,
+                $body['os_name'] ?? null,
+                $body['os_version'] ?? null,
+                $body['app_version'] ?? null,
+                $body['platform'] ?? null,
+            ]);
+        }
+
+        // Save token on the current session device (most recent active) and legacy user_devices
+        $this->pdo->prepare(
+            'UPDATE device_registrations SET fcm_token = ? WHERE user_id = ? AND is_active = 1 ORDER BY last_seen DESC LIMIT 1'
+        )->execute([$token, (int)$user['user_id']]);
+
+        $this->pdo->prepare(
+            'INSERT INTO user_devices (user_id, device_uuid, platform, fcm_token, last_active_at)
+             VALUES (?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE fcm_token = ?, last_active_at = NOW()'
+        )->execute([(int)$user['user_id'], $fingerprint ?: 'web-' . substr(md5($token), 0, 12), $body['platform'] ?? 'android', $token, $token]);
+
+        Response::success(null, 'تم تسجيل رمز الإشعارات');
+    }
+
     // Private helpers
 
     private function getDeviceId(int $userId, string $fingerprint): int

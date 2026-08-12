@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
@@ -8,6 +9,8 @@ import '../utils/nova_ui.dart';
 import 'stories_screen.dart';
 import 'calls_screen.dart';
 import 'settings_screen.dart';
+import 'call_screen.dart';
+import '../utils/web_notifier.dart';
 
 /// الشل الرئيسي بشريط تنقل سفلي زجاجي: المحادثات، المكالمات، الحالات، جهات الاتصال، الإعدادات
 class ChatsScreen extends StatefulWidget {
@@ -19,6 +22,8 @@ class ChatsScreen extends StatefulWidget {
 
 class _ChatsScreenState extends State<ChatsScreen> {
   int _index = 0;
+  Timer? _incomingCallTimer;
+  Map<String, dynamic>? _incomingCall;
 
   @override
   void initState() {
@@ -37,6 +42,55 @@ class _ChatsScreenState extends State<ChatsScreen> {
         }
       }
     }
+    // فحص المكالمات الواردة كل 2 ثانية (إشعار فوري)
+    _incomingCallTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted || _incomingCall != null) return;
+      try {
+        final res = await ApiService.get('/calls/incoming');
+        if (!mounted || res['success'] != true) return;
+        final data = res['data'];
+        if (data is List && data.isNotEmpty) {
+          final call = Map<String, dynamic>.from(data[0] as Map<String, dynamic>);
+          setState(() => _incomingCall = call);
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (c) => _IncomingCallDialog(
+              call: call,
+              onAnswer: () => _acceptCall(call),
+              onReject: () => _rejectCall(call),
+            ),
+          );
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _acceptCall(Map<String, dynamic> call) async {
+    final callId = call['id'];
+    try {
+      await ApiService.post('/calls/$callId/sign', body: {'signal': 'accept'});
+      await ApiService.post('/calls/$callId/answer');
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CallScreen(callData: call)));
+    } catch (e) {
+      if (mounted) showToast(context, 'فشل قبول المكالمة');
+    }
+  }
+
+  Future<void> _rejectCall(Map<String, dynamic> call) async {
+    final callId = call['id'];
+    try {
+      await ApiService.post('/calls/$callId/reject');
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _incomingCallTimer?.cancel();
+    super.dispose();
   }
 
   final List<Widget> _pages = const [
@@ -55,6 +109,21 @@ class _ChatsScreenState extends State<ChatsScreen> {
           Positioned.fill(
             child: IndexedStack(index: _index, children: _pages),
           ),
+          if (_incomingCall != null)
+            Positioned.fill(
+              child: _IncomingCallDialog(
+                call: _incomingCall!,
+                onAnswer: () {
+                  Navigator.of(context).pop();
+                  _acceptCall(_incomingCall!);
+                },
+                onReject: () {
+                  Navigator.of(context).pop();
+                  _rejectCall(_incomingCall!);
+                  setState(() => _incomingCall = null);
+                },
+              ),
+            ),
           Positioned(
             left: 0,
             right: 0,
@@ -92,10 +161,16 @@ class _ChatsTabState extends State<ChatsTab> {
   bool _loading = true;
   String _search = '';
   String? _autoChat;
+  Timer? _pollTimer;
+  int _lastTotalUnread = 0;
 
   @override
   void initState() {
     super.initState();
+    // طلب إذن إشعارات المتصفح عند الدخول (ويب فقط)
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => WebNotifier.requestPermission());
+    }
     if (kIsWeb) {
       final url = novaHref();
       final q = url.contains('?') ? url.split('?')[1] : '';
@@ -107,6 +182,50 @@ class _ChatsTabState extends State<ChatsTab> {
       }
     }
     _load();
+    // Polling: تحديث تلقائي للمحادثات كل 5 ثوانٍ + heartbeat كل 30 ثانية
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) _refreshSilent();
+    });
+    Timer.periodic(const Duration(seconds: 30), (_) async {
+      if (!mounted) return;
+      try {
+        await ApiService.post('/heartbeat', body: {'status': 'online'});
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _refreshSilent() async {
+    try {
+      final res = await ApiService.get('/conversations');
+      if (mounted && res['success'] == true && res['data'] is List) {
+        final convs = (res['data'] as List)
+            .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        // إشعار ويب عند وصول رسائل جديدة
+        int total = 0;
+        String? latestSender;
+        for (final c in convs) {
+          total += c.unreadCount ?? 0;
+          if ((c.unreadCount ?? 0) > 0 && latestSender == null) {
+            latestSender = c.name;
+          }
+        }
+        if (kIsWeb && total > _lastTotalUnread && latestSender != null && _lastTotalUnread > 0) {
+          WebNotifier.show('NOVA Messenger', '$latestSender أرسل رسالة...', tag: 'new-message');
+        }
+        _lastTotalUnread = total;
+        setState(() {
+          _conversations = convs;
+          _applyFilter();
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -356,6 +475,34 @@ class _ChatsTabState extends State<ChatsTab> {
                                             style: TextStyle(
                                                 fontSize: 13, color: c.muted),
                                           ),
+                                          const SizedBox(height: 3),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                conv.isOnline
+                                                    ? Icons.circle
+                                                    : Icons.circle_outlined,
+                                                size: 8,
+                                                color: conv.isOnline
+                                                    ? const Color(0xFF25D366)
+                                                    : c.muted,
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                conv.isOnline
+                                                    ? 'متصل الآن'
+                                                    : formatLastSeen(
+                                                        conv.lastSeen,
+                                                        isOnline: conv.isOnline),
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: conv.isOnline
+                                                        ? const Color(0xFF25D366)
+                                                        : c.muted),
+                                              ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -370,6 +517,131 @@ class _ChatsTabState extends State<ChatsTab> {
                       ),
                     ),
         ),
+      ],
+    );
+  }
+}
+
+/// حوار مكالمة واردة — شاشة رنين كاملة مع صوت واهتزاز
+/// (في الويب: بدون اهتزاز لكن مع إشعار ويب عبر html.Notification)
+class _IncomingCallDialog extends StatefulWidget {
+  final Map<String, dynamic> call;
+  final VoidCallback onAnswer;
+  final VoidCallback onReject;
+  const _IncomingCallDialog({
+    required this.call,
+    required this.onAnswer,
+    required this.onReject,
+  });
+
+  @override
+  State<_IncomingCallDialog> createState() => _IncomingCallDialogState();
+}
+
+class _IncomingCallDialogState extends State<_IncomingCallDialog> {
+  @override
+  void initState() {
+    super.initState();
+    // إشعار متصفح عند مكالمة واردة (ويب فقط)
+    WebNotifier.show('NOVA Messenger',
+        '${widget.call['caller_name'] ?? 'مستخدم'} يُجري اتصالًا...',
+        tag: 'incoming-call');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.call['caller_name'] ?? 'متصل...';
+    final type = widget.call['call_type'] ?? 'voice';
+    return Container(
+      color: Colors.black.withOpacity(0.92),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            // رنين: نبض الأيقونة
+            Container(
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF25D366).withOpacity(0.15),
+              ),
+              child: Icon(
+                type == 'video' ? Icons.videocam : Icons.call,
+                color: const Color(0xFF25D366),
+                size: 56,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(name,
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text('مكالمة ${type == 'video' ? 'فيديو' : 'صوتية'} واردة',
+                style: TextStyle(color: Colors.white70, fontSize: 16)),
+            const SizedBox(height: 12),
+            const Text('يضغط... يرسل رنينًا',
+                style: TextStyle(color: Colors.white54, fontSize: 13)),
+            const SizedBox(height: 60),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // رفض
+                _CallBtn(
+                  icon: Icons.call_end,
+                  color: const Color(0xFFEF4444),
+                  label: 'رفض',
+                  onTap: widget.onReject,
+                ),
+                const SizedBox(width: 60),
+                // قبول
+                _CallBtn(
+                  icon: Icons.call,
+                  color: const Color(0xFF25D366),
+                  label: 'قبول',
+                  onTap: widget.onAnswer,
+                ),
+              ],
+            ),
+            const SizedBox(height: 60),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CallBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+  const _CallBtn({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        PressScale(
+          onTap: onTap,
+          child: Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 20)],
+            ),
+            child: Icon(icon, color: Colors.white, size: 32),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
       ],
     );
   }

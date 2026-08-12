@@ -34,7 +34,7 @@ class MessageController
 
         $stmt = $this->pdo->prepare(
             "SELECT m.id, m.uuid, m.conversation_id, m.sender_id, m.reply_to_message_id,
-                    m.type, m.body, m.file_id, m.client_message_id, m.status,
+                    m.type, m.body, m.file_id, m.client_message_id, m.status, m.disappear_after,
                     m.created_at, m.updated_at, m.deleted_at,
                     u.name AS sender_name, u.avatar AS sender_avatar,
                     a.storage_path AS file_path, a.thumbnail_path, a.mime_type, a.file_size,
@@ -49,6 +49,25 @@ class MessageController
         $stmt->execute($params);
         $messages = array_reverse($stmt->fetchAll());
 
+        // Mark unread non-deleted messages sent to this user as delivered, then mark all as read
+        foreach ($messages as $m) {
+            if ((int)$m['sender_id'] !== $userId && in_array($m['status'], ['sent', 'delivered'], true) && $m['status'] !== 'deleted') {
+                $this->pdo->prepare('UPDATE messages SET status = "delivered", updated_at = NOW() WHERE id = ? AND status = "sent"')
+                          ->execute([$m['id']]);
+            }
+        }
+        if (!empty($messages)) {
+            $ids = array_map(fn ($m) => (int)$m['id'], $messages);
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $this->pdo->prepare(
+                "INSERT IGNORE INTO message_reads (message_id, user_id, read_at)
+                 SELECT id, ?, NOW() FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+            )->execute(array_merge([$userId], $ids, [$userId]));
+            $this->pdo->prepare(
+                "UPDATE messages SET status = 'read', updated_at = NOW() WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+            )->execute(array_merge($ids, [$userId]));
+        }
+
         // Update last_read_message_id
         if (!empty($messages)) {
             $lastId = end($messages)['id'];
@@ -57,6 +76,12 @@ class MessageController
                  WHERE conversation_id = ? AND user_id = ?'
             )->execute([$lastId, $convId, $userId]);
         }
+
+        // Disappearing messages: expirations
+        // 1) رسائل "بعد القراءة" (-1): تُحذف فورًا بعد أن يقرأها جميع المشاركين
+        $this->expireAfterRead($convId);
+        // 2) رسائل بوقت محدد (86400...): تُحذف عندما يتجاوز الزمن إعداد كل مُرسل
+        $this->expireDisappearingMessages($convId);
 
         Response::success($messages);
     }
@@ -82,6 +107,17 @@ class MessageController
         $replyToId       = !empty($body['reply_to_message_id']) ? (int)$body['reply_to_message_id'] : null;
         $fileId          = !empty($body['file_id']) ? (int)$body['file_id'] : null;
 
+        // إعداد الرسائل المختفية الخاص بالطرف المُرسل في هذه المحادثة
+        $memberStmt = $this->pdo->prepare(
+            'SELECT disappear_after FROM conversation_members WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1'
+        );
+        $memberStmt->execute([$convId, $userId]);
+        $memberDisappearing = (int)($memberStmt->fetchColumn() ?: 0);
+        $disappearAfter   = isset($body['disappear_after']) ? (int)$body['disappear_after'] : $memberDisappearing;
+        if (!in_array($disappearAfter, [0, 86400, 3600, 604800, -1], true)) {
+            $disappearAfter = 0;
+        }
+
         if ($type === 'text' && empty($messageBody)) {
             Response::error('نص الرسالة لا يمكن أن يكون فارغاً', 'EMPTY_MESSAGE', 400);
         }
@@ -100,9 +136,9 @@ class MessageController
         try {
             $uuid = UuidHelper::generate();
             $this->pdo->prepare(
-                'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, "sent", NOW(), NOW())'
-            )->execute([$uuid, $convId, $userId, $replyToId, $type, $messageBody, $fileId, $clientMessageId]);
+                'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, disappear_after, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, "sent", ?, NOW(), NOW())'
+            )->execute([$uuid, $convId, $userId, $replyToId, $type, $messageBody, $fileId, $clientMessageId, $disappearAfter]);
 
             $messageId = (int)$this->pdo->lastInsertId();
 
@@ -226,8 +262,23 @@ class MessageController
 
         // Update message status to read if all recipients have read it
         $this->pdo->prepare(
-            'UPDATE messages SET status = "read", updated_at = NOW() WHERE id = ? AND status != "deleted"'
+            'UPDATE messages SET status = "read", updated_at = NOW() WHERE id = ? AND status NOT IN ("deleted", "read")'
         )->execute([$id]);
+
+        // Disappearing messages: delete immediately after reading when disappear_after = -1
+        if ((int)($message['disappear_after'] ?? 0) === -1) {
+            $this->pdo->prepare(
+                'INSERT INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
+                 VALUES (?, ?, ?, ?, ?, "expired", NOW())'
+            )->execute([$id, (int)$message['conversation_id'], $userId, $message['body'], $message['type']]);
+            $this->pdo->prepare(
+                'UPDATE messages SET status = "deleted", deleted_at = NOW(), body = NULL, updated_at = NOW() WHERE id = ?'
+            )->execute([$id]);
+            $this->notifyMessageEvent((int)$message['conversation_id'], $id, 'disappeared', $userId);
+        }
+
+        // Notify sender that their message was read (update the blue ticks on sender side)
+        $this->notifyMessageEvent((int)$message['conversation_id'], $id, 'read', $userId);
 
         Response::success(null, 'تم تعليم الرسالة كمقروءة');
     }
@@ -301,6 +352,44 @@ class MessageController
         }
     }
 
+    /**
+     * Expire "disappear after read" (-1) messages once every participant has read them.
+     */
+    private function expireAfterRead(int $convId): void
+    {
+        try {
+            $this->pdo->prepare(
+                'UPDATE messages m
+                 SET status = "deleted", deleted_at = NOW(), body = NULL, updated_at = NOW()
+                 WHERE m.conversation_id = ? AND m.disappear_after = -1 AND m.deleted_at IS NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM conversation_members cm2
+                       LEFT JOIN message_reads mr ON mr.message_id = m.id AND mr.user_id = cm2.user_id AND mr.deleted_for_me = 0
+                       WHERE cm2.conversation_id = m.conversation_id AND cm2.left_at IS NULL AND cm2.user_id != m.sender_id
+                         AND mr.message_id IS NULL
+                   )'
+            )->execute([$convId]);
+        } catch (\Throwable $e) {
+            error_log('Expire after-read messages error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Expire time-based disappearing messages in a conversation.
+     */
+    private function expireDisappearingMessages(int $convId): void
+    {
+        try {
+            $this->pdo->prepare(
+                'UPDATE messages SET status = "deleted", deleted_at = NOW(), body = NULL, updated_at = NOW()
+                 WHERE conversation_id = ? AND disappear_after > 0 AND deleted_at IS NULL
+                   AND TIMESTAMPDIFF(SECOND, COALESCE(updated_at, created_at), NOW()) > disappear_after'
+            )->execute([$convId]);
+        } catch (\Throwable $e) {
+            error_log('Expire disappearing messages error: ' . $e->getMessage());
+        }
+    }
+
     private function requireMember(int $convId, int $userId): void
     {
         $stmt = $this->pdo->prepare(
@@ -316,7 +405,7 @@ class MessageController
     {
         $stmt = $this->pdo->prepare(
             'SELECT m.id, m.uuid, m.conversation_id, m.sender_id, m.reply_to_message_id,
-                    m.type, m.body, m.file_id, m.client_message_id, m.status,
+                    m.type, m.body, m.file_id, m.client_message_id, m.status, m.disappear_after,
                     m.created_at, m.updated_at, m.deleted_at,
                     u.name AS sender_name, u.avatar AS sender_avatar
              FROM messages m
@@ -358,6 +447,23 @@ class MessageController
                     (string)$convId,
                     $avatar
                 );
+            }
+
+            // In-app notification (real-time polling fallback): store in notifications table
+            $stmt = $this->pdo->prepare(
+                'SELECT DISTINCT cm.user_id FROM conversation_members cm WHERE cm.conversation_id = ? AND cm.user_id != ?'
+            );
+            $stmt->execute([$convId, $senderId]);
+            foreach ($stmt->fetchAll() as $member) {
+                $this->pdo->prepare(
+                    'INSERT INTO notifications (user_id, type, title, body, data_json, created_at)
+                     VALUES (?, "message", ?, ?, ?, NOW())'
+                )->execute([
+                    (int)$member['user_id'],
+                    $title,
+                    $body,
+                    json_encode(['conversation_id' => $convId, 'sender_id' => $senderId, 'avatar' => $sender['avatar'] ?? null], JSON_UNESCAPED_UNICODE),
+                ]);
             }
         } catch (\Throwable $e) {
             error_log('FCM notification error: ' . $e->getMessage());
