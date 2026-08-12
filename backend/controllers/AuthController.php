@@ -63,7 +63,8 @@ class AuthController
         // Generate and store OTP
         $otp       = $this->generateOtp();
         $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+        $devMinutes = $this->isDevelopmentOtp() ? 30 * 24 * 60 : 5;
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $devMinutes . ' minutes'));
 
         $this->storeOtp($phone, $otpHash, $expiresAt, $name);
 
@@ -178,7 +179,8 @@ class AuthController
         // Generate OTP
         $otp       = $this->generateOtp();
         $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+        $devMinutes = $this->isDevelopmentOtp() ? 30 * 24 * 60 : 5;
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $devMinutes . ' minutes'));
         $this->storeOtp($phone, $otpHash, $expiresAt, '');
 
         $responseData = ['message' => 'تم إرسال رمز التحقق'];
