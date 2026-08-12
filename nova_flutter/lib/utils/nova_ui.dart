@@ -236,10 +236,11 @@ class NovaLogo extends StatelessWidget {
 }
 
 class NovaAvatar extends StatelessWidget {
-  const NovaAvatar({super.key, required this.letter, this.size = 54, this.online = false, this.radius = 18, this.verified = false});
+  const NovaAvatar({super.key, required this.letter, this.size = 54, this.online = false, this.radius = 18, this.verified = false, this.imageUrl});
   final String letter;
   final double size, radius;
   final bool online, verified;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -261,14 +262,19 @@ class NovaAvatar extends StatelessWidget {
                 end: Alignment.bottomRight,
                 colors: [Color(0xFFD8D5FF), Color(0xFF9CA3FF)],
               ),
+              image: (imageUrl != null && imageUrl!.isNotEmpty)
+                  ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover)
+                  : null,
             ),
-            child: Center(
-              child: Text(ltr,
-                  style: TextStyle(
-                      fontSize: size * 0.38,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF333333))),
-            ),
+            child: (imageUrl != null && imageUrl!.isNotEmpty)
+                ? null
+                : Center(
+                    child: Text(ltr,
+                        style: TextStyle(
+                            fontSize: size * 0.38,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF333333))),
+                  ),
           ),
           if (online)
             Positioned(

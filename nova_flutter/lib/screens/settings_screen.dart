@@ -4,6 +4,8 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
 import 'web_login_screen.dart';
+import 'privacy_screen.dart';
+import '../utils/avatar_picker.dart';
 
 /// تبويب الإعدادات — تصميم القالب الجديد مع الوظائف الحقيقية
 class SettingsScreen extends StatefulWidget {
@@ -124,7 +126,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Center(
                     child: Column(
                       children: [
-                        NovaAvatar(letter: letter, size: 92, radius: 30, online: me?.isOnline ?? false),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            NovaAvatar(letter: letter, size: 92, radius: 30, online: me?.isOnline ?? false, imageUrl: me?.avatar),
+                            Positioned(
+                              left: -6,
+                              bottom: -6,
+                              child: PressScale(
+                                onTap: () => NovaAvatarPicker.pick(context),
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: c.accent,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: c.bg, width: 2),
+                                  ),
+                                  child: const Icon(Icons.photo_camera, color: Colors.white, size: 17),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -203,6 +227,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 subtitle: 'تصلك عبر الإشعارات الفورية (FCM)',
                                 onTap: () => _infoDialog('الإشعارات',
                                     'تُفعّل الإشعارات تلقائيًا عند تسجيل الدخول وترسل عبر FCM لكل رسالة ومكالمة وقصة.'),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.photo_camera),
+                                title: 'تغيير الصورة الشخصية',
+                                subtitle: 'اضغط لاختيار صورة من الجهاز',
+                                onTap: () => NovaAvatarPicker.pick(context),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.lock_outline),
+                                title: 'الخصوصية',
+                                subtitle: 'آخر الظهور، الصورة الشخصية، حالة النشاط',
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const PrivacyScreen())),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.timer_off),
+                                title: 'الرسائل المختفية',
+                                subtitle: 'تلقائيًا: تُضبط لكل محادثة من شاشة المحادثة نفسها',
+                                onTap: () => _infoDialog('الرسائل المختفية',
+                                    'من شاشة أي محادثة، اضغط أيقونة "المؤقت" أعلى المحادثة واختر: \n• دائم (افتراضي)\n• بعد 24 ساعة\n• بعد القراءة'),
                               ),
                               RowItem(
                                 leading: _iconBox(icon: Icons.data_saver_on),

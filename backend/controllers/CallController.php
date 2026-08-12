@@ -31,7 +31,7 @@ class CallController
 
         $uuid = UuidHelper::generate();
         $this->pdo->prepare(
-            'INSERT INTO calls (uuid, caller_id, call_type, status, created_at) VALUES (?, ?, ?, "calling", NOW())'
+            'INSERT INTO calls (uuid, caller_id, call_type, status, created_at) VALUES (?, ?, ?, "ringing", NOW())'
         )->execute([$uuid, $callerId, $callType]);
         $callId = (int)$this->pdo->lastInsertId();
 
@@ -148,6 +148,26 @@ class CallController
         } catch (\Throwable $e) {
             error_log('Call signal notification error: ' . $e->getMessage());
         }
+    }
+
+    // GET /api/v1/calls/incoming — المكالمات الواردة النشطة (ringing/calling) للمستخدم الحالي
+    public function incoming(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT c.id, c.uuid, c.caller_id, c.call_type, c.status, c.created_at,
+                    u.name AS caller_name, u.avatar AS caller_avatar
+             FROM calls c
+             JOIN call_participants cp ON cp.call_id = c.id AND cp.user_id = ?
+             JOIN users u ON u.id = c.caller_id
+             WHERE c.status IN ("calling", "ringing") AND c.caller_id != ?
+             ORDER BY c.created_at DESC
+             LIMIT 5'
+        );
+        $stmt->execute([$userId, $userId]);
+        Response::success($stmt->fetchAll());
     }
 
     // GET /api/v1/calls
@@ -278,6 +298,17 @@ class CallController
                     $caller['avatar']
                 );
             }
+
+            // In-app call notification (real-time polling fallback)
+            $this->pdo->prepare(
+                'INSERT INTO notifications (user_id, type, title, body, data_json, created_at)
+                 VALUES (?, "incoming_call", ?, ?, ?, NOW())'
+            )->execute([
+                $calleeId,
+                $caller['name'],
+                mb_substr($caller['name'], 0, 60) . ' يُجري اتصالًا... ',
+                json_encode(['call_uuid' => $callUuid, 'caller_id' => $callerId, 'avatar' => $caller['avatar'] ?? null], JSON_UNESCAPED_UNICODE),
+            ]);
         } catch (\Throwable $e) {
             error_log('Call FCM notification error: ' . $e->getMessage());
         }
