@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 
@@ -45,6 +46,112 @@ ThemeData buildNovaTheme(Brightness b, NovaColors c) {
     fontFamily: 'Cairo',
     splashColor: c.accent.withOpacity(0.06),
   );
+}
+
+/* ═══════════════════════ تحويل الزمن إلى نص عربي ═══════════════════════ */
+String timeAgoArabic(String? iso) {
+  if (iso == null || iso.isEmpty) return '';
+  final dt = DateTime.tryParse(iso);
+  if (dt == null) return '';
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  if (diff.inMinutes < 1) return 'الآن';
+  if (diff.inHours < 1) return 'قبل ${diff.inMinutes} دقيقة';
+  if (diff.inDays < 1) {
+    final t = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return 'اليوم، $t';
+  }
+  if (diff.inDays == 1) {
+    final t = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return 'أمس، $t';
+  }
+  if (diff.inDays < 7) return 'قبل ${diff.inDays} أيام';
+  return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+String timeShort(String? iso) {
+  if (iso == null || iso.isEmpty) return '';
+  if (iso.length >= 16) return iso.substring(11, 16);
+  return iso;
+}
+
+/* ═══════════════════════ التوست (Overlay) ═══════════════════════ */
+void showToast(BuildContext context, String message) {
+  final overlay = Overlay.maybeOf(context);
+  if (overlay == null) return;
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => Positioned(
+      left: 0, right: 0, bottom: 88,
+      child: IgnorePointer(
+        child: _ToastHost(text: message, onDone: () => entry.remove()),
+      ),
+    ),
+  );
+  overlay.insert(entry);
+}
+
+class _ToastHost extends StatefulWidget {
+  const _ToastHost({required this.text, required this.onDone});
+  final String text;
+  final VoidCallback onDone;
+  @override
+  State<_ToastHost> createState() => _ToastHostState();
+}
+
+class _ToastHostState extends State<_ToastHost> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final CurvedAnimation _curve;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+    _curve = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _ctrl.forward().whenComplete(() {
+      _timer = Timer(const Duration(milliseconds: 1800),
+          () => _ctrl.reverse().whenComplete(widget.onDone));
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _curve.dispose();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _curve,
+      builder: (_, __) {
+        final v = _curve.value;
+        return Opacity(
+          opacity: v,
+          child: Transform.translate(
+            offset: Offset(0, 20 * (1 - v)),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF101828),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 18, offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: Text(widget.text,
+                    style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /* ═══════════════════════ مكوّنات مشتركة ═══════════════════════ */
@@ -104,6 +211,30 @@ class _PressScaleState extends State<PressScale> {
   }
 }
 
+/// الشعار النصي N بتدرّج
+class NovaLogo extends StatelessWidget {
+  const NovaLogo({super.key, this.size = 40, this.radius = 14, this.letter = 'N'});
+  final double size, radius;
+  final String letter;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = NovaColors.of(context);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c.accent, c.accent2]),
+        boxShadow: [BoxShadow(color: c.accent.withOpacity(0.35), blurRadius: 16, offset: const Offset(0, 6))],
+      ),
+      child: Center(
+        child: Text(letter, style: TextStyle(color: Colors.white, fontSize: size * 0.42, fontWeight: FontWeight.w900)),
+      ),
+    );
+  }
+}
+
 class NovaAvatar extends StatelessWidget {
   const NovaAvatar({super.key, required this.letter, this.size = 54, this.online = false, this.radius = 18, this.verified = false});
   final String letter;
@@ -113,6 +244,7 @@ class NovaAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = NovaColors.of(context);
+    final ltr = letter.isNotEmpty ? letter[0] : '?';
     return SizedBox(
       width: size,
       height: size,
@@ -131,11 +263,11 @@ class NovaAvatar extends StatelessWidget {
               ),
             ),
             child: Center(
-              child: Text(letter.isNotEmpty ? letter : '?',
+              child: Text(ltr,
                   style: TextStyle(
                       fontSize: size * 0.38,
                       fontWeight: FontWeight.w900,
-                      color: const Color(0xFF4338CA))),
+                      color: const Color(0xFF333333))),
             ),
           ),
           if (online)
@@ -365,17 +497,18 @@ class NovaSwitch extends StatelessWidget {
   }
 }
 
-/// شريط التنقل السفلي الزجاجي (5 تبويبات)
+/// شريط التنقل السفلي الزجاجي (5 تبويبات حسب القالب الجديد)
 class NovaBottomNav extends StatelessWidget {
   const NovaBottomNav({super.key, required this.index, required this.onTap});
   final int index;
   final ValueChanged<int> onTap;
 
   static const items = [
-    ('الإعدادات', Icons.settings_outlined, Icons.settings),
-    ('الحالة', Icons.circle_outlined, Icons.circle),
-    ('المكالمات', Icons.call_outlined, Icons.call),
     ('المحادثات', Icons.chat_bubble_outline, Icons.chat_bubble),
+    ('المكالمات', Icons.phone, Icons.phone),
+    ('الحالات', Icons.radio_button_unchecked, Icons.radio_button_unchecked),
+    ('جهات الاتصال', Icons.person_outline, Icons.person),
+    ('الإعدادات', Icons.settings_outlined, Icons.settings),
   ];
 
   @override
