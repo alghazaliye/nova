@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,8 +18,8 @@ android {
         applicationId = "com.nova.messenger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -25,8 +28,30 @@ android {
         buildConfigField("String", "WS_URL",       "\"wss://your-server.com:8080\"")
     }
 
+    // Signing configuration — reads from local.properties (never commit keystore or passwords)
+    val keystorePropertiesFile = rootProject.file("local.properties")
+    val keystoreProperties = Properties().apply {
+        if (keystorePropertiesFile.exists()) {
+            load(FileInputStream(keystorePropertiesFile))
+        }
+    }
+    signingConfigs {
+        create("release") {
+            val storeFilePath = keystoreProperties.getProperty("storeFile", "")
+            if (storeFilePath.isNotBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (keystoreProperties.getProperty("storeFile", "").isNotBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
