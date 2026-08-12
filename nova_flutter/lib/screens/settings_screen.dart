@@ -74,25 +74,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _confirmLogout() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Text('تسجيل الخروج'),
-        content: const Text('هل تريد تسجيل الخروج من الحساب؟'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('إلغاء')),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('خروج', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-    if (ok == true && mounted) {
-      await context.read<AuthProvider>().logout();
-    }
+    if (!mounted) return;
+    await context.read<AuthProvider>().logout();
   }
 
   void _infoDialog(String title, String body) {
