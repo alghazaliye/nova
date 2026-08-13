@@ -132,6 +132,9 @@ if (preg_match('#^/messages/(\d+)/read$#', $uri, $m) && $method === 'POST') {
 if (preg_match('#^/messages/(\d+)/reaction$#', $uri, $m) && $method === 'POST') {
     (new MessageController())->react((int)$m[1]);
 }
+if ($uri === '/messages/voice' && $method === 'POST') {
+    (new MessageController())->uploadVoice();
+}
 
 // Story Routes
 if ($uri === '/stories' && $method === 'GET') {

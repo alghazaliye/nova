@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:universal_html/html.dart' as html;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -802,6 +804,34 @@ class _Bubble extends StatelessWidget {
     ];
   }
 
+  Widget _buildAudioPlayer(String filePath, NovaColors c) {
+    final url = filePath.startsWith('http')
+        ? filePath
+        : '${ApiService.baseUrl.replaceAll('/api/v1', '')}/storage/$filePath';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: c.accent.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(
+          icon: Icon(Icons.play_circle_fill, color: c.accent, size: 28),
+          onPressed: () {
+            if (kIsWeb) html.window.open(url, '_blank');
+          },
+          splashRadius: 18,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text('رسالة صوتية', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isMine ? c.mineText : c.text)),
+            if (msg.duration != null) Text('${msg.duration} ثانية', style: TextStyle(fontSize: 11, color: c.muted)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = colors;
@@ -837,19 +867,7 @@ class _Bubble extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: Image.network(msg.filePath!, width: 240, height: 160, fit: BoxFit.cover))
             else if (msg.type == 'audio' && msg.filePath != null)
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: c.accent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                child: Row(children: [
-                  Icon(Icons.audiotrack, color: c.accent, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(msg.body ?? 'رسالة صوتية',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13, color: isMine ? c.mineText : c.text)),
-                  ),
-                ]),
-              )
+              _buildAudioPlayer(msg.filePath!, c)
             else if (msg.type == 'file' && msg.filePath != null)
               Container(
                 padding: const EdgeInsets.all(6),

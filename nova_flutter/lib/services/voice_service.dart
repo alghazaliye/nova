@@ -1,8 +1,22 @@
 /// خدمة تسجيل الرسائل الصوتية — تعمل على الويب عبر MediaRecorder
+/// تقرأ بيانات الصوت عبر dart:js_interop وBlob.arrayBuffer() مباشرة
 import 'dart:async';
+import 'dart:js_interop';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
+
+extension type JSMediaStream(JSObject _) implements JSObject {
+  external JSArray getAudioTracks();
+}
+
+extension type JSAudioTrack(JSObject _) implements JSObject {
+  external void stop();
+}
+
+extension type JSBlob(JSObject _) implements JSObject {
+  external JSPromise<JSArrayBuffer> arrayBuffer();
+}
 
 class VoiceService {
   static html.MediaRecorder? _recorder;
@@ -19,29 +33,34 @@ class VoiceService {
     if (!kIsWeb) {
       throw UnsupportedError('التسجيل الصوتي متوفر حاليًا في نسخة الويب');
     }
-    final constraints = {'audio': true};
-    final stream = await html.window.navigator.mediaDevices?.getUserMedia(constraints);
+    final devices = html.window.navigator.mediaDevices;
+    if (devices == null) throw Exception('المتصفح لا يدعم التسجيل الصوتي');
+    final stream = await devices.getUserMedia({'audio': true});
     if (stream == null) throw Exception('تعذر الوصول إلى الميكروفون');
 
     _chunks.clear();
     _seconds = 0;
 
-    final options = <String, Object>{
-      'mimeType': _supportedMime(),
-      'audioBitsPerSecond': 48000,
-    };
-    final recorder = html.MediaRecorder(stream, options);
+    final recorder = html.MediaRecorder(
+      stream,
+      <String, Object>{
+        'mimeType': _supportedMime(),
+        'audioBitsPerSecond': 48000,
+      },
+    );
 
     recorder.on['dataavailable'].listen((event) {
-      final blobEvent = event as html.BlobEvent;
-      final data = blobEvent.data;
-      if (data != null) {
-        final impl = data as dynamic;
-        final bytes = impl._data;
-        if (bytes is List<int>) {
-          _chunks.add(Uint8List.fromList(bytes));
-        }
-      }
+      try {
+        final blobEvent = event as html.BlobEvent;
+        final blob = blobEvent.data;
+        if (blob == null) return;
+        // قراءة البيانات عبر JS: blob.arrayBuffer() ثم تحويلها لـ Uint8List
+        final jsBlob = JSBlob(blob as JSObject);
+        jsBlob.arrayBuffer().toDart.then((jsBuf) {
+          final bytes = jsBuf.toDart.asUint8List();
+          if (bytes.isNotEmpty) _chunks.add(bytes);
+        });
+      } catch (_) {}
     });
 
     recorder.start(100); // تجميع كل 100ms
@@ -66,12 +85,14 @@ class VoiceService {
 
     await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
     sub.cancel();
-    // إيقافTracks الميكروفون (نفس أسلوب call_service)
+    // إيقاف مسارات الميكروفون
     try {
       final stream = recorder.stream;
       if (stream != null) {
-        for (final t in stream.getAudioTracks()) {
-          t.stop();
+        final jsStream = JSMediaStream(stream as JSObject);
+        final tracks = jsStream.getAudioTracks();
+        for (final t in tracks.toDart) {
+          JSAudioTrack(t as JSObject).stop();
         }
       }
     } catch (_) {}
