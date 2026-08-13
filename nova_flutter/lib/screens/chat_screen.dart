@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
+import '../services/voice_service.dart';
 import '../models/user_model.dart' show NovaMessage, Conversation, formatLastSeen;
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
@@ -28,6 +29,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _loading = false;
   bool _hasMore = true;
   bool _hasText = false;
+  bool _isRecording = false;
+  int _recordSeconds = 0;
   Timer? _pollTimer;
   final ImagePicker _picker = ImagePicker();
   static const Uuid _uuid = Uuid();
@@ -257,8 +260,19 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     if (!mounted) return;
     if (res['success'] == true && res['data'] != null) {
+      // دمج بيانات المكالمة مع بيانات المتصل حتى يعرف CallScreen هويتي
+      final callData = Map<String, dynamic>.from(res['data'] as Map<String, dynamic>);
+      // الخادم يرجع call_id وليس id — توحيدهما لأن CallScreen يقرأ 'id'
+      if (callData.containsKey('call_id') && !callData.containsKey('id')) {
+        callData['id'] = callData['call_id']; // MANUS-FIX-2026-08-13
+      }
+      final me = context.read<AuthProvider>().user;
+      if (me != null) {
+        callData['caller_id'] = me.id;
+        callData['caller_name'] = me.name;
+      }
       Navigator.push(context, MaterialPageRoute(
-          builder: (_) => CallScreen(callData: res['data'] as Map<String, dynamic>)));
+          builder: (_) => CallScreen(callData: callData)));
     } else if (mounted) {
       showToast(context, res['message'] ?? 'فشل الاتصال');
     }
@@ -364,7 +378,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   static const _disappearOptions = [
     {'label': 'دائم (لا تختفي)', 'value': 0, 'icon': Icons.inbox},
+    {'label': 'بعد ساعة', 'value': 3600, 'icon': Icons.hourglass_top},
     {'label': 'بعد 24 ساعة', 'value': 86400, 'icon': Icons.timelapse},
+    {'label': 'بعد أسبوع', 'value': 604800, 'icon': Icons.calendar_today},
     {'label': 'بعد القراءة', 'value': -1, 'icon': Icons.visibility},
   ];
 
@@ -604,18 +620,20 @@ class _ChatScreenState extends State<ChatScreen> {
                 IconBtn(icon: Icons.emoji_emotions_outlined, onTap: _addEmoji),
                 const SizedBox(width: 7),
                 PressScale(
-                  onTap: _sendMessage,
+                  onTap: _isRecording ? _stopAndSendVoice : _toggleVoice,
                   child: Container(
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: c.accent,
+                      color: _isRecording ? c.red : c.accent,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(color: c.accent.withOpacity(0.35), blurRadius: 14, offset: const Offset(0, 5)),
                       ],
                     ),
-                    child: Icon(_hasText ? Icons.send : Icons.mic, color: Colors.white, size: 20),
+                    child: _isRecording
+                        ? Text('$_recordSeconds"', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold))
+                        : Icon(_hasText ? Icons.send : Icons.mic, color: Colors.white, size: 20),
                   ),
                 ),
               ],
@@ -629,6 +647,96 @@ class _ChatScreenState extends State<ChatScreen> {
   void _addEmoji() {
     _ctrl.text = '${_ctrl.text} 😊';
     _ctrl.selection = TextSelection.collapsed(offset: _ctrl.text.length);
+  }
+
+  /// بدء التسجيل الصوتي (إلغاء التسجيل بالضغط مرة أخرى)
+  Future<void> _toggleVoice() async {
+    if (_hasText) {
+      await _sendMessage();
+      return;
+    }
+    try {
+      await VoiceService.start();
+      if (!mounted) return;
+      setState(() => _isRecording = true);
+      _recordTick();
+      if (mounted) showToast(context, 'جارٍ التسجيل... اضغط مرة أخرى للإرسال');
+    } catch (e) {
+      if (mounted) showToast(context, 'تعذر الوصول إلى الميكروفون — تأكد من السماح بالوصول');
+    }
+  }
+
+  void _recordTick() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted || !_isRecording) return;
+      final s = VoiceService.seconds;
+      setState(() => _recordSeconds = s);
+      if (s < 120) _recordTick(); // حد أقصى دقيقتان
+      else if (mounted) _stopAndSendVoice();
+    });
+  }
+
+  /// إيقاف التسجيل وإرسال الصوت
+  Future<void> _stopAndSendVoice() async {
+    if (!mounted) return;
+    final wasRecording = _isRecording;
+    setState(() => _isRecording = false);
+    if (!wasRecording) return;
+    final result = await VoiceService.stop();
+    if (!mounted) return;
+    setState(() => _recordSeconds = 0);
+    final bytes = result.$1;
+    if (bytes == null || bytes.isEmpty) {
+      showToast(context, 'تم إلغاء التسجيل');
+      return;
+    }
+    showToast(context, 'جاري إرسال الرسالة الصوتية...');
+    try {
+      final clientId = _uuid.v4();
+      final temp = NovaMessage(
+        id: -1,
+        uuid: clientId,
+        senderId: context.read<AuthProvider>().user?.id ?? 0,
+        type: 'audio',
+        status: 'sent',
+        createdAt: DateTime.now().toIso8601String(),
+        duration: result.$2 == 'audio' ? _recordSeconds : null,
+      );
+      setState(() => _messages.add(temp));
+      _scrollToBottom();
+      final res = await ApiService.uploadMultipart(
+        '/messages/voice',
+        [
+          http.MultipartFile.fromBytes(
+            'voice', bytes,
+            filename: 'voice.webm',
+            contentType: http.MediaType.parse('audio/webm'),
+          ),
+        ],
+        fields: {
+          'conversation_id': widget.conv.id.toString(),
+          'client_message_id': clientId,
+          'duration': _recordSeconds.toString(),
+        },
+      );
+      if (!mounted) return;
+      if (res['success'] == true && res['data'] != null) {
+        setState(() {
+          _messages.removeWhere((m) => m.id == -1);
+          _messages.add(NovaMessage.fromJson(Map<String, dynamic>.from(res['data'] as Map<String, dynamic>)));
+        });
+        _scrollToBottom();
+        showToast(context, 'تم إرسال الرسالة الصوتية');
+      } else {
+        setState(() => _messages.removeWhere((m) => m.id == -1));
+        showToast(context, res['message'] ?? 'فشل إرسال الصوت');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _messages.removeWhere((m) => m.id == -1));
+        showToast(context, 'خطأ في إرسال الصوت');
+      }
+    }
   }
 }
 

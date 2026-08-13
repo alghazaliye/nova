@@ -214,10 +214,24 @@ class ConversationController
 
     private function addMember(int $convId, int $userId, string $role = 'member'): void
     {
+        // Apply the user's global default disappearing mode (user_settings) when joining
+        $default = 0;
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT setting_value FROM user_settings WHERE user_id = ? AND setting_key = ? LIMIT 1'
+            );
+            $stmt->execute([$userId, 'disappear_default']);
+            $v = (int)($stmt->fetchColumn() ?: 0);
+            if (in_array($v, [0, 86400, 3600, 604800, -1], true)) {
+                $default = $v;
+            }
+        } catch (\Throwable $e) {
+            // Database errors must never block joining a conversation
+        }
         $this->pdo->prepare(
-            'INSERT IGNORE INTO conversation_members (conversation_id, user_id, role, joined_at, created_at, updated_at)
-             VALUES (?, ?, ?, NOW(), NOW(), NOW())'
-        )->execute([$convId, $userId, $role]);
+            'INSERT IGNORE INTO conversation_members (conversation_id, user_id, role, joined_at, disappear_after, created_at, updated_at)
+             VALUES (?, ?, ?, NOW(), ?, NOW(), NOW())'
+        )->execute([$convId, $userId, $role, $default]);
     }
 
     private function requireMember(int $convId, int $userId): void
@@ -263,8 +277,9 @@ class ConversationController
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 
         $value = $body['disappear_after'] ?? null;
-        if (!in_array($value, [0, 86400, -1], true)) {
-            Response::error('القيمة غير صالحة: 0 (دائم)، 86400 (بعد 24 ساعة)، -1 (بعد القراءة)', 'INVALID_VALUE', 400);
+        $allowed = [0, 86400, 3600, 604800, -1];
+        if ($value === null || !in_array($value, $allowed, true)) {
+            Response::error('القيمة غير صالحة: 0 (دائم)، 3600 (بعد ساعة)، 86400 (بعد 24 ساعة)، 604800 (بعد أسبوع)، -1 (بعد القراءة)', 'INVALID_VALUE', 400);
         }
 
         $stmt = $this->pdo->prepare(

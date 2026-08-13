@@ -68,6 +68,12 @@ if ($uri === '/users/me' && $method === 'GET') {
 if ($uri === '/users/me' && $method === 'PUT') {
     (new UserController())->updateMe();
 }
+if ($uri === '/users/settings' && $method === 'GET') {
+    (new UserController())->getSettings();
+}
+if ($uri === '/users/settings' && $method === 'PUT') {
+    (new UserController())->updateSettings();
+}
 if ($uri === '/users/avatar' && $method === 'POST') {
     (new UserController())->uploadAvatar();
 }

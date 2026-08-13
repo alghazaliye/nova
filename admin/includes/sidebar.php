@@ -94,6 +94,9 @@ function navActive(string $page, string $current): string {
     <a href="settings.php" class="<?= navActive('settings', $currentPage) ?>">
       <span>⚙</span> الإعدادات
     </a>
+    <a href="api-docs.php" class="<?= navActive('api-docs', $currentPage) ?>">
+      <span>⟪⟫</span> ملفات API
+    </a>
   </nav>
 
   <div style="margin-top:auto; padding:10px 0;">

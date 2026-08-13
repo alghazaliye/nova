@@ -231,6 +231,52 @@ class UserController
         Response::success(null, 'تم فك الحظر عن المستخدم');
     }
 
+    // GET /api/v1/users/settings
+    public function getSettings(): void
+    {
+        $auth = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT setting_key, setting_value FROM user_settings WHERE user_id = ?'
+        );
+        $stmt->execute([$userId]);
+        $settings = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $settings[$row['setting_key']] = $row['setting_value'];
+        }
+
+        Response::success([
+            'disappear_default' => (int)($settings['disappear_default'] ?? 0),
+        ]);
+    }
+
+    // PUT /api/v1/users/settings
+    public function updateSettings(): void
+    {
+        $auth = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $allowed = [0, 86400, 3600, 604800, -1];
+        $disappearDefault = (int)($body['disappear_default'] ?? 0);
+        if (!in_array($disappearDefault, $allowed, true)) {
+            Response::error('القيمة غير صالحة: 0 (دائم)، 3600 (بعد ساعة)، 86400 (بعد 24 ساعة)، 604800 (بعد أسبوع)، -1 (بعد القراءة)', 'INVALID_VALUE', 400);
+        }
+
+        $this->pdo->prepare(
+            'INSERT INTO user_settings (user_id, setting_key, setting_value) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()'
+        )->execute([$userId, 'disappear_default', $disappearDefault, $disappearDefault]);
+
+        // Update the disappear_after for all current conversations of this user
+        $this->pdo->prepare(
+            'UPDATE conversation_members SET disappear_after = ? WHERE user_id = ? AND left_at IS NULL'
+        )->execute([$disappearDefault, $userId]);
+
+        Response::success(['disappear_default' => $disappearDefault], 'تم حفظ الإعدادات');
+    }
+
     // =====================================================
     // Private Helpers
     // =====================================================

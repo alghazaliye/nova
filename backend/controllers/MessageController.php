@@ -115,7 +115,17 @@ class MessageController
         $memberDisappearing = (int)($memberStmt->fetchColumn() ?: 0);
         $disappearAfter   = isset($body['disappear_after']) ? (int)$body['disappear_after'] : $memberDisappearing;
         if (!in_array($disappearAfter, [0, 86400, 3600, 604800, -1], true)) {
-            $disappearAfter = 0;
+            // Fall back to the admin-configured system default for all users (0 = never)
+            try {
+                $dflt = (int)($this->pdo->query("SELECT setting_value FROM app_settings WHERE setting_key = 'message_type_default'")->fetchColumn() ?: 0);
+                if (in_array($dflt, [0, 86400, 3600, 604800, -1], true)) {
+                    $disappearAfter = $dflt;
+                } else {
+                    $disappearAfter = 0;
+                }
+            } catch (\Throwable $e) {
+                $disappearAfter = 0;
+            }
         }
 
         if ($type === 'text' && empty($messageBody)) {
@@ -176,6 +186,9 @@ class MessageController
             Response::forbidden('لا يمكنك تعديل رسالة شخص آخر');
         }
 
+        // Enforcement of the admin-configured edit time limit (minutes, 0 = unlimited)
+        $this->enforceMessageTimeLimit('edit_time_limit_minutes', (int)$msg['id'], 'انتهت المدة المسموحة لتعديل الرسالة');
+
         $body    = json_decode(file_get_contents('php://input'), true) ?? [];
         $newBody = htmlspecialchars(strip_tags(trim($body['body'] ?? '')), ENT_QUOTES, 'UTF-8');
 
@@ -213,6 +226,9 @@ class MessageController
             Response::forbidden('لا يمكنك حذف رسالة شخص آخر');
         }
 
+        // Enforcement of the admin-configured delete time limit (minutes, 0 = unlimited)
+        $this->enforceMessageTimeLimit('delete_time_limit_minutes', (int)$msg['id'], 'انتهت المدة المسموحة لحذف الرسالة');
+
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $forAll = filter_var($body['for_all'] ?? $body['everyone'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $scope = $forAll ? 'everyone' : 'self';
@@ -242,6 +258,35 @@ class MessageController
         $this->notifyMessageEvent((int)$msg['conversation_id'], $id, $forAll ? 'deleted' : 'deleted_for_me', (int)$msg['sender_id']);
 
         Response::success(null, $forAll ? 'تم حذف الرسالة لدى الجميع' : 'تم حذف الرسالة لديك');
+    }
+
+    /**
+     * Enforce the admin-configured time limit (in minutes) for editing/deleting a message.
+     * Uses ONLY MySQL clocks (UNIX_TIMESTAMP) to avoid any PHP timezone mismatch.
+     * Pass the message id as $messageId.
+     */
+    private function enforceMessageTimeLimit(string $settingKey, int $messageId, string $expiredMessage): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
+            $stmt->execute([$settingKey]);
+            $limit = (int)($stmt->fetchColumn() ?: 0);
+            if ($limit > 0) {
+                // Both timestamps come from MySQL itself, so they are always consistent
+                $stmt = $this->pdo->prepare(
+                    'SELECT UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(created_at) AS age_seconds FROM messages WHERE id = ?'
+                );
+                $stmt->execute([$messageId]);
+                $ageSeconds = (int)($stmt->fetchColumn() ?: 0);
+                $sentMinutesAgo = $ageSeconds / 60;
+                if ($sentMinutesAgo > $limit) {
+                    Response::forbidden($expiredMessage);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Database errors must never block message operations
+            error_log('Time-limit check error: ' . $e->getMessage());
+        }
     }
 
     // POST /api/v1/messages/{id}/read
@@ -467,5 +512,77 @@ class MessageController
         } catch (\Throwable $e) {
             error_log('FCM notification error: ' . $e->getMessage());
         }
+    }
+
+    // POST /api/v1/messages/voice (رفع رسالة صوتية)
+    public function uploadVoice(): void
+    {
+        $auth = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        if (!isset($_FILES['voice']) || !is_uploaded_file($_FILES['voice']['tmp_name'])) {
+            Response::error('لم يتم رفع أي ملف صوتي', 'NO_FILE', 400);
+        }
+
+        $file     = $_FILES['voice'];
+        $convId   = (int)($_POST['conversation_id'] ?? 0);
+        $clientId = $_POST['client_message_id'] ?? null;
+        $duration = !empty($_POST['duration']) ? (int)$_POST['duration'] : null;
+
+        if (!$convId) {
+            Response::error('معرف المحادثة مطلوب', 'MISSING_CONVERSATION', 400);
+        }
+
+        $this->requireMember($convId, $userId);
+
+        $allowed  = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav'];
+        $maxSize  = 10 * 1024 * 1024; // 10MB
+
+        if (!in_array($file['type'], $allowed, true)) {
+            Response::error('نوع الملف غير مسموح به', 'INVALID_FILE_TYPE', 400);
+        }
+        if ($file['size'] > $maxSize) {
+            Response::error('حجم الملف يتجاوز الحد المسموح به (10MB)', 'FILE_TOO_LARGE', 400);
+        }
+
+        $fileName = UuidHelper::generate() . '.webm';
+        $destDir  = ($_ENV['STORAGE_PATH'] ?? __DIR__ . '/../storage') . '/voices/';
+        if (!is_dir($destDir)) mkdir($destDir, 0755, true);
+
+        if (!move_uploaded_file($file['tmp_name'], $destDir . $fileName)) {
+            Response::error('فشل في رفع الملف الصوتي', 'UPLOAD_FAILED', 500);
+        }
+
+        // تسجيل المرفق في جدول attachments
+        $relPath = 'voices/' . $fileName;
+        $uuid = UuidHelper::generate();
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, duration, created_at)
+             VALUES (?, ?, "audio", "voice_message.webm", ?, ?, ?, ?, ?, NOW())'
+        );
+        $stmt->execute([$uuid, $userId, $fileName, $file['type'], (int)$file['size'], $relPath, $duration]);
+        $fileId = (int)$this->pdo->lastInsertId();
+
+        // حفظ الرسالة (مثل send() لكن صوتية)
+        $this->pdo->beginTransaction();
+        try {
+            $msgUuid = UuidHelper::generate();
+            $this->pdo->prepare(
+                'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, disappear_after, created_at, updated_at)
+                 VALUES (?, ?, ?, NULL, "audio", ?, ?, ?, "sent", 0, NOW(), NOW())'
+            )->execute([$msgUuid, $convId, $userId, '', $fileId, $clientId ?? $msgUuid]);
+            $msgId = (int)$this->pdo->lastInsertId();
+            $this->pdo->prepare('UPDATE conversations SET last_message_id = ?, updated_at = NOW() WHERE id = ?')
+                  ->execute([$msgId, $convId]);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            Response::error('فشل في إرسال الرسالة الصوتية', 'SEND_FAILED', 500);
+        }
+
+        // إشعار المستخدمين الآخرين (عبر polling /conversations/{id}/messages)
+        $this->pdo->prepare('UPDATE conversations SET updated_at = NOW() WHERE id = ?')->execute([$convId]);
+
+        Response::success(['id' => $msgId, 'type' => 'audio', 'file_id' => $fileId], 'تم إرسال الرسالة الصوتية', 201);
     }
 }

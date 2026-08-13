@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'allow_groups', 'allow_stories', 'max_file_size_mb', 'max_image_size_mb',
         'max_video_size_mb', 'story_duration_hrs', 'otp_expiry_minutes', 'otp_required',
         'session_duration_days', 'default_language', 'default_timezone',
-        'fcm_enabled',
+        'fcm_enabled', 'edit_time_limit_minutes', 'delete_time_limit_minutes', 'message_type_default',
     ];
     foreach ($editableKeys as $key) {
         if (array_key_exists($key, $_POST)) {
@@ -145,6 +145,46 @@ include __DIR__ . '/includes/sidebar.php';
       <div class="form-group">
         <label class="form-label">مدة الحالة (ساعة)</label>
         <input type="number" name="story_duration_hrs" class="form-control" value="<?= s($settings, 'story_duration_hrs', '24') ?>">
+      </div>
+    </div>
+
+    </div>
+
+    <!-- Message Lifecycle -->
+    <div class="card panel">
+      <h3>💬 دورة حياة الرسائل (التعديل والحذف)</h3>
+      <div class="form-group">
+        <label class="form-label">مدة السماح بتعديل الرسالة (دقيقة) — 0 = بلا حد</label>
+        <input type="number" min="0" name="edit_time_limit_minutes" class="form-control" value="<?= s($settings, 'edit_time_limit_minutes', '30') ?>">
+        <small style="color:var(--muted)">بعد انقضاء هذه المدة لا يمكن تعديل الرسالة حتى لدى الطرفين</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">مدة السماح بحذف الرسالة لدى الطرفين (دقيقة) — 0 = بلا حد</label>
+        <input type="number" min="0" name="delete_time_limit_minutes" class="form-control" value="<?= s($settings, 'delete_time_limit_minutes', '60') ?>">
+        <small style="color:var(--muted)">بعد انقضاء هذه المدة لا يمكن حذف الرسالة لدى الطرفين (فقط للحذف الشخصي)</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">الإعداد الافتراضي لاختفاء الرسائل (لجميع المستخدمين)</label>
+        <select name="message_type_default" class="form-control">
+          <option value="0" <?= ($settings['message_type_default']??'0')==='0'?'selected':'' ?>>دائم (لا تختفي)</option>
+          <option value="3600" <?= ($settings['message_type_default']??'0')==='3600'?'selected':'' ?>>بعد ساعة</option>
+          <option value="86400" <?= ($settings['message_type_default']??'0')==='86400'?'selected':'' ?>>بعد 24 ساعة</option>
+          <option value="604800" <?= ($settings['message_type_default']??'0')==='604800'?'selected':'' ?>>بعد أسبوع</option>
+          <option value="-1" <?= ($settings['message_type_default']??'0')==='-1'?'selected':'' ?>>بعد القراءة</option>
+        </select>
+        <small style="color:var(--muted)">يطبّق تلقائيًا على المحادثات الجديدة لكل مستخدم، ويمكن للمستخدم تغييره من إعداداته</small>
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div class="card panel">
+      <h3>🔔 الإشعارات الفورية (FCM)</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><b>إشعارات FCM</b><small style="display:block; color:var(--muted); font-size:11px;">إرسال إشعارات الرسائل والمكالمات عبر Firebase</small></div>
+        <select name="fcm_enabled" class="select">
+          <option value="1" <?= ($settings['fcm_enabled']??'1')==='1'?'selected':'' ?>>نعم</option>
+          <option value="0" <?= ($settings['fcm_enabled']??'1')==='0'?'selected':'' ?>>لا</option>
+        </select>
       </div>
     </div>
 

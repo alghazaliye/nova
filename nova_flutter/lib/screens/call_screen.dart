@@ -27,6 +27,7 @@ class _CallScreenState extends State<CallScreen> {
   bool _cameraOff = false;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+  int _lastSignalId = 0;
   String? _lastSignalTime;
 
   int get _callId => widget.callData['id'] is int
@@ -91,6 +92,9 @@ class _CallScreenState extends State<CallScreen> {
 
     CallService.attachCandidateSender(_callId);
 
+    // قراءة أي إشارات وصلها قبل اكتمال الإعداد (مهمة للمستدعى)
+    await _fetchSignals();
+
     if (_isCaller) {
       // المتصل: إنشاء Offer فور تجهيز الوسائط
       try {
@@ -109,7 +113,7 @@ class _CallScreenState extends State<CallScreen> {
         if (res['success'] != true) return;
         final data = res['data'] as Map<String, dynamic>? ?? {};
         final status = (data['status'] ?? '').toString();
-        if (status == 'accepted') {
+        if (status == 'answered') {
           if (mounted) setState(() {
             _answered = true;
             _status = 'المكالمة نشطة';
@@ -128,13 +132,22 @@ class _CallScreenState extends State<CallScreen> {
 
   Future<void> _fetchSignals() async {
     try {
-      final res = await ApiService.get('/calls/$_callId/signals',
-          query: _lastSignalTime != null ? {'since': _lastSignalTime!} : null);
+      // استخدام since أوسع (قبل 10 ثوانٍ) + تصفية client-side لتجنب ضياع الإشارات
+      // المتزامنة في نفس الثانية
+      String? since = _lastSignalTime;
+      final res = await ApiService.get('/calls/$_callId/signals', query: {
+        'since': since ?? DateTime.now().subtract(const Duration(seconds: 10)).toString().replaceAll('T', ' ').split('.')[0],
+      });
       if (res['success'] != true) return;
-      final rows = res['data'] as List? ?? [];
-      for (final sig in rows) {
-        final m = sig as Map<String, dynamic>;
-        _lastSignalTime = m['created_at']?.toString() ?? _lastSignalTime;
+      final rows = (res['data'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      for (final m in rows) {
+        final sigId = (m['id'] is int) ? m['id'] as int : int.tryParse(m['id'].toString()) ?? 0;
+        if (sigId <= _lastSignalId) continue;
+        _lastSignalId = sigId;
+        final ca = m['created_at']?.toString();
+        if (ca != null && (_lastSignalTime == null || ca.compareTo(_lastSignalTime!) > 0)) {
+          _lastSignalTime = ca;
+        }
         if (!_isCaller && m['signal_type'] == 'offer') {
           // المستدعى يستقبل Offer — استخراج SDP من payload
           var payload = m['payload'];
