@@ -291,8 +291,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _deleteMessage(NovaMessage msg) async {
-    final res = await ApiService.delete('/messages/${msg.id}');
+  Future<void> _deleteMessage(NovaMessage msg, {bool forAll = false}) async {
+    final res = await ApiService.delete('/messages/${msg.id}',
+        body: forAll ? {'for_all': true} : null);
     if (!mounted) return;
     if (res['success'] == true) {
       await _refresh();
@@ -405,10 +406,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       Navigator.pop(c);
                       _editMessage(msg);
                     }),
-                  _MenuChip(Icons.delete_outline, 'حذف لدى الطرفين', cl, () {
-                    Navigator.pop(c);
-                    _deleteMessage(msg);
-                  }),
+                  if (isMine)
+                    _MenuChip(Icons.delete_outline, 'حذف لدى الطرفين', cl, () {
+                      Navigator.pop(c);
+                      _deleteMessage(msg, forAll: true);
+                    }),
+                  if (!isMine)
+                    _MenuChip(Icons.delete_outline, 'حذف', cl, () {
+                      Navigator.pop(c);
+                      _deleteMessage(msg, forAll: false);
+                    }),
                   _MenuChip(Icons.copy, 'نسخ النص', cl, () {
                     Navigator.pop(c);
                     if (msg.body != null && msg.body!.isNotEmpty) {

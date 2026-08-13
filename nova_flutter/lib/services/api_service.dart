@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 /// خدمة الاتصال بخادم NOVA Messenger API
 class ApiService {
   static const String baseUrl =
-      'https://8000-iuawg7ipo5m5tnjzab4ca-3e3e9a64.us2.manus.computer/api/v1';
+      'https://80-iuawg7ipo5m5tnjzab4ca-3e3e9a64.us2.manus.computer/nova/backend/public/api/v1';
 
   static String? token;
 
@@ -39,9 +39,15 @@ class ApiService {
     return _decode(res);
   }
 
-  static Future<Map<String, dynamic>> delete(String path) async {
+  static Future<Map<String, dynamic>> delete(String path,
+      {Map<String, dynamic>? body}) async {
     final url = Uri.parse('$baseUrl$path');
-    final res = await http.delete(url, headers: headers);
+    final http.Response res;
+    if (body != null) {
+      res = await http.delete(url, headers: headers, body: jsonEncode(body));
+    } else {
+      res = await http.delete(url, headers: headers);
+    }
     return _decode(res);
   }
 
