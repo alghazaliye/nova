@@ -24,7 +24,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
   int _index = 0;
   Timer? _incomingCallTimer;
   Map<String, dynamic>? _incomingCall;
-  bool _dialogOpen = false; // يمنع تراكم حوارات المكالمة الواردة (رنين مكرر)
 
   @override
   void initState() {
@@ -45,39 +44,24 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
     // فحص المكالمات الواردة كل 2 ثانية (إشعار فوري)
     _incomingCallTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      if (!mounted || _dialogOpen || _incomingCall != null) return;
+      if (!mounted || _incomingCall != null) return;
       try {
         final res = await ApiService.get('/calls/incoming');
         if (!mounted || res['success'] != true) return;
         final data = res['data'];
         if (data is List && data.isNotEmpty) {
           final call = Map<String, dynamic>.from(data[0] as Map<String, dynamic>);
-          setState(() {
-            _incomingCall = call;
-            _dialogOpen = true;
-          });
+          setState(() => _incomingCall = call);
           if (!mounted) return;
           await showDialog(
             context: context,
             barrierDismissible: false,
             builder: (c) => _IncomingCallDialog(
               call: call,
-              onAnswer: () {
-                Navigator.of(c).pop();
-                _acceptCall(call);
-              },
-              onReject: () {
-                Navigator.of(c).pop();
-                _rejectCall(call);
-              },
+              onAnswer: () => _acceptCall(call),
+              onReject: () => _rejectCall(call),
             ),
           );
-          // تنظيف الحالة بعد إغلاق الحوار بأي طريقة
-          if (!mounted) return;
-          setState(() {
-            _dialogOpen = false;
-            _incomingCall = null;
-          });
         }
       } catch (_) {}
     });
@@ -85,11 +69,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   Future<void> _acceptCall(Map<String, dynamic> call) async {
     final callId = call['id'];
-    setState(() {
-      _dialogOpen = false;
-      _incomingCall = null;
-    });
     try {
+      await ApiService.post('/calls/$callId/sign', body: {'signal': 'accept'});
       await ApiService.post('/calls/$callId/answer');
       if (!mounted) return;
       Navigator.of(context).push(MaterialPageRoute(
@@ -101,10 +82,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   Future<void> _rejectCall(Map<String, dynamic> call) async {
     final callId = call['id'];
-    setState(() {
-      _dialogOpen = false;
-      _incomingCall = null;
-    });
     try {
       await ApiService.post('/calls/$callId/reject');
     } catch (_) {}
@@ -143,6 +120,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                 onReject: () {
                   Navigator.of(context).pop();
                   _rejectCall(_incomingCall!);
+                  setState(() => _incomingCall = null);
                 },
               ),
             ),
@@ -618,31 +596,19 @@ class _IncomingCallDialogState extends State<_IncomingCallDialog> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // رفض
-                ElevatedButton.icon(
-                  onPressed: widget.onReject,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEF4444),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(110, 52),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.call_end, color: Colors.white),
-                  label: const Text('رفض'),
+                _CallBtn(
+                  icon: Icons.call_end,
+                  color: const Color(0xFFEF4444),
+                  label: 'رفض',
+                  onTap: widget.onReject,
                 ),
-                const SizedBox(width: 28),
+                const SizedBox(width: 60),
                 // قبول
-                ElevatedButton.icon(
-                  onPressed: widget.onAnswer,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF25D366),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(110, 52),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.call, color: Colors.white),
-                  label: const Text('قبول'),
+                _CallBtn(
+                  icon: Icons.call,
+                  color: const Color(0xFF25D366),
+                  label: 'قبول',
+                  onTap: widget.onAnswer,
                 ),
               ],
             ),

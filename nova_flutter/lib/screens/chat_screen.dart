@@ -1,13 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:universal_html/html.dart' as html;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/voice_service.dart';
+import 'package:video_player/video_player.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:record/record.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/user_model.dart' show NovaMessage, Conversation, formatLastSeen;
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
@@ -28,11 +30,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<NovaMessage> _messages = [];
   final TextEditingController _ctrl = TextEditingController();
   final ScrollController _scroll = ScrollController();
+  final AudioRecorder _recorder = AudioRecorder();
   bool _loading = false;
+  bool _isRecording = false;
+  bool _cancelRecording = false;
+  DateTime? _recordStartedAt;
+  StreamSubscription<RecordState>? _recSub;
   bool _hasMore = true;
   bool _hasText = false;
-  bool _isRecording = false;
-  int _recordSeconds = 0;
   Timer? _pollTimer;
   final ImagePicker _picker = ImagePicker();
   static const Uuid _uuid = Uuid();
@@ -54,9 +59,83 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _recSub?.cancel();
+    _recorder.dispose();
     _ctrl.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// تسجيل صوتي بأسلوب الواتساب: ضغط مطوّل = ابدأ، سحب لليمين/الأسفل = إلغاء، رفع الإصبع = إرسال
+  Future<void> _startRecording() async {
+    if (_isRecording) return;
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      if (mounted) showToast(context, 'يُطلب السماح بالوصول إلى الميكروفون');
+      return;
+    }
+    final ok = await _recorder.hasPermission();
+    if (!ok) {
+      if (mounted) showToast(context, 'لا يوجد إذن للميكروفون');
+      return;
+    }
+    final path = '/tmp/nova_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(
+      const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000),
+      path: path,
+    );
+    setState(() {
+      _isRecording = true;
+      _cancelRecording = false;
+      _recordStartedAt = DateTime.now();
+    });
+  }
+
+  Future<void> _sendVoice() async {
+    if (!_isRecording) return;
+    await _stopRecording();
+  }
+
+  Future<void> _stopRecording() async {
+    if (!_isRecording) return;
+    final wasCancelled = _cancelRecording;
+    _recSub?.cancel();
+    final path = await _recorder.stop();
+    setState(() => _isRecording = false);
+    if (wasCancelled || path == null || path.isEmpty) return;
+    // أرسل المقطع المسجل
+    try {
+      if (mounted) showToast(context, 'جاري إرسال المقطع الصوتي...');
+      final file = http.MultipartFile.fromBytes(
+        'attachment', await File(path).readAsBytes(),
+        filename: 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        contentType: http.MediaType.parse('audio/mp4'),
+      );
+      final res = await ApiService.uploadMultipart(
+        '/conversations/${widget.conv.id}/media',
+        [file],
+        fields: {'client_message_id': _uuid.v4(), 'type': 'audio'},
+      );
+      if (mounted) {
+        if (res['success'] == true) {
+          await _refresh();
+          if (mounted) showToast(context, 'تم إرسال المقطع الصوتي');
+        } else if (mounted) {
+          showToast(context, res['message'] ?? 'فشل الإرسال');
+        }
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'فشل إرسال المقطع الصوتي');
+    }
+  }
+
+  void _toggleCancelRecording(Offset offset) {
+    // سحب لأكثر من 80px لليمين = إلغاء التسجيل (مثل الواتساب)
+    if (offset.dx > 80) {
+      if (!_cancelRecording) setState(() => _cancelRecording = true);
+    } else if (_cancelRecording) {
+      setState(() => _cancelRecording = false);
+    }
   }
 
   /// تحديث صامت: يجلب أحدث الرسائل الجديدة فقط ويحدّث حالة الرسائل الحالية
@@ -213,6 +292,14 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// تحويل المسار النسبي إلى رابط URL مطلق قابل للخدمة
+  String _fileUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    if (path.startsWith('http')) return path;
+    final base = ApiService.baseUrl.replaceAll('/api/v1', '');
+    return '$base/nova/backend/storage/$path';
+  }
+
   Future<void> _pickMedia() async {
     try {
       final XFile? f = await _picker.pickImage(source: ImageSource.gallery);
@@ -254,6 +341,83 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {}
   }
 
+  /// رفع فيديو من المعرض — إرساله كفقاعة فيديو قابلة للتشغيل
+  Future<void> _pickVideo() async {
+    try {
+      final XFile? f = await _picker.pickVideo(source: ImageSource.gallery);
+      if (f == null || !mounted) return;
+      final name = f.name.split('/').last;
+      if (!mounted) return;
+      showToast(context, 'جاري رفع الفيديو...');
+      try {
+        final bytes = await f.readAsBytes();
+        final mime = _mimeFromExt(name.contains('.') ? name.split('.').last.toLowerCase() : 'bin');
+        final res = await ApiService.uploadMultipart(
+          '/conversations/${widget.conv.id}/media',
+          [
+            http.MultipartFile.fromBytes(
+              'attachment', bytes,
+              filename: name,
+              contentType: http.MediaType.parse(mime),
+            ),
+          ],
+          fields: {'client_message_id': _uuid.v4()},
+        );
+        if (mounted) {
+          if (res['success'] == true) {
+            await _refresh();
+            if (mounted) showToast(context, 'تم إرسال الفيديو');
+          } else if (mounted) {
+            showToast(context, res['message'] ?? 'فشل الإرسال');
+          }
+        }
+      } catch (e) {
+        if (mounted) showToast(context, 'فشل رفع الفيديو');
+      }
+    } catch (_) {}
+  }
+
+  /// رفع ملف صوتي من الجهاز — إرساله كفقاعة صوت قابلة للاستماع
+  Future<void> _pickAudio() async {
+    try {
+      final XFile? f = await _picker.pickMedia();
+      if (f == null || !mounted) return;
+      final name = f.name.split('/').last;
+      final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+      if (!['mp3', 'wav', 'ogg', 'm4a', 'webm'].contains(ext)) {
+        if (mounted) showToast(context, 'اختر ملف صوتي (mp3/wav/ogg/m4a)');
+        return;
+      }
+      if (!mounted) return;
+      showToast(context, 'جاري رفع المقطع الصوتي...');
+      try {
+        final bytes = await f.readAsBytes();
+        final mime = _mimeFromExt(ext);
+        final res = await ApiService.uploadMultipart(
+          '/conversations/${widget.conv.id}/media',
+          [
+            http.MultipartFile.fromBytes(
+              'attachment', bytes,
+              filename: name,
+              contentType: http.MediaType.parse(mime),
+            ),
+          ],
+          fields: {'client_message_id': _uuid.v4()},
+        );
+        if (mounted) {
+          if (res['success'] == true) {
+            await _refresh();
+            if (mounted) showToast(context, 'تم إرسال المقطع الصوتي');
+          } else if (mounted) {
+            showToast(context, res['message'] ?? 'فشل الإرسال');
+          }
+        }
+      } catch (e) {
+        if (mounted) showToast(context, 'فشل رفع المقطع الصوتي');
+      }
+    } catch (_) {}
+  }
+
   Future<void> _startCall(String type) async {
     final calleeId = widget.conv.otherUserId;
     final res = await ApiService.post('/calls', body: {
@@ -262,19 +426,8 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     if (!mounted) return;
     if (res['success'] == true && res['data'] != null) {
-      // دمج بيانات المكالمة مع بيانات المتصل حتى يعرف CallScreen هويتي
-      final callData = Map<String, dynamic>.from(res['data'] as Map<String, dynamic>);
-      // الخادم يرجع call_id وليس id — توحيدهما لأن CallScreen يقرأ 'id'
-      if (callData.containsKey('call_id') && !callData.containsKey('id')) {
-        callData['id'] = callData['call_id']; // MANUS-FIX-2026-08-13
-      }
-      final me = context.read<AuthProvider>().user;
-      if (me != null) {
-        callData['caller_id'] = me.id;
-        callData['caller_name'] = me.name;
-      }
       Navigator.push(context, MaterialPageRoute(
-          builder: (_) => CallScreen(callData: callData)));
+          builder: (_) => CallScreen(callData: res['data'] as Map<String, dynamic>)));
     } else if (mounted) {
       showToast(context, res['message'] ?? 'فشل الاتصال');
     }
@@ -307,9 +460,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _deleteMessage(NovaMessage msg, {bool forAll = false}) async {
-    final res = await ApiService.delete('/messages/${msg.id}',
-        body: forAll ? {'for_all': true} : null);
+  Future<void> _deleteMessage(NovaMessage msg) async {
+    final res = await ApiService.delete('/messages/${msg.id}');
     if (!mounted) return;
     if (res['success'] == true) {
       await _refresh();
@@ -380,9 +532,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   static const _disappearOptions = [
     {'label': 'دائم (لا تختفي)', 'value': 0, 'icon': Icons.inbox},
-    {'label': 'بعد ساعة', 'value': 3600, 'icon': Icons.hourglass_top},
     {'label': 'بعد 24 ساعة', 'value': 86400, 'icon': Icons.timelapse},
-    {'label': 'بعد أسبوع', 'value': 604800, 'icon': Icons.calendar_today},
     {'label': 'بعد القراءة', 'value': -1, 'icon': Icons.visibility},
   ];
 
@@ -424,16 +574,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       Navigator.pop(c);
                       _editMessage(msg);
                     }),
-                  if (isMine)
-                    _MenuChip(Icons.delete_outline, 'حذف لدى الطرفين', cl, () {
-                      Navigator.pop(c);
-                      _deleteMessage(msg, forAll: true);
-                    }),
-                  if (!isMine)
-                    _MenuChip(Icons.delete_outline, 'حذف', cl, () {
-                      Navigator.pop(c);
-                      _deleteMessage(msg, forAll: false);
-                    }),
+                  _MenuChip(Icons.delete_outline, 'حذف لدى الطرفين', cl, () {
+                    Navigator.pop(c);
+                    _deleteMessage(msg);
+                  }),
                   _MenuChip(Icons.copy, 'نسخ النص', cl, () {
                     Navigator.pop(c);
                     if (msg.body != null && msg.body!.isNotEmpty) {
@@ -583,10 +727,15 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Row(
               children: [
                 IconBtn(icon: Icons.add_circle_outline, onTap: () => openAttachSheet(context,
-                      onImage: _pickMedia, onDocument: _pickMedia)),
+                      onImage: _pickMedia, onDocument: _pickMedia,
+                      onVideo: _pickVideo, onAudio: _pickAudio)),
                 const SizedBox(width: 7),
-                Expanded(
-                  child: SizedBox(
+                  Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isRecording) _buildRecordingIndicator(c),
+                      SizedBox(
                     height: 44,
                     child: TextField(
                       controller: _ctrl,
@@ -616,25 +765,35 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                     ),
-                  ),
+                    ),
+                  ],
+                ),
                 ),
                 const SizedBox(width: 7),
-                IconBtn(icon: Icons.emoji_emotions_outlined, onTap: _addEmoji),
-                const SizedBox(width: 7),
+                if (!_isRecording) ...[
+                  IconBtn(icon: Icons.emoji_emotions_outlined, onTap: _addEmoji),
+                  const SizedBox(width: 7),
+                ],
                 PressScale(
-                  onTap: _isRecording ? _stopAndSendVoice : _toggleVoice,
-                  child: Container(
+                  onTap: _isRecording ? null : (_hasText ? _sendMessage : _startRecording),
+                  onLongPressStart: (_) => _startRecording(),
+                  onLongPressMoveUpdate: (d) => _toggleCancelRecording(d.localPosition),
+                  onLongPressEnd: (_) => _sendVoice(),
+                  behavior: HitTestBehavior.opaque,
+                    child: Container(
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: _isRecording ? c.red : c.accent,
+                      color: _isRecording
+                          ? (_cancelRecording ? Colors.red : c.accent)
+                          : c.accent,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(color: c.accent.withOpacity(0.35), blurRadius: 14, offset: const Offset(0, 5)),
                       ],
                     ),
                     child: _isRecording
-                        ? Text('$_recordSeconds"', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold))
+                        ? Icon(Icons.mic, color: Colors.white, size: 20)
                         : Icon(_hasText ? Icons.send : Icons.mic, color: Colors.white, size: 20),
                   ),
                 ),
@@ -651,94 +810,338 @@ class _ChatScreenState extends State<ChatScreen> {
     _ctrl.selection = TextSelection.collapsed(offset: _ctrl.text.length);
   }
 
-  /// بدء التسجيل الصوتي (إلغاء التسجيل بالضغط مرة أخرى)
-  Future<void> _toggleVoice() async {
-    if (_hasText) {
-      await _sendMessage();
-      return;
-    }
-    try {
-      await VoiceService.start();
-      if (!mounted) return;
-      setState(() => _isRecording = true);
-      _recordTick();
-      if (mounted) showToast(context, 'جارٍ التسجيل... اضغط مرة أخرى للإرسال');
-    } catch (e) {
-      if (mounted) showToast(context, 'تعذر الوصول إلى الميكروفون — تأكد من السماح بالوصول');
-    }
-  }
-
-  void _recordTick() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted || !_isRecording) return;
-      final s = VoiceService.seconds;
-      setState(() => _recordSeconds = s);
-      if (s < 120) _recordTick(); // حد أقصى دقيقتان
-      else if (mounted) _stopAndSendVoice();
-    });
-  }
-
-  /// إيقاف التسجيل وإرسال الصوت
-  Future<void> _stopAndSendVoice() async {
-    if (!mounted) return;
-    final wasRecording = _isRecording;
-    setState(() => _isRecording = false);
-    if (!wasRecording) return;
-    final result = await VoiceService.stop();
-    if (!mounted) return;
-    setState(() => _recordSeconds = 0);
-    final bytes = result.$1;
-    if (bytes == null || bytes.isEmpty) {
-      showToast(context, 'تم إلغاء التسجيل');
-      return;
-    }
-    showToast(context, 'جاري إرسال الرسالة الصوتية...');
-    try {
-      final clientId = _uuid.v4();
-      final temp = NovaMessage(
-        id: -1,
-        uuid: clientId,
-        senderId: context.read<AuthProvider>().user?.id ?? 0,
-        type: 'audio',
-        status: 'sent',
-        createdAt: DateTime.now().toIso8601String(),
-        duration: result.$2 == 'audio' ? _recordSeconds : null,
-      );
-      setState(() => _messages.add(temp));
-      _scrollToBottom();
-      final res = await ApiService.uploadMultipart(
-        '/messages/voice',
-        [
-          http.MultipartFile.fromBytes(
-            'voice', bytes,
-            filename: 'voice.webm',
-            contentType: http.MediaType.parse('audio/webm'),
+  /// مؤشر التسجيل بأسلوب الواتساب (يعرض عداد المدة وشريط الإلغاء)
+  Widget _buildRecordingIndicator(NovaColors c) {
+    final elapsed = _recordStartedAt != null
+        ? DateTime.now().difference(_recordStartedAt!).inSeconds
+        : 0;
+    final mins = elapsed ~/ 60;
+    final secs = elapsed % 60;
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: _cancelRecording ? Colors.red.shade100 : c.surface2,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _cancelRecording ? Icons.cancel_outlined : Icons.mic,
+            color: _cancelRecording ? Colors.red : c.accent,
+            size: 18,
           ),
+          const SizedBox(width: 8),
+          Text(
+            _cancelRecording ? 'اسحب مرة أخرى للإلغاء' : 'تسجيل... $mins:${secs.toString().padLeft(2, '0')}',
+            style: TextStyle(color: _cancelRecording ? Colors.red : c.text, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const Spacer(),
+          Text('↗ ${_cancelRecording ? 'إلغاء' : 'إرسال'}',
+            style: TextStyle(color: _cancelRecording ? Colors.red : c.muted, fontSize: 12)),
         ],
-        fields: {
-          'conversation_id': widget.conv.id.toString(),
-          'client_message_id': clientId,
-          'duration': _recordSeconds.toString(),
-        },
-      );
-      if (!mounted) return;
-      if (res['success'] == true && res['data'] != null) {
-        setState(() {
-          _messages.removeWhere((m) => m.id == -1);
-          _messages.add(NovaMessage.fromJson(Map<String, dynamic>.from(res['data'] as Map<String, dynamic>)));
-        });
-        _scrollToBottom();
-        showToast(context, 'تم إرسال الرسالة الصوتية');
-      } else {
-        setState(() => _messages.removeWhere((m) => m.id == -1));
-        showToast(context, res['message'] ?? 'فشل إرسال الصوت');
+      ),
+    );
+  }
+}
+
+/* ═══════════════ فقاعة فيديو بأسلوب الواتساب (تشغيل/إيقاف + شريط تقدم) ═══════════════ */
+class _VideoBubble extends StatefulWidget {
+  const _VideoBubble({required this.path, this.thumbnail, this.duration, required this.isMine, required this.colors});
+  final String? path;
+  final String? thumbnail;
+  final int? duration;
+  final bool isMine;
+  final NovaColors colors;
+
+  @override
+  State<_VideoBubble> createState() => _VideoBubbleState();
+}
+
+class _VideoBubbleState extends State<_VideoBubble> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+  String get _url {
+    final p = widget.path ?? '';
+    if (p.startsWith('http')) return p;
+    return '${ApiService.baseUrl.replaceAll('/api/v1', '')}/nova/backend/storage/$p';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final ctrl = VideoPlayerController.networkUrl(Uri.parse(_url));
+      await ctrl.initialize();
+      ctrl.setLooping(false);
+      if (!mounted) {
+        ctrl.dispose();
+        return;
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _messages.removeWhere((m) => m.id == -1));
-        showToast(context, 'خطأ في إرسال الصوت');
-      }
+      ctrl.addListener(() => setState(() {}));
+      setState(() {
+        _controller = ctrl;
+        _ready = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() {});
     }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  String _fmt(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.isMine ? Colors.white.withOpacity(0.92) : const Color(0xFF101828).withOpacity(0.85);
+    final ctrl = _controller;
+    final duration = widget.duration;
+    return SizedBox(
+      width: 250,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_ready && ctrl != null && ctrl.value.isInitialized)
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    if (ctrl.value.isPlaying) {
+                      ctrl.pause();
+                    } else {
+                      ctrl.play();
+                    }
+                    setState(() {});
+                  },
+                  child: AspectRatio(
+                    aspectRatio: ctrl.value.aspectRatio,
+                    child: VideoPlayer(ctrl),
+                  ),
+                ),
+                if (!ctrl.value.isPlaying)
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10)],
+                    ),
+                    child: const Icon(Icons.play_arrow, size: 34, color: Color(0xFF5B5CE2)),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: c,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    child: Row(children: [
+                      Icon(ctrl.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                          color: Colors.white, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            minHeight: 3,
+                            value: ctrl.value.position.inMilliseconds > 0 &&
+                                    ctrl.value.duration.inMilliseconds > 0
+                                ? (ctrl.value.position.inMilliseconds /
+                                    ctrl.value.duration.inMilliseconds)
+                                    .clamp(0.0, 1.0)
+                                : null,
+                            backgroundColor: Colors.white.withOpacity(0.3),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _fmt(ctrl.value.position.inSeconds),
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                    ]),
+                  ),
+                ),
+              ],
+            )
+          else
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: widget.thumbnail != null
+                      ? Image.network(
+                          '${ApiService.baseUrl.replaceAll('/api/v1', '')}/nova/backend/storage/${widget.thumbnail}',
+                          width: 250, height: 160, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 160, width: 250, child: Center(child: CircularProgressIndicator())))
+                      : Container(width: 250, height: 160, color: Colors.black12, child: const Center(child: CircularProgressIndicator())),
+                ),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.9),
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 8)],
+                  ),
+                  child: const Icon(Icons.play_circle_fill, size: 44, color: Color(0xFF5B5CE2)),
+                ),
+                if (duration != null)
+                  Positioned(
+                    bottom: 6,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.65),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(_fmt(duration),
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ═══════════════ فقاعة صوت بأسلوب الواتساب (تشغيل + شريط تقدم + مدة) ═══════════════ */
+class _AudioBubble extends StatefulWidget {
+  const _AudioBubble({required this.path, this.duration, required this.isMine, required this.colors});
+  final String? path;
+  final int? duration;
+  final bool isMine;
+  final NovaColors colors;
+
+  @override
+  State<_AudioBubble> createState() => _AudioBubbleState();
+}
+
+class _AudioBubbleState extends State<_AudioBubble> {
+  AudioPlayer? _player;
+  bool _playing = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  String get _url {
+    final p = widget.path ?? '';
+    if (p.startsWith('http')) return p;
+    return '${ApiService.baseUrl.replaceAll('/api/v1', '')}/nova/backend/storage/$p';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final d = widget.duration;
+    if (d != null && d > 0) _duration = Duration(seconds: d);
+  }
+
+  Future<void> _toggle() async {
+    final p = _player;
+    if (p == null) {
+      final player = AudioPlayer();
+      player.setUrl(_url).then((_) {
+        setState(() => _duration = player.duration ?? _duration);
+      }).catchError((_) {
+        if (mounted) showToast(context, 'تعذر تشغيل المقطع');
+      });
+      player.positionStream.listen((pos) {
+        if (mounted) setState(() => _position = pos);
+      });
+      player.playerStateStream.listen((state) {
+        if (mounted) setState(() => _playing = state.playing);
+      });
+      player.processingStateStream.listen((state) {
+        if (state == ProcessingState.completed && mounted) {
+          setState(() => _playing = false);
+        }
+      });
+      setState(() => _player = player);
+      await player.play();
+      setState(() => _playing = true);
+      return;
+    }
+    if (_playing) {
+      await p.pause();
+      setState(() => _playing = false);
+    } else {
+      await p.play();
+      setState(() => _playing = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.colors;
+    return SizedBox(
+      width: 230,
+      child: Row(children: [
+        PressScale(
+          onTap: _toggle,
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: widget.isMine ? Colors.white.withOpacity(0.25) : c.accent.withOpacity(0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(_playing ? Icons.pause : Icons.play_arrow,
+                color: widget.isMine ? Colors.white : c.accent, size: 24),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                minHeight: 4,
+                value: _duration.inMilliseconds > 0
+                    ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+                    : null,
+                color: widget.isMine ? Colors.white : c.accent,
+                backgroundColor: (widget.isMine ? Colors.white : c.accent).withOpacity(0.25),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              _fmt(_position) + ' / ' + _fmt(_duration),
+              style: TextStyle(fontSize: 11, color: widget.isMine ? c.mineText.withOpacity(0.8) : c.muted),
+            ),
+          ]),
+        ),
+      ]),
+    );
   }
 }
 
@@ -781,20 +1184,28 @@ class _Bubble extends StatelessWidget {
     String label;
     switch (status) {
       case 'read':
+        {
         color = const Color(0xFF3B82F6);
         label = '✓✓';
+        }
         break;
       case 'delivered':
+        {
         color = const Color(0xFF6B7280);
         label = '✓✓';
+        }
         break;
       case 'deleted':
+        {
         color = const Color(0xFFEF4444);
         label = '✕';
+        }
         break;
       default:
+        {
         color = const Color(0xFF9CA3AF);
         label = '✓';
+        }
     }
     return [
       const SizedBox(width: 4),
@@ -802,34 +1213,6 @@ class _Bubble extends StatelessWidget {
           style: TextStyle(
               fontSize: 12, fontWeight: FontWeight.w700, color: color)),
     ];
-  }
-
-  Widget _buildAudioPlayer(String filePath, NovaColors c) {
-    final url = filePath.startsWith('http')
-        ? filePath
-        : '${ApiService.baseUrl.replaceAll('/api/v1', '')}/storage/$filePath';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: c.accent.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(
-          icon: Icon(Icons.play_circle_fill, color: c.accent, size: 28),
-          onPressed: () {
-            if (kIsWeb) html.window.open(url, '_blank');
-          },
-          splashRadius: 18,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text('رسالة صوتية', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isMine ? c.mineText : c.text)),
-            if (msg.duration != null) Text('${msg.duration} ثانية', style: TextStyle(fontSize: 11, color: c.muted)),
-          ]),
-        ),
-      ]),
-    );
   }
 
   @override
@@ -863,11 +1246,9 @@ class _Bubble extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: Image.network(msg.filePath!, width: 220))
             else if (msg.type == 'video' && msg.filePath != null)
-              ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(msg.filePath!, width: 240, height: 160, fit: BoxFit.cover))
+              _VideoBubble(path: msg.filePath, thumbnail: msg.thumbnailPath, duration: msg.duration, isMine: isMine, colors: c)
             else if (msg.type == 'audio' && msg.filePath != null)
-              _buildAudioPlayer(msg.filePath!, c)
+              _AudioBubble(path: msg.filePath, duration: msg.duration, isMine: isMine, colors: c)
             else if (msg.type == 'file' && msg.filePath != null)
               Container(
                 padding: const EdgeInsets.all(6),

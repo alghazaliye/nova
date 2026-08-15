@@ -9,6 +9,9 @@ import '../utils/nova_ui.dart';
 import '../utils/nova_web_state.dart';
 import 'profile_screen.dart';
 import 'chats_screen.dart';
+import '../models/user_model.dart';
+import 'chat_screen.dart';
+import '../services/api_service.dart';
 
 
 /// شاشة إدخال رمز التحقق OTP
@@ -137,11 +140,38 @@ class _OtpScreenState extends State<OtpScreen> {
     final ok = await context.read<AuthProvider>().verifyOtp(widget.phone, otp);
     if (!mounted) return;
     if (ok) {
+      // فتح محادثة مباشرة عند وجود ?chat=<id> في الرابط (للاختبار السريع)
+      final q = Uri.splitQueryString(Uri.parse(novaHref()).query);
+      final chatId = int.tryParse(q['chat'] ?? '') ?? 0;
+      final screen = widget.isRegister
+          ? const ProfileScreen()
+          : (chatId > 0 ? const ChatsScreen() : const ChatsScreen());
       Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-              builder: (_) =>
-                  widget.isRegister ? const ProfileScreen() : const ChatsScreen()));
+          MaterialPageRoute(builder: (_) => screen));
+      if (chatId > 0) {
+        // جلب المحادثة وفتحها بعد بناء قائمة المحادثات
+        try {
+          final res = await ApiService.get('/conversations');
+          if (mounted) {
+            final list = (res['data'] is List) ? res['data'] as List : [];
+            Conversation? conv;
+            for (final item in list) {
+              if (item is Map &&
+                  (item['id'] == chatId || '${item['id']}' == '$chatId')) {
+                conv = Conversation.fromJson(Map<String, dynamic>.from(item));
+                break;
+              }
+            }
+            if (conv != null) {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => ChatScreen(conv: conv!)));
+            }
+          }
+        } catch (_) {}
+      }
     }
   }
 }

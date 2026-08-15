@@ -6,6 +6,9 @@ import 'utils/nova_ui.dart';
 import 'screens/phone_screen.dart';
 import 'screens/otp_screen.dart';
 import 'screens/chats_screen.dart';
+import 'screens/chat_screen.dart';
+import 'services/api_service.dart';
+import 'models/user_model.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -126,7 +129,19 @@ class _AppRouterState extends State<AppRouter> {
       final p = uri.queryParameters['phone'];
       final otp = uri.queryParameters['otp'];
       if (p != null && p.length >= 7 && otp != null && otp.length >= 4) {
-        target = OtpScreen(phone: p, isRegister: false);
+        final chatId = uri.queryParameters['chat'];
+        final cid = chatId != null ? int.tryParse(chatId) : null;
+        if (cid != null && cid > 0) {
+          // تسجيل دخول تلقائي ثم فتح المحادثة مباشرة عبر ?chat=<id>
+          final ok = await context.read<AuthProvider>().verifyOtp(p, otp);
+          if (!ok || !mounted) {
+            target = OtpScreen(phone: p, isRegister: false);
+          } else {
+            target = _ChatByIdLoader(id: cid);
+          }
+        } else {
+          target = OtpScreen(phone: p, isRegister: false);
+        }
         if (mounted) {
           setState(() { _target = target; _checked = true; });
         }
@@ -135,7 +150,20 @@ class _AppRouterState extends State<AppRouter> {
     }
     if (token != null) {
       final ok = await context.read<AuthProvider>().fetchMe();
-      target = ok ? const ChatsScreen() : const PhoneScreen();
+      if (!ok) {
+        target = const PhoneScreen();
+      } else if (kIsWeb) {
+        // فتح مباشر لمحادثة معينة عبر ?chat=<id> لأغراض الاختبار
+        final chatId = Uri.parse(Uri.base.toString()).queryParameters['chat'];
+        if (chatId != null) {
+          target = _ChatByIdLoader(id: int.tryParse(chatId) ?? 0);
+          _onAuthChanged();
+        } else {
+          target = const ChatsScreen();
+        }
+      } else {
+        target = const ChatsScreen();
+      }
       _onAuthChanged();
     } else {
       target = const PhoneScreen();
@@ -154,5 +182,63 @@ class _AppRouterState extends State<AppRouter> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return _target!;
+  }
+}
+
+/// يحمّل محادثة محددة بمعرفها من API ويفتحها مباشرة (للاختبار السريع عبر ?chat=<id>)
+class _ChatByIdLoader extends StatefulWidget {
+  final int id;
+  const _ChatByIdLoader({required this.id});
+
+  @override
+  State<_ChatByIdLoader> createState() => _ChatByIdLoaderState();
+}
+
+class _ChatByIdLoaderState extends State<_ChatByIdLoader> {
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  Future<void> _open() async {
+    try {
+      final res = await ApiService.get('/conversations');
+      final list = (res['data'] is List ? res['data'] as List : <dynamic>[]);
+      for (final e in list) {
+        final m = Map<String, dynamic>.from(e as Map);
+        if ((m['id']?.toString() ?? '') == widget.id.toString()) {
+          final conv = Conversation.fromJson(m);
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ChatScreen(conv: conv)),
+            );
+          }
+          return;
+        }
+      }
+      if (mounted) {
+        // لم تُوجد المحادثة — الانتقال للقائمة الرئيسية
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ChatsScreen()),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ChatsScreen()),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
   }
 }

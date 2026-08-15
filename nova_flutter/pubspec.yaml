@@ -1,7 +1,6 @@
 name: nova_flutter
 description: "NOVA Messenger - تطبيق محادثات متكامل"
 publish_to: 'none'
-version: 3.7.1+38
 
 environment:
   sdk: ^3.6.2
@@ -16,10 +15,11 @@ dependencies:
   image_picker: ^1.1.2
   file_picker: ^8.0.0
   video_player: ^2.9.1
+  just_audio: ^0.9.42
+  record: ^5.1.2
+  permission_handler: ^11.3.1
   qr_flutter: ^4.1.0
   uuid: ^4.4.0
-  flutter_webrtc: ^0.12.12
-  universal_html: ^2.2.4
   shared_preferences: ^2.3.2
   intl_phone_field: ^3.2.0
 

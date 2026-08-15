@@ -21,6 +21,11 @@ require_once __DIR__ . '/../controllers/NotificationController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
 require_once __DIR__ . '/../controllers/DeviceController.php';
 
+
+// ════════════════════════════════════════════════════════════════════
+// Serve uploaded media files (video/audio/image) with CORS + Range support
+// Matches: GET /media/{path...} and GET /nova/backend/storage/{path...}
+// ════════════════════════════════════════════════════════════════════
 // Parse request
 $method = $_SERVER['REQUEST_METHOD'];
 $uri    = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -34,6 +39,84 @@ if ($basePosition !== false) {
     $uri = substr($uri, $basePosition + strlen($basePath));
 }
 $uri = '/' . ltrim($uri, '/');
+
+$mediaMatch = null;
+if (preg_match('#^/media/(.+)$#', $uri, $mediaMatch) || preg_match('#^/nova/backend/storage/(.+)$#', $uri, $mediaMatch) || preg_match('#^/storage/(.+)$#', $uri, $mediaMatch) || preg_match('#^/attachments/.*\.(mp4|mov|webm|mp3|wav|ogg|weba|m4a|aac|jpe?g|png|gif|webp)$#i', $uri, $mediaMatch) || preg_match('#^/voices/.*\.(mp3|wav|ogg|weba|m4a|aac|webm)$#i', $uri, $mediaMatch)) {
+    $rel = trim($mediaMatch[1]);
+    // Security: no directory traversal
+    if (strpos($rel, '..') !== false || preg_match('#^\.\.$#', $rel)) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'message' => 'مسار غير صالح', 'error_code' => 'INVALID_PATH']);
+        exit;
+    }
+    $allowedExts = ['mp4','mov','webm','mp3','wav','ogg','weba','m4a','aac','jpg','jpeg','png','gif','webp'];
+    $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowedExts, true)) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'message' => 'نوع ملف غير مسموح', 'error_code' => 'INVALID_EXT']);
+        exit;
+    }
+    $storageBase = $_ENV['STORAGE_PATH'] ?? dirname(__DIR__) . '/storage';
+    $file = rtrim($storageBase, '/') . '/' . $rel;
+    if (!is_file($file)) {
+        http_response_code(404);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'message' => 'الملف غير موجود', 'error_code' => 'NOT_FOUND']);
+        exit;
+    }
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
+    header('Access-Control-Allow-Headers: Range, Content-Type');
+    header('Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges');
+    $mimeTypes = [
+        'mp4' => 'video/mp4', 'mov' => 'video/quicktime', 'webm' => 'video/webm',
+        'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'ogg' => 'audio/ogg',
+        'weba' => 'audio/webm', 'm4a' => 'audio/mp4', 'aac' => 'audio/aac',
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'gif' => 'image/gif', 'webp' => 'image/webp',
+    ];
+    header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
+    header('Accept-Ranges: bytes');
+    header('Cache-Control: public, max-age=31536000, immutable');
+    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+    $size = filesize($file);
+    header('Content-Length: ' . $size);
+    $range = $_SERVER['HTTP_RANGE'] ?? null;
+    if ($range && preg_match('/^bytes=(\d*)-(\d*)$/', $range, $rm)) {
+        $start = $rm[1] !== '' ? (int)$rm[1] : 0;
+        $end   = $rm[2] !== '' ? (int)$rm[2] : $size - 1;
+        if ($start >= $size) {
+            http_response_code(416);
+            header("Content-Range: bytes */{$size}");
+            exit;
+        }
+        if ($end >= $size) $end = $size - 1;
+        http_response_code(206);
+        header("Content-Range: bytes {$start}-{$end}/{$size}");
+        header('Content-Length: ' . ($end - $start + 1));
+        $fh = fopen($file, 'rb');
+        fseek($fh, $start);
+        $remaining = $end - $start + 1;
+        $chunk = 8192;
+        while ($remaining > 0 && !feof($fh)) {
+            $len = min($chunk, $remaining);
+            $data = fread($fh, $len);
+            echo $data;
+            $remaining -= strlen($data);
+        }
+        fclose($fh);
+        exit;
+    }
+    readfile($file);
+    exit;
+}
+
+
 
 // =====================================================
 // Router
@@ -67,12 +150,6 @@ if ($uri === '/users/me' && $method === 'GET') {
 }
 if ($uri === '/users/me' && $method === 'PUT') {
     (new UserController())->updateMe();
-}
-if ($uri === '/users/settings' && $method === 'GET') {
-    (new UserController())->getSettings();
-}
-if ($uri === '/users/settings' && $method === 'PUT') {
-    (new UserController())->updateSettings();
 }
 if ($uri === '/users/avatar' && $method === 'POST') {
     (new UserController())->uploadAvatar();
@@ -131,6 +208,9 @@ if (preg_match('#^/messages/(\d+)/read$#', $uri, $m) && $method === 'POST') {
 }
 if (preg_match('#^/messages/(\d+)/reaction$#', $uri, $m) && $method === 'POST') {
     (new MessageController())->react((int)$m[1]);
+}
+if (preg_match('#^/conversations/(\d+)/media$#', $uri, $m) && $method === 'POST') {
+    (new MessageController())->uploadMedia((int)$m[1]);
 }
 if ($uri === '/messages/voice' && $method === 'POST') {
     (new MessageController())->uploadVoice();

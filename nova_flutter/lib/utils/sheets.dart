@@ -3,13 +3,18 @@ import '../utils/nova_ui.dart';
 
 /// شيت الإرفاق: الكاميرا/المعرض/مستند تذهب للوظيفة الحقيقية، الباقي توست.
 void openAttachSheet(BuildContext context,
-    {required VoidCallback onImage, required VoidCallback onDocument}) {
+    {required VoidCallback onImage,
+    required VoidCallback onDocument,
+    required VoidCallback onVideo,
+    required VoidCallback onAudio}) {
   _openSheet(
     context,
     'إرفاق',
     [
       (Icons.camera_alt, 'الكاميرا', onImage),
       (Icons.photo_library_outlined, 'المعرض', onImage),
+      (Icons.videocam_outlined, 'فيديو', onVideo),
+      (Icons.audiotrack_outlined, 'صوت', onAudio),
       (Icons.description_outlined, 'مستند', onDocument),
       (Icons.location_on_outlined, 'الموقع', () => showToast(context, 'قريبًا ✨')),
       (Icons.person_outline, 'جهة اتصال', () => showToast(context, 'قريبًا ✨')),

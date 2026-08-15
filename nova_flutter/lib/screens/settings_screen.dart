@@ -17,37 +17,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
-  int _disappearDefault = 0;
-  bool _settingsLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSettings());
-  }
-
-  Future<void> _loadSettings() async {
-    final res = await ApiService.get('/users/settings');
-    if (mounted && res['success'] == true) {
-      final data = res['data'];
-      setState(() {
-        _disappearDefault = data is Map ? (data['disappear_default'] ?? 0) as int : 0;
-        _settingsLoaded = true;
-      });
-    } else if (mounted) {
-      setState(() => _settingsLoaded = true);
-    }
-  }
-
-  Future<void> _updateDisappearDefault() async {
-    final res = await ApiService.put('/users/settings', body: {'disappear_default': _disappearDefault});
-    if (!mounted) return;
-    if (res['success'] == true) {
-      showToast(context, 'تم حفظ الإعداد الجديد');
-    } else {
-      showToast(context, res['message'] ?? 'فشل الحفظ');
-    }
-  }
 
   Future<void> _updateProfile() async {
     final auth = context.read<AuthProvider>();
@@ -123,67 +92,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _showDisappearDefaultPicker() async {
-    final options = [
-      {'label': 'دائم (لا تختفي)', 'value': 0, 'icon': Icons.inbox},
-      {'label': 'بعد ساعة', 'value': 3600, 'icon': Icons.hourglass_top},
-      {'label': 'بعد 24 ساعة', 'value': 86400, 'icon': Icons.timelapse},
-      {'label': 'بعد أسبوع', 'value': 604800, 'icon': Icons.calendar_today},
-      {'label': 'بعد القراءة', 'value': -1, 'icon': Icons.visibility},
-    ];
-    final selected = await showModalBottomSheet<int?>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.42),
-      builder: (c) {
-        final cl = NovaColors.of(c);
-        return Container(
-          decoration: BoxDecoration(
-            color: cl.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-          ),
-          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(c).bottom + 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                    width: 42, height: 4, decoration: BoxDecoration(color: cl.line, borderRadius: BorderRadius.circular(5))),
-              ),
-              const SizedBox(height: 15),
-              const Text('الاختفاء الافتراضي لرسائلك الجديدة',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Text('تُطبق على جميع محادثاتك، ويمكنك تغييرها لكل محادثة على حدة',
-                  style: TextStyle(fontSize: 12.5, color: cl.muted)),
-              const SizedBox(height: 10),
-              ...options.map((opt) => PressScale(
-                    onTap: () => Navigator.pop(c, opt['value'] as int),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(children: [
-                        Icon(opt['icon'] as IconData, color: cl.accent, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(opt['label'] as String,
-                              style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
-                        ),
-                        if ((opt['value'] as int) == _disappearDefault)
-                          Icon(Icons.check_circle, color: cl.accent, size: 18),
-                      ]),
-                    ),
-                  )),
-            ],
-          ),
-        );
-      },
-    );
-    if (selected == null || selected == _disappearDefault || !mounted) return;
-    setState(() => _disappearDefault = selected);
-    await _updateDisappearDefault();
   }
 
   Widget _iconBox({required IconData icon, Color? color}) {
@@ -338,8 +246,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               RowItem(
                                 leading: _iconBox(icon: Icons.timer_off),
                                 title: 'الرسائل المختفية',
-                                subtitle: 'تُضبط من شاشة المحادثة أو عبر الإعداد الافتراضي أدناه',
-                                onTap: () => _showDisappearDefaultPicker(),
+                                subtitle: 'تلقائيًا: تُضبط لكل محادثة من شاشة المحادثة نفسها',
+                                onTap: () => _infoDialog('الرسائل المختفية',
+                                    'من شاشة أي محادثة، اضغط أيقونة "المؤقت" أعلى المحادثة واختر: \n• دائم (افتراضي)\n• بعد 24 ساعة\n• بعد القراءة'),
                               ),
                               RowItem(
                                 leading: _iconBox(icon: Icons.data_saver_on),

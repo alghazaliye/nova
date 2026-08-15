@@ -514,6 +514,160 @@ class MessageController
         }
     }
 
+    // POST /api/v1/conversations/{id}/media — رفع فيديو/صورة/صوت وإنشاء رسالة مرفقة تلقائيًا
+    public function uploadMedia(int $convId): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $this->requireMember($convId, $userId);
+
+        if (!isset($_FILES['attachment']) || !is_uploaded_file($_FILES['attachment']['tmp_name'])) {
+            Response::error('لم يتم رفع أي ملف', 'NO_FILE', 400);
+        }
+        $file     = $_FILES['attachment'];
+        $clientId = trim($_POST['client_message_id'] ?? '');
+        if ($clientId === '') {
+            Response::error('معرف الرسالة مطلوب', 'MISSING_CLIENT_ID', 400);
+        }
+
+        $allowedMimes = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'video/mp4', 'video/webm', 'video/quicktime',
+            'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav',
+        ];
+        $maxSize = 100 * 1024 * 1024; // 100MB
+
+        // فحص نوع الملف الفعلي عبر البصمات (magic bytes) لمنع انتحال النوع
+        $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+        $realMime = (string)finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        // تطبيع الأنواع التي تعيدها بعض أنظمة finfo خارج القائمة القياسية
+        // (مثال: audio/x-m4a لملفات M4A، video/x-m4v، video/x-matroska لملفات MKV/WebM)
+        $clientMime   = trim($_FILES['attachment']['type'] ?? '');
+        $clientHintOk = in_array($clientMime, $allowedMimes, true);
+        if (!in_array($realMime, $allowedMimes, true)) {
+            $norm = match ($realMime) {
+                'audio/x-m4a', 'audio/aac', 'audio/x-aac', 'audio/3gpp', 'audio/3gpp2' => $clientHintOk && str_starts_with($clientMime, 'audio/') ? $clientMime : 'audio/mp4',
+                'video/x-m4v' => 'video/mp4',
+                'video/x-matroska' => 'video/webm',
+                'audio/x-matroska' => 'audio/webm',
+                default => $realMime,
+            };
+            $realMime = $norm;
+        }
+        if (!in_array($realMime, $allowedMimes, true)) {
+            Response::error('نوع الملف غير مسموح به', 'INVALID_FILE_TYPE', 400);
+        }
+        if ((int)$file['size'] > $maxSize) {
+            Response::error('حجم الملف يتجاوز الحد المسموح به (100MB)', 'FILE_TOO_LARGE', 400);
+        }
+
+        $extFromMime = [
+            'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp',
+            'video/mp4' => 'mp4', 'video/webm' => 'webm', 'video/quicktime' => 'mov',
+            'audio/webm' => 'webm', 'audio/ogg' => 'ogg', 'audio/mp4' => 'm4a',
+            'audio/mpeg' => 'mp3', 'audio/wav' => 'wav',
+        ];
+        $type = in_array($realMime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)
+            ? 'image'
+            : (in_array($realMime, ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav'], true) ? 'audio' : 'video');
+
+        $uuidName = UuidHelper::generate();
+        $ext      = $extFromMime[$realMime] ?? 'bin';
+        $fileName = $uuidName . '.' . $ext;
+
+        $destDir = ($_ENV['STORAGE_PATH'] ?? __DIR__ . '/../storage') . '/attachments/';
+        if (!is_dir($destDir)) mkdir($destDir, 0755, true);
+        if (!move_uploaded_file($file['tmp_name'], $destDir . $fileName)) {
+            Response::error('فشل في رفع الملف', 'UPLOAD_FAILED', 500);
+        }
+
+        $relPath   = 'attachments/' . $fileName;
+        $duration  = null;
+        $width     = null;
+        $height    = null;
+        $thumbRel  = null;
+
+        // استخلاص المدة والأبعاد للفيديو/الصوت + صورة مصغرة للفيديو
+        try {
+            $probe = json_decode(shell_exec('ffprobe -v quiet -print_format json -show_format -show_streams ' . escapeshellarg($destDir . $fileName) . ' 2>&1') ?? '{}', true);
+            if (is_array($probe) && isset($probe['format']['duration'])) {
+                $duration = (int)round((float)$probe['format']['duration']);
+            }
+            if (is_array($probe) && !empty($probe['streams'])) {
+                foreach ($probe['streams'] as $stream) {
+                    if (isset($stream['width'])) {
+                        $width  = (int)$stream['width'];
+                        $height = (int)$stream['height'];
+                        break;
+                    }
+                }
+            }
+            if ($type === 'video') {
+                $thumbFile = $uuidName . '_thumb.jpg';
+                shell_exec('ffmpeg -y -v quiet -ss 1 -i ' . escapeshellarg($destDir . $fileName) . ' -frames:v 1 -vf scale=320:-1 ' . escapeshellarg($destDir . $thumbFile) . ' 2>&1');
+                if (is_file($destDir . $thumbFile)) {
+                    $thumbRel = 'attachments/' . $thumbFile;
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('Media probe error: ' . $e->getMessage());
+        }
+
+        // منع الإرسال المكرر (idempotency)
+        $stmt = $this->pdo->prepare('SELECT id FROM messages WHERE conversation_id = ? AND client_message_id = ? LIMIT 1');
+        $stmt->execute([$convId, $clientId]);
+        if ($stmt->fetch()) {
+            Response::success(null, 'تم إرسال الرسالة مسبقًا');
+        }
+
+        // تسجيل المرفق
+        $attachmentUuid = UuidHelper::generate();
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, thumbnail_path, duration, width, height, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+        );
+        $stmt->execute([
+            $attachmentUuid, $userId, $type, basename((string)$file['name']), $fileName, $realMime,
+            (int)$file['size'], $relPath, $thumbRel, $duration, $width, $height,
+        ]);
+        $fileId = (int)$this->pdo->lastInsertId();
+
+        // إعداد الرسائل المختفية للمستخدم
+        $memberStmt = $this->pdo->prepare('SELECT disappear_after FROM conversation_members WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1');
+        $memberStmt->execute([$convId, $userId]);
+        $disappearAfter = (int)($memberStmt->fetchColumn() ?: 0);
+
+        $this->pdo->beginTransaction();
+        try {
+            $msgUuid = UuidHelper::generate();
+            $this->pdo->prepare(
+                'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, disappear_after, created_at, updated_at)
+                 VALUES (?, ?, ?, NULL, ?, \'\', ?, ?, "sent", ?, NOW(), NOW())'
+            )->execute([$msgUuid, $convId, $userId, $type, $fileId, $clientId, $disappearAfter]);
+            $msgId = (int)$this->pdo->lastInsertId();
+            $this->pdo->prepare('UPDATE conversations SET last_message_id = ?, updated_at = NOW() WHERE id = ?')
+                  ->execute([$msgId, $convId]);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            file_put_contents('/tmp/send_media_err.log', 'Send media error: ' . $e->getMessage() . "\n", FILE_APPEND);
+            Response::error('فشل في إرسال الوسائط', 'SEND_FAILED', 500);
+        }
+
+        Response::success(
+            [
+                'id' => $msgId, 'type' => $type, 'file_id' => $fileId,
+                'file_path' => $relPath, 'mime_type' => $realMime,
+                'duration' => $duration, 'width' => $width, 'height' => $height,
+                'thumbnail_path' => $thumbRel,
+            ],
+            'تم إرسال الوسائط',
+            201
+        );
+    }
+
     // POST /api/v1/messages/voice (رفع رسالة صوتية)
     public function uploadVoice(): void
     {

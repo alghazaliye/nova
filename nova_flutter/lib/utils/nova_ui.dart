@@ -183,10 +183,23 @@ Widget novaTopBar(BuildContext context,
 }
 
 class PressScale extends StatefulWidget {
-  const PressScale({super.key, required this.child, this.onTap, this.scale = 0.94});
+  const PressScale({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.scale = 0.94,
+    this.onLongPressStart,
+    this.onLongPressMoveUpdate,
+    this.onLongPressEnd,
+    this.behavior,
+  });
   final Widget child;
   final VoidCallback? onTap;
   final double scale;
+  final ValueChanged<LongPressStartDetails>? onLongPressStart;
+  final ValueChanged<LongPressMoveUpdateDetails>? onLongPressMoveUpdate;
+  final ValueChanged<LongPressEndDetails>? onLongPressEnd;
+  final HitTestBehavior? behavior;
   @override
   State<PressScale> createState() => _PressScaleState();
 }
@@ -197,11 +210,22 @@ class _PressScaleState extends State<PressScale> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+      behavior: widget.behavior ?? HitTestBehavior.opaque,
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       onTap: widget.onTap,
+      onLongPressStart: widget.onLongPressStart != null
+          ? (d) {
+              setState(() => _pressed = true);
+              widget.onLongPressStart!(d);
+            }
+          : null,
+      onLongPressMoveUpdate: widget.onLongPressMoveUpdate,
+      onLongPressEnd: (d) {
+        setState(() => _pressed = false);
+        widget.onLongPressEnd?.call(d);
+      },
       child: AnimatedScale(
         scale: _pressed ? widget.scale : 1,
         duration: const Duration(milliseconds: 120),
