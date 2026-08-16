@@ -6,7 +6,9 @@ void openAttachSheet(BuildContext context,
     {required VoidCallback onImage,
     required VoidCallback onDocument,
     required VoidCallback onVideo,
-    required VoidCallback onAudio}) {
+    required VoidCallback onAudio,
+    VoidCallback? onLocation,
+    VoidCallback? onContact}) {
   _openSheet(
     context,
     'إرفاق',
@@ -16,8 +18,8 @@ void openAttachSheet(BuildContext context,
       (Icons.videocam_outlined, 'فيديو', onVideo),
       (Icons.audiotrack_outlined, 'صوت', onAudio),
       (Icons.description_outlined, 'مستند', onDocument),
-      (Icons.location_on_outlined, 'الموقع', () => showToast(context, 'قريبًا ✨')),
-      (Icons.person_outline, 'جهة اتصال', () => showToast(context, 'قريبًا ✨')),
+      (Icons.location_on_outlined, 'الموقع', onLocation ?? () => showToast(context, 'مشاركة الموقع غير متاحة')),
+      (Icons.person_outline, 'جهة اتصال', onContact ?? () => showToast(context, 'مشاركة جهة الاتصال غير متاحة')),
       (Icons.poll_outlined, 'استطلاع', () => showToast(context, 'قريبًا ✨')),
     ],
   );

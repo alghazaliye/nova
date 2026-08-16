@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
+import 'story_viewer_fullscreen.dart';
 
 /// تبويب الحالة (القصص) — تصميم القالب: قصتي + تحديثات حديثة
 class StoriesScreen extends StatefulWidget {
@@ -74,10 +75,14 @@ class _StoriesScreenState extends State<StoriesScreen> {
   }
 
   void _openStory(Map<String, dynamic> story) {
+    final initialIndex = _stories.indexWhere((s) =>
+        s['id'].toString() == story['id'].toString());
     Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => StoryViewer(stories: _stories, initial: story)));
+            builder: (_) => NovaStoryViewer(
+                stories: _stories,
+                initialIndex: initialIndex >= 0 ? initialIndex : 0)));
   }
 
   Future<void> _deleteStory(Map<String, dynamic> story) async {
@@ -158,12 +163,16 @@ class _StoriesScreenState extends State<StoriesScreen> {
                                           orElse: () => _stories.first)),
                               child: Row(
                                 children: [
-                                  NovaAvatar(
-                                      letter: me?.name != null && me!.name!.isNotEmpty
-                                          ? me.name![0]
-                                          : '?',
+                                        NovaAvatar(
+                                            letter: me?.name != null && me!.name!.isNotEmpty
+                                                ? me.name![0]
+                                                : '?',
                                       size: 54,
-                                      radius: 18),
+                                      radius: 18,
+                                      imageUrl: me?.avatar != null &&
+                                              me!.avatar!.isNotEmpty
+                                          ? me.avatar
+                                          : null),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -201,7 +210,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
                                                 ? s['user_name'].toString()[0]
                                                 : '?',
                                             size: 54,
-                                            radius: 18),
+                                            radius: 18,
+                                            imageUrl: s['user_avatar'] != null &&
+                                                    s['user_avatar'].toString().isNotEmpty
+                                                ? s['user_avatar'].toString()
+                                                : null),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(

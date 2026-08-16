@@ -4,13 +4,90 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 
+/// إعدادات التطبيق العامة (من GET /settings)
+class AppSettings {
+  final bool allowCalls;
+  final bool allowGroups;
+  final bool allowStories;
+  final bool allowRegistration;
+  final bool maintenanceMode;
+  final String appName;
+  final int maxFileSizeMb;
+  final int maxImageSizeMb;
+  final int maxVideoSizeMb;
+  final int storyDurationHrs;
+  final bool fcmEnabled;
+
+  const AppSettings({
+    required this.allowCalls,
+    required this.allowGroups,
+    required this.allowStories,
+    required this.allowRegistration,
+    required this.maintenanceMode,
+    required this.appName,
+    required this.maxFileSizeMb,
+    required this.maxImageSizeMb,
+    required this.maxVideoSizeMb,
+    required this.storyDurationHrs,
+    required this.fcmEnabled,
+  });
+
+  factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
+        allowCalls: j['allow_calls'] == true,
+        allowGroups: j['allow_groups'] == true,
+        allowStories: j['allow_stories'] == true,
+        allowRegistration: j['allow_registration'] == true,
+        maintenanceMode: j['maintenance_mode'] == true,
+        appName: (j['app_name'] ?? 'NOVA Messenger').toString(),
+        maxFileSizeMb: (j['max_file_size_mb'] ?? 50) as int,
+        maxImageSizeMb: (j['max_image_size_mb'] ?? 10) as int,
+        maxVideoSizeMb: (j['max_video_size_mb'] ?? 100) as int,
+        storyDurationHrs: (j['story_duration_hrs'] ?? 24) as int,
+        fcmEnabled: j['fcm_enabled'] == true,
+      );
+}
+
 /// مزود حالة المصادقة والمستخدم الحالي
 class AuthProvider extends ChangeNotifier {
   NovaUser? _user;
+  AppSettings? _appSettings;
   bool _loading = false;
   String? _error;
 
   NovaUser? get user => _user;
+
+  /// إعدادات التطبيق العامة (المكالمات/المجموعات/الحالات من لوحة التحكم)
+  AppSettings? get appSettings => _appSettings;
+
+  /// إعدادات افتراضية عند عدم توفر استجابة الخادم.
+  static AppSettings get defaultAppSettings => const AppSettings(
+        allowCalls: true,
+        allowGroups: true,
+        allowStories: true,
+        allowRegistration: true,
+        maintenanceMode: false,
+        appName: 'NOVA Messenger',
+        maxFileSizeMb: 50,
+        maxImageSizeMb: 10,
+        maxVideoSizeMb: 100,
+        storyDurationHrs: 24,
+        fcmEnabled: false,
+      );
+
+  /// إعدادات فعّالة (افتراضية إذا كانت null).
+  AppSettings get effectiveAppSettings => _appSettings ?? defaultAppSettings;
+
+  /// GET /settings — جلب إعدادات التطبيق العامة
+  Future<void> fetchAppSettings() async {
+    try {
+      if (ApiService.token == null) return;
+      final res = await ApiService.get('/settings');
+      if (res['success'] == true && res['data'] != null) {
+        _appSettings = AppSettings.fromJson(Map<String, dynamic>.from(res['data']));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
 
   set user(NovaUser? value) {
     _user = value;
@@ -24,16 +101,19 @@ class AuthProvider extends ChangeNotifier {
   static String? get currentToken => ApiService.token;
 
   /// حفظ رمز التحقق
-  static Future<void> saveToken(String token) async {
+  static Future<void> saveToken(String token, {int? userId}) async {
     ApiService.token = token;
+    if (userId != null) ApiService.userId = userId;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', token);
+    if (userId != null) await prefs.setInt('user_id', userId);
   }
 
   static Future<String?> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
     if (token != null) ApiService.token = token;
+    ApiService.userId = prefs.getInt('user_id') ?? 0;
     return token;
   }
 
@@ -113,8 +193,9 @@ class AuthProvider extends ChangeNotifier {
       final token = data['token'] as String?;
       if (token != null) {
         _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
-        await saveToken(token);
+        await saveToken(token, userId: _user?.id);
         registerCurrentDevice();
+        await fetchAppSettings();
       }
     }
     notifyListeners();
@@ -144,12 +225,13 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
     final data = res['data'] as Map<String, dynamic>? ?? {};
-    final token = data['token'] as String?;
+      final token = data['token'] as String?;
     if (token != null) {
       _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
-      await saveToken(token);
+      await saveToken(token, userId: _user?.id);
       // تسجيل تفاصيل الجهاز عند كل دخول ناجح
       registerCurrentDevice();
+      await fetchAppSettings();
     }
     notifyListeners();
     return true;
@@ -169,6 +251,7 @@ class AuthProvider extends ChangeNotifier {
   /// GET /auth/me
   Future<bool> fetchMe() async {
     if (ApiService.token == null) return false;
+    await fetchAppSettings();
     final res = await ApiService.get('/auth/me');
     final err = (res['error_code'] ?? '').toString();
     // حساب محظور أو جلسة ملغاة → تسجيل خروج فوري
@@ -182,6 +265,7 @@ class AuthProvider extends ChangeNotifier {
     }
     if (res['success'] == true) {
       _user = NovaUser.fromJson(Map<String, dynamic>.from(res['data'] ?? {}));
+      ApiService.userId = _user?.id ?? 0;
       notifyListeners();
       return true;
     }
@@ -198,6 +282,7 @@ class AuthProvider extends ChangeNotifier {
       await ApiService.post('/auth/logout');
     } catch (_) {}
     _user = null;
+    _appSettings = null;
     await clearToken();
     notifyListeners();
   }

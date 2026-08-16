@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
 /* ═══════════════════════ الألوان (فاتح / داكن) ═══════════════════════ */
 class NovaColors {
@@ -15,6 +16,7 @@ class NovaColors {
   final Color accent, accent2, bubble, mine, mineText;
   Color get green => const Color(0xFF22C55E);
   Color get red => const Color(0xFFEF4444);
+  Color get shadow => const Color(0x0A000000);
 
   static const NovaColors light = NovaColors(
     bg: Color(0xFFF5F7FB), surface: Colors.white, surface2: Color(0xFFEEF2F7),
@@ -47,6 +49,9 @@ ThemeData buildNovaTheme(Brightness b, NovaColors c) {
     splashColor: c.accent.withOpacity(0.06),
   );
 }
+
+/* ═══════════════════════ رابط الملف الكامل ═══════════════════════ */
+String novaMediaUrl(String? path) => ApiService.mediaUrl(path);
 
 /* ═══════════════════════ تحويل الزمن إلى نص عربي ═══════════════════════ */
 String timeAgoArabic(String? iso) {
@@ -287,7 +292,7 @@ class NovaAvatar extends StatelessWidget {
                 colors: [Color(0xFFD8D5FF), Color(0xFF9CA3FF)],
               ),
               image: (imageUrl != null && imageUrl!.isNotEmpty)
-                  ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover)
+                  ? DecorationImage(image: NetworkImage(novaMediaUrl(imageUrl!)), fit: BoxFit.cover)
                   : null,
             ),
             child: (imageUrl != null && imageUrl!.isNotEmpty)

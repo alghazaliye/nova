@@ -20,6 +20,7 @@ require_once __DIR__ . '/../controllers/CallController.php';
 require_once __DIR__ . '/../controllers/NotificationController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
 require_once __DIR__ . '/../controllers/DeviceController.php';
+require_once __DIR__ . '/../controllers/GroupsController.php';
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -232,6 +233,49 @@ if (preg_match('#^/stories/(\d+)/view$#', $uri, $m) && $method === 'POST') {
 if (preg_match('#^/stories/(\d+)$#', $uri, $m) && $method === 'DELETE') {
     (new StoryController())->delete((int)$m[1]);
 }
+if (preg_match('#^/stories/(\d+)/upload$#', $uri, $m) && $method === 'POST') {
+    (new StoryController())->upload((int)$m[1]);
+}
+
+// Group Routes
+if ($uri === '/groups/mine' && $method === 'GET') {
+    (new GroupsController())->mine();
+}
+if (preg_match('#^/groups/(\d+)$#', $uri, $m) && $method === 'GET') {
+    (new GroupsController())->show((int)$m[1]);
+}
+if (preg_match('#^/groups/(\d+)/members$#', $uri, $m) && $method === 'POST') {
+    (new GroupsController())->addMembers((int)$m[1]);
+}
+if (preg_match('#^/groups/(\d+)/members/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new GroupsController())->removeMember((int)$m[1], (int)$m[2]);
+}
+if (preg_match('#^/groups/(\d+)/members/(\d+)/role$#', $uri, $m) && $method === 'PUT') {
+    (new GroupsController())->setRole((int)$m[1], (int)$m[2]);
+}
+if (preg_match('#^/groups/(\d+)/settings$#', $uri, $m) && $method === 'PUT') {
+    (new GroupsController())->updateSettings((int)$m[1]);
+}
+if (preg_match('#^/groups/(\d+)/title$#', $uri, $m) && $method === 'PUT') {
+    (new GroupsController())->updateTitle((int)$m[1]);
+}
+if (preg_match('#^/groups/(\d+)/avatar$#', $uri, $m) && $method === 'POST') {
+    (new GroupsController())->uploadAvatar((int)$m[1]);
+}
+if (preg_match('#^/groups/(\d+)/leave$#', $uri, $m) && $method === 'POST') {
+    (new GroupsController())->leave((int)$m[1]);
+}
+
+// Contact Routes
+if ($uri === '/contacts/new' && $method === 'GET') {
+    (new UserController())->newContacts();
+}
+if ($uri === '/contacts' && $method === 'POST') {
+    (new UserController())->addContact();
+}
+if (preg_match('#^/contacts/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new UserController())->removeContact((int)$m[1]);
+}
 
 // Call Routes
 if ($uri === '/calls' && $method === 'POST') {
@@ -326,6 +370,9 @@ if ($uri === '/devices/fcm-token' && $method === 'POST') {
 }
 if ($uri === '/heartbeat' && $method === 'POST') {
     (new UserController())->heartbeat();
+}
+if ($uri === '/settings' && $method === 'GET') {
+    (new UserController())->appSettings();
 }
 if ($uri === '/privacy' && $method === 'GET') {
     (new UserController())->privacyGet();

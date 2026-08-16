@@ -231,6 +231,93 @@ class UserController
         Response::success(null, 'تم فك الحظر عن المستخدم');
     }
 
+    // GET /api/v1/contacts/new — جهات الاتصال (المحفوظة في دفتر المستخدم)
+    public function newContacts(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT c.id, c.contact_user_id, c.nickname, c.created_at,
+                    u.name, u.username, u.phone, u.avatar, u.is_online, u.last_seen
+             FROM contacts c
+             JOIN users u ON u.id = c.contact_user_id
+             WHERE c.user_id = ? AND c.is_blocked = 0
+             ORDER BY u.is_online DESC, u.last_seen DESC, c.created_at DESC'
+        );
+        $stmt->execute([$userId]);
+        $rows = $stmt->fetchAll();
+
+        Response::success($rows);
+    }
+
+    // POST /api/v1/contacts — إضافة جهة اتصال {contact_user_id, nickname?}
+    public function addContact(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+        $target = (int)($body['contact_user_id'] ?? 0);
+
+        if (!$target || $target === $userId) {
+            Response::error('يجب تحديد مستخدم صالح للإضافة', 'INVALID_TARGET', 400);
+        }
+
+        $check = $this->pdo->prepare('SELECT id FROM users WHERE id = ? AND is_blocked = 0 LIMIT 1');
+        $check->execute([$target]);
+        if (!$check->fetch()) {
+            Response::notFound('المستخدم غير موجود');
+        }
+
+        $nickname = trim((string)($body['nickname'] ?? ''));
+        $nickname = $nickname !== '' ? htmlspecialchars(strip_tags($nickname), ENT_QUOTES, 'UTF-8') : null;
+
+        $this->pdo->prepare(
+            'INSERT INTO contacts (user_id, contact_user_id, nickname) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE is_blocked = 0' . ($nickname !== null ? ', nickname = VALUES(nickname)' : '')
+        )->execute([$userId, $target, $nickname]);
+
+        Response::success(null, 'تمت إضافة جهة الاتصال');
+    }
+
+    // DELETE /api/v1/contacts/{id} — إزالة جهة اتصال
+    public function removeContact(int $id): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+
+        $this->pdo->prepare('DELETE FROM contacts WHERE id = ? AND user_id = ?')->execute([$id, $userId]);
+
+        Response::success(null, 'تمت إزالة جهة الاتصال');
+    }
+
+    // GET /api/v1/settings — إعدادات التطبيق العامة (من جدول app_settings)
+    public function appSettings(): void
+    {
+        AuthMiddleware::authenticate();
+        $stmt = $this->pdo->prepare(
+            'SELECT setting_key, setting_value FROM app_settings'
+        );
+        $stmt->execute();
+        $settings = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $settings[$row['setting_key']] = $row['setting_value'];
+        }
+        Response::success([
+            'allow_calls'     => ($settings['allow_calls'] ?? '1') === '1',
+            'allow_groups'    => ($settings['allow_groups'] ?? '1') === '1',
+            'allow_stories'   => ($settings['allow_stories'] ?? '1') === '1',
+            'allow_registration' => ($settings['allow_registration'] ?? '1') === '1',
+            'maintenance_mode'   => ($settings['maintenance_mode'] ?? '0') === '1',
+            'app_name'        => $settings['app_name'] ?? 'NOVA Messenger',
+            'max_file_size_mb'   => (int)($settings['max_file_size_mb'] ?? 50),
+            'max_image_size_mb'  => (int)($settings['max_image_size_mb'] ?? 10),
+            'max_video_size_mb'  => (int)($settings['max_video_size_mb'] ?? 100),
+            'story_duration_hrs' => (int)($settings['story_duration_hrs'] ?? 24),
+            'fcm_enabled'     => ($settings['fcm_enabled'] ?? '1') === '1',
+        ]);
+    }
+
     // =====================================================
     // Private Helpers
     // =====================================================

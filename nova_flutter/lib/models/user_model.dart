@@ -70,6 +70,9 @@ class Conversation {
   final String? lastSeen;
   final String? lastMessageType;
   final int? disappearAfter;
+  final bool isGroup;
+  final int? groupId;
+  final int memberCount;
 
   Conversation({
     required this.id,
@@ -87,6 +90,9 @@ class Conversation {
     this.lastSeen,
     this.lastMessageType,
     this.disappearAfter,
+    this.isGroup = false,
+    this.groupId,
+    this.memberCount = 0,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
@@ -111,6 +117,9 @@ class Conversation {
         isOnline: _otherIsOnline(j),
         lastSeen: _otherLastSeen(j),
         disappearAfter: j['disappear_after'] is int ? j['disappear_after'] as int : int.tryParse((j['disappear_after'] ?? 0).toString()),
+        isGroup: j['is_group'] == true || j['type'] == 'group',
+        groupId: j['group_id'] != null ? int.tryParse(j['group_id'].toString()) : null,
+        memberCount: j['member_count'] != null ? int.parse(j['member_count'].toString()) : 0,
       );
 
   static String _memberPhone(Map<String, dynamic> j) {

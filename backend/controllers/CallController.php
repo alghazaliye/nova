@@ -200,8 +200,10 @@ class CallController
         $userId = (int)$auth['user_id'];
 
         $stmt = $this->pdo->prepare(
-            'SELECT c.* FROM calls c
+            'SELECT c.*, u.name AS caller_name, u.avatar AS caller_avatar
+             FROM calls c
              JOIN call_participants cp ON cp.call_id = c.id AND cp.user_id = ?
+             JOIN users u ON u.id = c.caller_id
              WHERE c.id = ? LIMIT 1'
         );
         $stmt->execute([$userId, $id]);

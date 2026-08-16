@@ -40,8 +40,20 @@ class ConversationController
         $stmt->execute([$userId, $userId]);
         $conversations = $stmt->fetchAll();
 
-        // For private conversations, get the other user's info
+        // Enrich: is_group, group_id, member_count
         foreach ($conversations as &$conv) {
+            $conv['is_group'] = $conv['type'] === 'group';
+            if ($conv['type'] === 'group') {
+                $gs = $this->pdo->prepare('SELECT id FROM groups WHERE conversation_id = ? LIMIT 1');
+                $gs->execute([(int)$conv['id']]);
+                $row = $gs->fetch();
+                $conv['group_id'] = $row ? (int)$row['id'] : null;
+            }
+            $mc = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL'
+            );
+            $mc->execute([(int)$conv['id']]);
+            $conv['member_count'] = (int)$mc->fetchColumn();
             if ($conv['type'] === 'private') {
                 $other = $this->getOtherParticipant((int)$conv['id'], $userId);
                 if ($other) {
@@ -242,6 +254,21 @@ class ConversationController
         );
         $stmt->execute([$userId, $id]);
         $conv = $stmt->fetch();
+
+        if ($conv) {
+            $conv['is_group'] = $conv['type'] === 'group';
+            if ($conv['type'] === 'group') {
+                $gs = $this->pdo->prepare('SELECT id FROM groups WHERE conversation_id = ? LIMIT 1');
+                $gs->execute([(int)$conv['id']]);
+                $row = $gs->fetch();
+                $conv['group_id'] = $row ? (int)$row['id'] : null;
+            }
+            $mc = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL'
+            );
+            $mc->execute([(int)$conv['id']]);
+            $conv['member_count'] = (int)$mc->fetchColumn();
+        }
 
         if ($conv && $conv['type'] === 'private') {
             $other = $this->getOtherParticipant($id, $userId);

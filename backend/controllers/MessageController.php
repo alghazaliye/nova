@@ -83,6 +83,47 @@ class MessageController
         // 2) رسائل بوقت محدد (86400...): تُحذف عندما يتجاوز الزمن إعداد كل مُرسل
         $this->expireDisappearingMessages($convId);
 
+        // Enrich: is_edited + deleted_for_me + deleted_for_all
+        if (!empty($messages)) {
+            $ids = array_map(fn ($m) => (int)$m['id'], $messages);
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+            // التعديلات
+            $stmt = $this->pdo->prepare("SELECT message_id, edited_at FROM message_edits WHERE message_id IN ($placeholders)");
+            $stmt->execute($ids);
+            $edits = [];
+            foreach ($stmt->fetchAll() as $e) {
+                $edits[(int)$e['message_id']] = true;
+            }
+
+            // الحذف الشخصي + الحذف الكلي
+            $stmt = $this->pdo->prepare(
+                "SELECT message_id, deleted_by, scope_type FROM message_deletions WHERE message_id IN ($placeholders)"
+            );
+            $stmt->execute($ids);
+            $deletedForMe = [];
+            $deletedForAll = [];
+            foreach ($stmt->fetchAll() as $d) {
+                if ($d['scope_type'] === 'everyone') {
+                    $deletedForAll[(int)$d['message_id']] = true;
+                }
+                if ((int)$d['deleted_by'] === $userId) {
+                    $deletedForMe[(int)$d['message_id']] = true;
+                }
+            }
+
+            foreach ($messages as &$m) {
+                $m['is_edited']       = isset($edits[(int)$m['id']]);
+                $m['deleted_for_me']  = isset($deletedForMe[(int)$m['id']]);
+                $m['deleted_for_all'] = isset($deletedForAll[(int)$m['id']]);
+                if ($m['deleted_for_me'] || $m['deleted_for_all']) {
+                    $m['type'] = 'deleted';
+                    $m['body'] = '';
+                }
+            }
+            unset($m);
+        }
+
         Response::success($messages);
     }
 
@@ -93,6 +134,27 @@ class MessageController
         $userId = (int)$auth['user_id'];
 
         $this->requireMember($convId, $userId);
+
+        // في المجموعات: فحص إعداد «المرسل مسموح للمشرفين فقط»
+        try {
+            $gStmt = $this->pdo->prepare(
+                'SELECT g.id, gs.only_admins_can_message FROM groups g '
+                . 'LEFT JOIN group_settings gs ON gs.group_id = g.id '
+                . 'WHERE g.conversation_id = ? LIMIT 1'
+            );
+            $gStmt->execute([$convId]);
+            $group = $gStmt->fetch();
+            if ($group && (int)($group['only_admins_can_message'] ?? 0) === 1) {
+                $rStmt = $this->pdo->prepare(
+                    'SELECT role FROM conversation_members WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1'
+                );
+                $rStmt->execute([$convId, $userId]);
+                $role = (string)($rStmt->fetchColumn() ?: '');
+                if ($role !== 'owner' && $role !== 'admin') {
+                    Response::forbidden('المرسل مسموح للمشرفين فقط في هذه المجموعة');
+                }
+            }
+        } catch (\Throwable $e) { /* لا نعطل الإرسال بسبب فشل فحص الإعداد */ }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $v    = Validator::make($body)->required('client_message_id', 'معرف الرسالة');
@@ -222,15 +284,16 @@ class MessageController
             Response::notFound('الرسالة غير موجودة');
         }
 
-        if ((int)$msg['sender_id'] !== $userId) {
-            Response::forbidden('لا يمكنك حذف رسالة شخص آخر');
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $forAll = filter_var($body['for_all'] ?? $body['everyone'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        // الحذف لدى الجميع: للمرسل فقط. الحذف لدي فقط: لأي عضو في المحادثة.
+        if ((int)$msg['sender_id'] !== $userId && $forAll) {
+            Response::forbidden('لا يمكنك حذف رسالة شخص آخر لدى الجميع');
         }
 
         // Enforcement of the admin-configured delete time limit (minutes, 0 = unlimited)
         $this->enforceMessageTimeLimit('delete_time_limit_minutes', (int)$msg['id'], 'انتهت المدة المسموحة لحذف الرسالة');
-
-        $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $forAll = filter_var($body['for_all'] ?? $body['everyone'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $scope = $forAll ? 'everyone' : 'self';
 
         // Save deletion record with original content for admin tracking (before deletion)

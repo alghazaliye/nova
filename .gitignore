@@ -5,3 +5,13 @@ android/NOVAMessenger/app/google-services.json
 *.log
 backend/.env
 android/NOVAMessenger/local.properties
+
+# Builds & generated
+nova_flutter/build/
+*.apk
+*.aab
+.dart_tool/
+.gradle/
+nova_flutter/android/.gradle/
+backend/storage/
+rate-limit/

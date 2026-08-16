@@ -1,5 +1,5 @@
 import 'dart:js_interop';
-import 'dart:js_util' as js_util;
+import 'dart:js_interop_unsafe' as unsafe;
 import 'dart:async';
 
 @JS('window.location.href')
@@ -28,7 +28,7 @@ String novaHrefImpl() {
 external JSObject get _notification;
 
 @JS('window.navigator.userAgent')
-external JSString get _ua;
+external JSString? get _ua;
 
 @JS('Notification.requestPermission')
 external JSPromise<JSString> _requestPermission();
@@ -43,7 +43,7 @@ bool _notificationSupported() {
 
 Future<bool> isNotificationGrantedImpl() async {
   if (!_notificationSupported()) return false;
-  final permission = js_util.getProperty<JSString>(_notification, 'permission');
+  final permission = _notification.getProperty<JSString>('permission'.toJS);
   return permission.toDart == 'granted';
 }
 
@@ -55,9 +55,10 @@ Future<void> requestNotificationPermissionImpl() async {
 void showNotificationImpl(String title, String body, {String? tag}) {
   if (!_notificationSupported()) return;
   try {
-    js_util.callMethod(_notification, 'Notification', [
-      title.toJS,
-      js_util.jsify({'body': body, 'tag': tag ?? 'nova', 'icon': '/favicon.png'}),
-    ]);
+    final options = JSObject()
+      ..setProperty('body'.toJS, body.toJS)
+      ..setProperty('tag'.toJS, (tag ?? 'nova').toJS)
+      ..setProperty('icon'.toJS, '/favicon.png'.toJS);
+    globalContext.callMethod('Notification'.toJS, title.toJS, options);
   } catch (_) {}
 }
