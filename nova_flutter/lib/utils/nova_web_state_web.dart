@@ -1,41 +1,37 @@
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe' as unsafe;
-import 'dart:async';
 
-@JS('window.location.href')
-external JSString get _href;
+// ═══ JS interop موثوق في WASM/skwasm mode ═══
+// نمط: external @JS getter لـ window (مفيد globalThis) ثم extensions من
+// dart:js_interop_unsafe للتحكم الديناميكي.
 
-@JS('window.__novaState')
-external set _novaState(JSString v);
+@JS('window')
+external JSObject get _window;
 
-@JS('window.__novaChats')
-external set _novaChats(JSString v);
+@JS('globalThis')
+external JSObject get _globalThis;
 
 void setNovaStateImpl(String value) {
-  _novaState = value.toJS;
+  _window.setProperty('__novaState'.toJS, value.toJS);
 }
 
 void setNovaChatsImpl(String value) {
-  _novaChats = value.toJS;
+  _window.setProperty('__novaChats'.toJS, value.toJS);
 }
 
 String novaHrefImpl() {
-  return _href.toDart;
+  try {
+    final loc = _window.getProperty<JSAny>('location'.toJS) as JSObject;
+    return (loc.getProperty<JSAny>('href'.toJS) as JSString).toDart;
+  } catch (_) {
+    return '';
+  }
 }
 
 // ═══ إشعارات المتصفح ═══
-@JS('Notification')
-external JSObject get _notification;
-
-@JS('window.navigator.userAgent')
-external JSString? get _ua;
-
-@JS('Notification.requestPermission')
-external JSPromise<JSString> _requestPermission();
-
 bool _notificationSupported() {
   try {
-    return _notification != null;
+    return _window.has('Notification');
   } catch (_) {
     return false;
   }
@@ -43,22 +39,33 @@ bool _notificationSupported() {
 
 Future<bool> isNotificationGrantedImpl() async {
   if (!_notificationSupported()) return false;
-  final permission = _notification.getProperty<JSString>('permission'.toJS);
-  return permission.toDart == 'granted';
+  try {
+    final notif = _window.getProperty<JSAny>('Notification'.toJS) as JSObject;
+    final perm = (notif.getProperty<JSAny>('permission'.toJS) as JSString).toDart;
+    return perm == 'granted';
+  } catch (_) {
+    return false;
+  }
 }
 
 Future<void> requestNotificationPermissionImpl() async {
   if (!_notificationSupported()) return;
-  await _requestPermission().toDart;
+  try {
+    final notif = _window.getProperty<JSObject>('Notification'.toJS);
+    notif.callMethod<JSAny?>('requestPermission'.toJS);
+  } catch (_) {}
 }
 
 void showNotificationImpl(String title, String body, {String? tag}) {
   if (!_notificationSupported()) return;
   try {
-    final options = JSObject()
+    final notif = _window.getProperty<JSObject>('Notification'.toJS);
+    final object = _globalThis.getProperty<JSObject>('Object'.toJS);
+    final options = object.callMethod<JSObject>('create'.toJS, null);
+    options
       ..setProperty('body'.toJS, body.toJS)
       ..setProperty('tag'.toJS, (tag ?? 'nova').toJS)
       ..setProperty('icon'.toJS, '/favicon.png'.toJS);
-    globalContext.callMethod('Notification'.toJS, title.toJS, options);
+    (notif as JSFunction).callAsConstructor<JSObject>(title.toJS, options);
   } catch (_) {}
 }

@@ -141,6 +141,45 @@ foreach ($candidates as $candidate) {
     }
     $resolved = realpath($candidate);
     if ($resolved !== false && is_file($resolved)) {
+        // Pre-compressed variants (Brotli > Gzip) for static assets
+        $origExt = strtolower(pathinfo($resolved, PATHINFO_EXTENSION));
+        if ($origExt !== 'php') {
+            $acceptEncoding = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
+            $compressed = false;
+            if (strpos($acceptEncoding, 'br') !== false && is_file($resolved . '.br')) {
+                $compressed = $resolved . '.br';
+                header('Content-Encoding: br');
+            } elseif (strpos($acceptEncoding, 'gzip') !== false && is_file($resolved . '.gz')) {
+                $compressed = $resolved . '.gz';
+                header('Content-Encoding: gzip');
+            }
+            if ($compressed !== false) {
+                $mimeTypes = [
+                    'html' => 'text/html; charset=utf-8',
+                    'js'   => 'application/javascript; charset=utf-8',
+                    'mjs'  => 'application/javascript; charset=utf-8',
+                    'css'  => 'text/css; charset=utf-8',
+                    'json' => 'application/json; charset=utf-8',
+                    'wasm' => 'application/wasm',
+                    'ttf'  => 'font/ttf',
+                    'otf'  => 'font/otf',
+                    'woff' => 'font/woff',
+                    'woff2' => 'font/woff2',
+                    'png'  => 'image/png',
+                    'svg'  => 'image/svg+xml',
+                ];
+                header('Content-Type: ' . ($mimeTypes[$origExt] ?? 'application/octet-stream'));
+                header('Vary: Accept-Encoding');
+                // Required for WASM multi-threading (SharedArrayBuffer)
+                if (strpos($uri, '/web_app/') === 0) {
+                    header('Cross-Origin-Opener-Policy: same-origin');
+                    header('Cross-Origin-Embedder-Policy: require-corp');
+                }
+                header('Content-Length: ' . filesize($compressed));
+                readfile($compressed);
+                return true;
+            }
+        }
         $ext = strtolower(pathinfo($resolved, PATHINFO_EXTENSION));
         if ($ext === 'php') {
             require $resolved;
@@ -177,6 +216,11 @@ foreach ($candidates as $candidate) {
             header('Access-Control-Allow-Headers: Range');
             header('Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges');
             header('Accept-Ranges: bytes');
+            // Required for WASM multi-threading (SharedArrayBuffer)
+            if (strpos($uri, '/web_app/') === 0) {
+                header('Cross-Origin-Opener-Policy: same-origin');
+                header('Cross-Origin-Embedder-Policy: require-corp');
+            }
             $size = filesize($resolved);
             header('Content-Length: ' . $size);
             if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d+)-(\d*)/', $_SERVER['HTTP_RANGE'], $rm)) {

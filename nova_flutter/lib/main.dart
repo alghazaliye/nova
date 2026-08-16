@@ -135,12 +135,12 @@ class _AppRouterState extends State<AppRouter> {
           // تسجيل دخول تلقائي ثم فتح المحادثة مباشرة عبر ?chat=<id>
           final ok = await context.read<AuthProvider>().verifyOtp(p, otp);
           if (!ok || !mounted) {
-            target = OtpScreen(phone: p, isRegister: false);
+            target = OtpScreen(phone: p, isRegister: false, autoOtp: otp);
           } else {
             target = _ChatByIdLoader(id: cid);
           }
         } else {
-          target = OtpScreen(phone: p, isRegister: false);
+          target = OtpScreen(phone: p, isRegister: false, autoOtp: otp);
         }
         if (mounted) {
           setState(() { _target = target; _checked = true; });

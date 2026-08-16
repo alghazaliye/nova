@@ -18,8 +18,10 @@ import '../services/api_service.dart';
 class OtpScreen extends StatefulWidget {
   final String phone;
   final bool isRegister;
+  /// رمز OTP من رابط الويب (تجنّب JS interop غير الموثوق في WASM)
+  final String? autoOtp;
 
-  const OtpScreen({super.key, required this.phone, this.isRegister = false});
+  const OtpScreen({super.key, required this.phone, this.isRegister = false, this.autoOtp});
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -37,17 +39,19 @@ class _OtpScreenState extends State<OtpScreen> {
 
   void _fillAutoOtp() {
     if (!kIsWeb) return;
-    try {
-      final q = Uri.splitQueryString(Uri.parse(novaHref()).query);
-      final otp = q['otp'] ?? '';
-      if (otp.length == 6) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _ctrl.text = otp;
-          _verify(otp);
-        });
-      }
-
-    } catch (_) {}
+    String otp = widget.autoOtp ?? '';
+    if (otp.isEmpty) {
+      try {
+        final q = Uri.splitQueryString(Uri.parse(novaHref()).query);
+        otp = q['otp'] ?? '';
+      } catch (_) {}
+    }
+    if (otp.length == 6) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ctrl.text = otp;
+        _verify(otp);
+      });
+    }
   }
 
   @override

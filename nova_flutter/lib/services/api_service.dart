@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 /// خدمة الاتصال بخادم NOVA Messenger API
 class ApiService {
   static const String baseUrl =
-      'https://80-iuawg7ipo5m5tnjzab4ca-3e3e9a64.us2.manus.computer/api/v1';
+      'https://8080-i0y331w4apy035oayp9qf-247b94fb.us3.manus.computer/api/v1';
 
   static String? token;
   static int userId = 0;

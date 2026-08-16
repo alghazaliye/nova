@@ -1,34 +1,65 @@
 // ويب: عرض الفيديو عبر عنصر <video> HTML أصلي داخل HtmlElementView
-// يتجاوز مشاكل video_player مع wasm renderer في بعض المتصفحات.
+// يستخدم dart:js_interop (extension types) ليكون متوافقًا مع dart2wasm (WASM GC).
 // ملاحظة: هذا الملف يُستورد فقط على الويب (conditional import)
-// لذا استيراد dart:html و dart:ui_web هنا آمن ولا يؤثر على نسخة الموبايل.
-import 'dart:html' as html;
+// لذا لا يؤثر على نسخة الموبايل.
+import 'dart:js_interop';
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 
 bool _registered = false;
 
+/// عنصر HTMLStyleDeclaration عبر extension type (متوافق مع WASM).
+extension type CSSStyleDeclaration._(JSObject _) implements JSObject {
+  external set width(JSString value);
+  external set height(JSString value);
+  external set objectFit(JSString value);
+}
+
+/// عنصر HTMLVideoElement عبر extension type (متوافق مع WASM).
+extension type HTMLVideoElement._(JSObject _) implements JSObject {
+  external void load();
+  external JSPromise<JSAny?> play();
+  external void pause();
+
+  external set src(JSString value);
+  external JSString get src;
+  external set autoplay(bool value);
+  external CSSStyleDeclaration get style;
+  external bool get paused;
+}
+
+/// عنصر HTMLDocument عبر extension type.
+extension type HTMLDocument._(JSObject _) implements JSObject {
+  external HTMLVideoElement createElementVideo();
+}
+
+@JS('document')
+external HTMLDocument get _document;
+
+@JS('HTMLVideoElement')
+external HTMLVideoElement _createElementVideo(JSString tag);
+
 class StoryVideoHelper {
-  html.VideoElement? _element;
+  HTMLVideoElement? _element;
 
   void _ensureRegistered() {
     if (_registered) return;
     ui_web.platformViewRegistry.registerViewFactory(
       'nova_story_video',
-      (int viewId) => html.VideoElement(),
+      (int viewId) => _createElementVideo('video'.toJS),
     );
     _registered = true;
   }
 
   void createAndInsertVideo(String url) {
     _ensureRegistered();
-    final video = html.VideoElement()
-      ..src = url
-      ..autoplay = true
-      ..style.width = '100%'
-      ..style.height = '100%'
-      ..style.objectFit = 'cover';
+    final video = _createElementVideo('video'.toJS);
+    video.src = url.toJS;
+    video.autoplay = true;
+    video.style.width = '100%'.toJS;
+    video.style.height = '100%'.toJS;
+    video.style.objectFit = 'cover'.toJS;
     video.load();
     _element = video;
   }
@@ -48,7 +79,7 @@ class StoryVideoHelper {
   void removeVideo() {
     try {
       _element?.pause();
-      _element?.src = '';
+      _element?.src = ''.toJS;
       _element?.load();
     } catch (_) {}
   }
