@@ -37,16 +37,16 @@ class DeviceController
         $platform  = isset($body['platform']) ? trim((string)$v->sanitizeString('platform')) : null;
 
         // Upsert the device
+        // الجهاز الفريد يُحدَّد ببصمة الجهاز (fingerprint) كمعرف uuid
         $stmt = $this->pdo->prepare(
             'INSERT INTO device_registrations
-                (user_id, device_fingerprint, device_model, os_name, os_version, app_version, platform, is_active, first_seen, last_seen)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                (user_id, device_uuid, device_name, os, app_version, is_active, last_seen)
+             VALUES (?, ?, ?, ?, ?, 1, NOW())
              ON DUPLICATE KEY UPDATE
-                device_model = VALUES(device_model), os_name = VALUES(os_name), os_version = VALUES(os_version),
-                app_version = VALUES(app_version), platform = VALUES(platform),
+                device_name = VALUES(device_name), os = VALUES(os), app_version = VALUES(app_version),
                 is_active = 1, last_seen = NOW()'
         );
-        $stmt->execute([$userId, $fingerprint, $model, $osName, $osVersion, $appVersion, $platform]);
+        $stmt->execute([$userId, $fingerprint, ($model ?? '') . ' (' . ($osName ?? 'unknown') . ')', $osName, $appVersion]);
 
         $deviceId = (int)$this->pdo->lastInsertId() ?: $this->getDeviceId($userId, $fingerprint);
 
@@ -93,8 +93,7 @@ class DeviceController
         $userId = (int)$user['user_id'];
 
         $stmt = $this->pdo->prepare(
-            'SELECT id, device_fingerprint, device_model, os_name, os_version, app_version,
-                    platform, barcode_hash, is_active, first_seen, last_seen
+            'SELECT id, device_uuid, device_name, os, app_version, is_active, last_seen, created_at
              FROM device_registrations WHERE user_id = ? ORDER BY id DESC'
         );
         $stmt->execute([$userId]);
@@ -172,24 +171,22 @@ class DeviceController
         if (!empty($fingerprint)) {
             $this->pdo->prepare(
                 'INSERT INTO device_registrations
-                    (user_id, device_fingerprint, device_model, os_name, os_version, app_version, platform, is_active, first_seen, last_seen)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                    (user_id, device_uuid, device_name, os, app_version, is_active, last_seen)
+                 VALUES (?, ?, ?, ?, ?, 1, NOW())
                  ON DUPLICATE KEY UPDATE last_seen = NOW()'
             )->execute([
                 (int)$user['user_id'],
                 $fingerprint,
-                $body['device_model'] ?? null,
-                $body['os_name'] ?? null,
-                $body['os_version'] ?? null,
+                $body['device_name'] ?? ($body['device_model'] ?? 'web'),
+                $body['platform'] ?? 'web',
                 $body['app_version'] ?? null,
-                $body['platform'] ?? null,
             ]);
         }
 
-        // Save token on the current session device (most recent active) and legacy user_devices
+        // حفظ رمز FCM على الجهاز النشط الأخير في user_devices
         $this->pdo->prepare(
-            'UPDATE device_registrations SET fcm_token = ? WHERE user_id = ? AND is_active = 1 ORDER BY last_seen DESC LIMIT 1'
-        )->execute([$token, (int)$user['user_id']]);
+            'UPDATE device_registrations SET is_active = 1 WHERE user_id = ? AND device_uuid = ?'
+        )->execute([(int)$user['user_id'], $fingerprint]);
 
         $this->pdo->prepare(
             'INSERT INTO user_devices (user_id, device_uuid, platform, fcm_token, last_active_at)
@@ -204,7 +201,7 @@ class DeviceController
 
     private function getDeviceId(int $userId, string $fingerprint): int
     {
-        $stmt = $this->pdo->prepare('SELECT id FROM device_registrations WHERE user_id = ? AND device_fingerprint = ? LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT id FROM device_registrations WHERE user_id = ? AND device_uuid = ? LIMIT 1');
         $stmt->execute([$userId, $fingerprint]);
         return (int)($stmt->fetch()['id'] ?? 0);
     }

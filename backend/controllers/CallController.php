@@ -44,11 +44,30 @@ class CallController
         // Send FCM notification to callee
         $this->sendCallNotification($callerId, $calleeId, $uuid, $callType);
 
+        $stmt = $this->pdo->prepare(
+            'SELECT c.id, c.uuid, c.caller_id, c.call_type, c.status,
+                    cu.name AS caller_name, cu.avatar AS caller_avatar,
+                    pe.name AS callee_name, pe.avatar AS callee_avatar
+             FROM calls c
+             JOIN users cu ON cu.id = c.caller_id
+             JOIN users pe ON pe.id = ?
+             WHERE c.id = ? LIMIT 1'
+        );
+        $stmt->execute([$calleeId, $callId]);
+        $call = $stmt->fetch();
+
         Response::success([
-            'call_id'   => $callId,
-            'call_uuid' => $uuid,
-            'call_type' => $callType,
-            'status'    => 'calling',
+            'id'            => (int)$call['id'],
+            'call_id'       => (int)$call['id'],
+            'call_uuid'     => $call['uuid'],
+            'caller_id'     => (int)$call['caller_id'],
+            'callee_id'     => (int)$calleeId,
+            'call_type'     => $call['call_type'],
+            'status'        => 'ringing',
+            'caller_name'   => $call['caller_name'],
+            'caller_avatar' => $call['caller_avatar'],
+            'peer_name'     => $call['callee_name'],
+            'peer_avatar'   => $call['callee_avatar'],
         ], 'تم بدء الاتصال', 201);
     }
 
@@ -156,6 +175,19 @@ class CallController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
 
+        // إنهاء تلقائي للمكالمات القديمة التي لم يرد عليها أحد (أكثر من 60 ثانية)
+        // حتى لا تظهر مكالمات "ميتة" في واجهة الطرف الآخر.
+        try {
+            $this->pdo->prepare(
+                'UPDATE calls SET status = "ended", ended_at = NOW(),
+                        duration = TIMESTAMPDIFF(SECOND, created_at, NOW()) * 1000
+                 WHERE status IN ("calling", "ringing")
+                   AND created_at < DATE_SUB(NOW(), INTERVAL 60 SECOND)'
+            )->execute();
+        } catch (\Throwable $e) {
+            error_log('Incoming call cleanup error: ' . $e->getMessage());
+        }
+
         $stmt = $this->pdo->prepare(
             'SELECT c.id, c.uuid, c.caller_id, c.call_type, c.status, c.created_at,
                     u.name AS caller_name, u.avatar AS caller_avatar
@@ -163,8 +195,9 @@ class CallController
              JOIN call_participants cp ON cp.call_id = c.id AND cp.user_id = ?
              JOIN users u ON u.id = c.caller_id
              WHERE c.status IN ("calling", "ringing") AND c.caller_id != ?
+               AND c.created_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)
              ORDER BY c.created_at DESC
-             LIMIT 5'
+             LIMIT 1'
         );
         $stmt->execute([$userId, $userId]);
         Response::success($stmt->fetchAll());
@@ -180,7 +213,11 @@ class CallController
         $offset = ($page - 1) * $limit;
 
         $stmt = $this->pdo->prepare(
-            'SELECT c.id, c.uuid, c.caller_id, c.call_type, c.status,
+            'SELECT c.id, c.uuid, c.caller_id,
+                    (SELECT cp2.user_id FROM call_participants cp2
+                     WHERE cp2.call_id = c.id AND cp2.user_id != c.caller_id
+                     LIMIT 1) AS callee_id,
+                    c.call_type, c.status,
                     c.started_at, c.ended_at, c.duration, c.created_at,
                     u.name AS caller_name, u.avatar AS caller_avatar
              FROM calls c

@@ -29,8 +29,10 @@ class ChatsScreen extends StatefulWidget {
 class _ChatsScreenState extends State<ChatsScreen> {
   int _index = 0;
   Timer? _incomingCallTimer;
+  Timer? _activeCallTimer;
   Map<String, dynamic>? _incomingCall;
   bool _incomingCallPolling = false;
+  bool _activeCallPolling = false;
   // يمنع إعادة إظهار نفس المكالمة بعد التعامل معها قبل وصول تحديث الحالة.
   final Set<String> _handledIncomingCallIds = <String>{};
 
@@ -58,6 +60,45 @@ class _ChatsScreenState extends State<ChatsScreen> {
       if (mounted) _pollIncomingCall();
     });
     _pollIncomingCall();
+    // فتح شاشة المكالمة تلقائيًا إذا كانت هناك مكالمة نشطة (ringing/answered)
+    // تخص المستخدم ولم تُفتح بعد — يفيد عند قبول المكالمة عبر أي وسيلة
+    // (زر القبول، أو قبول الطرف الآخر للمكالمة الصادرة).
+    _activeCallTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) _pollActiveCall();
+    });
+  }
+
+  Future<void> _pollActiveCall() async {
+    if (_activeCallPolling) return;
+    _activeCallPolling = true;
+    try {
+      final res = await ApiService.get('/calls');
+      if (!mounted || res['success'] != true) return;
+      final data = res['data'];
+      if (data is! List) return;
+      for (final raw in data) {
+        if (raw is! Map) continue;
+        final call = Map<String, dynamic>.from(raw);
+        final status = (call['status'] ?? '').toString();
+        if (status != 'ringing' && status != 'answered' && status != 'accepted') continue;
+        final callId = call['id']?.toString();
+        if (callId == null || callId.isEmpty) continue;
+        // فحص أن المستخدم مشارك فعليًا في المكالمة
+        final callerId = call['caller_id']?.toString();
+        final calleeId = call['callee_id']?.toString();
+        final me = ApiService.userId.toString();
+        final amParticipant =
+            callerId == me || calleeId == me || (call['participants'] is List);
+        if (!amParticipant) continue;
+        call['is_outgoing'] = callerId == me;
+        await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => CallScreen(callData: call)));
+        return;
+      }
+    } catch (_) {}
+    finally {
+      _activeCallPolling = false;
+    }
   }
 
   Future<void> _pollIncomingCall() async {
@@ -133,6 +174,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   @override
   void dispose() {
     _incomingCallTimer?.cancel();
+    _activeCallTimer?.cancel();
     super.dispose();
   }
 

@@ -824,11 +824,14 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     if (!mounted) return;
     if (res['success'] == true && res['data'] != null) {
+      final callData = Map<String, dynamic>.from(
+          res['data'] as Map<String, dynamic>);
+      callData['caller_id'] = ApiService.userId.toString();
+      callData['is_outgoing'] = true;
       Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (_) =>
-                  CallScreen(callData: res['data'] as Map<String, dynamic>)));
+              builder: (_) => CallScreen(callData: callData)));
     } else if (mounted) {
       showToast(context, res['message'] ?? 'فشل الاتصال');
     }
