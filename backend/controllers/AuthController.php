@@ -371,38 +371,63 @@ class AuthController
         $expiryHours = (int)($_ENV['JWT_EXPIRY_HOURS'] ?? 720);
         $expiresAt   = time() + ($expiryHours * 3600);
 
+        $makeJti = static fn (): string =>
+            substr(md5((string)microtime(true) . random_int(0, PHP_INT_MAX)), 0, 16);
+
         $payload = [
             'sub' => $userId,
             'iat' => time(),
             'exp' => $expiresAt,
+            'jti' => $makeJti(),
         ];
 
         $token     = JwtHelper::generate($payload);
         $tokenHash = hash('sha256', $token);
         $deviceId  = null;
 
-        // Register device if provided
+        // Register device if provided (non-fatal on failure)
         if ($deviceUuid) {
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO user_devices (user_id, device_uuid, fcm_token, last_active_at, created_at, updated_at)
-                 VALUES (?, ?, ?, NOW(), NOW(), NOW())
-                 ON DUPLICATE KEY UPDATE fcm_token = ?, last_active_at = NOW(), updated_at = NOW()'
-            );
-            $stmt->execute([$userId, $deviceUuid, $fcmToken, $fcmToken]);
-            $deviceId = $this->pdo->lastInsertId() ?: null;
+            try {
+                $stmt = $this->pdo->prepare(
+                    'INSERT INTO user_devices (user_id, device_uuid, fcm_token, last_active_at, created_at, updated_at)
+                     VALUES (?, ?, ?, NOW(), NOW(), NOW())
+                     ON DUPLICATE KEY UPDATE fcm_token = ?, last_active_at = NOW(), updated_at = NOW()'
+                );
+                $stmt->execute([$userId, $deviceUuid, $fcmToken, $fcmToken]);
+                $deviceId = (int)($this->pdo->lastInsertId() ?: 0) ?: null;
+            } catch (\Throwable $e) {
+                error_log('Device registration error (non-fatal): ' . $e->getMessage());
+                $deviceId = null;
+            }
         }
 
-        $this->pdo->prepare(
-            'INSERT INTO sessions (user_id, token_hash, device_id, ip_address, user_agent, expires_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, NOW())'
-        )->execute([
-            $userId,
-            $tokenHash,
-            $deviceId,
-            $_SERVER['REMOTE_ADDR'] ?? null,
-            $_SERVER['HTTP_USER_AGENT'] ?? null,
-            date('Y-m-d H:i:s', $expiresAt),
-        ]);
+        // Insert session; on rare hash collision (same-second retries) retry once with a new jti.
+        $insertSession = function (int $uid, string $th, ?int $did, string $expStr) use ($expiresAt): bool {
+            try {
+                $this->pdo->prepare(
+                    'INSERT INTO sessions (user_id, token_hash, device_id, ip_address, user_agent, expires_at, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, NOW())'
+                )->execute([
+                    $uid,
+                    $th,
+                    $did,
+                    $_SERVER['REMOTE_ADDR'] ?? null,
+                    $_SERVER['HTTP_USER_AGENT'] ?? null,
+                    $expStr,
+                ]);
+                return true;
+            } catch (\Throwable $e) {
+                error_log('Session insert error: ' . $e->getMessage());
+                return false;
+            }
+        };
+
+        if (!$insertSession($userId, $tokenHash, $deviceId, date('Y-m-d H:i:s', $expiresAt))) {
+            $payload['jti'] = $makeJti();
+            $token     = JwtHelper::generate($payload);
+            $tokenHash = hash('sha256', $token);
+            $insertSession($userId, $tokenHash, $deviceId, date('Y-m-d H:i:s', $expiresAt));
+        }
 
         return $token;
     }
