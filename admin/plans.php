@@ -11,26 +11,9 @@ $error   = '';
 
 // Ensure tables exist
 try {
-    $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS plans (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(150) NOT NULL, description VARCHAR(500) NULL,
-          price DECIMAL(10,2) NOT NULL DEFAULT 0, currency VARCHAR(10) NOT NULL DEFAULT "SAR",
-          period ENUM("monthly","yearly","lifetime") NOT NULL DEFAULT "monthly",
-          max_devices INT UNSIGNED NOT NULL DEFAULT 1, features JSON NULL,
-          badge_color VARCHAR(20) NULL DEFAULT "blue", is_active TINYINT(1) NOT NULL DEFAULT 1,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)'
-    );
-    $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS user_subscriptions (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          user_id BIGINT UNSIGNED NOT NULL, plan_id INT UNSIGNED NULL,
-          status ENUM("active","expired","cancelled") NOT NULL DEFAULT "active",
-          activated_by INT UNSIGNED NULL, started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          ends_at DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE KEY uq_user_active (user_id, plan_id), KEY idx_user (user_id))'
-    );
+    // جدول plans موجود في قاعدة البيانات — لا نعيد إنشاءه لتجنب تعارض الأعمدة (features JSON قد لا يُدعم في بعض إصدارات MariaDB القديمة)
+
+    // العمود الفعلي للمدة هو expires_at (وليس ends_at) والجدول موجود في قاعدة البيانات
 } catch (\Throwable $e) {}
 
 // ---- Form actions ----
@@ -79,12 +62,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $days = (int)$_POST['sub_days'];
         $ends = $days > 0 ? date('Y-m-d H:i:s', strtotime("+{$days} days")) : null;
         $stmt = $pdo->prepare(
-            'INSERT INTO user_subscriptions (user_id, plan_id, status, activated_by, ends_at)
-             VALUES (?, ?, "active", ?, ?)
-             ON DUPLICATE KEY UPDATE plan_id = VALUES(plan_id), status = "active",
-             activated_by = VALUES(activated_by), ends_at = VALUES(ends_at)'
+            'INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
+             VALUES (?, ?, "active", NOW(), ?)'
         );
-        $stmt->execute([$userId, $planId, $admin['id'], $ends]);
+        $stmt->execute([$userId, $planId, $ends]);
         $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
         logAudit($admin, 'SUBSCRIPTION_ACTIVATE', 'user', $userId, "تفعيل اشتراك للمستخدم #{$userId} على الباقة #{$planId}");
         $message = 'تم تفعيل الاشتراك وعلامة التحقق الزرقاء';
@@ -111,14 +92,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Expire overdue
 try {
-    $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND ends_at IS NOT NULL AND ends_at < NOW()");
+    $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()");
 } catch (\Throwable $e) {}
 
 $plans = $pdo->query('SELECT * FROM plans ORDER BY id ASC')->fetchAll();
 $users = $pdo->query('SELECT id, name, phone, is_verified FROM users ORDER BY created_at DESC LIMIT 500')->fetchAll();
 
 $subs = $pdo->query(
-    'SELECT us.id, us.status, us.started_at, us.ends_at, us.plan_id,
+    'SELECT us.id, us.status, us.starts_at, us.expires_at, us.plan_id,
             u.id user_id, u.name, u.phone, u.is_verified,
             p.name plan_name, p.price, p.currency, p.period, p.max_devices
      FROM user_subscriptions us
@@ -212,7 +193,7 @@ include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.p
       <tr>
         <td><b><?= htmlspecialchars((string)$s['name']) ?></b><br><small style="color:var(--muted)"><?= htmlspecialchars((string)$s['phone']) ?></small></td>
         <td><?= $s['plan_name'] ? htmlspecialchars((string)$s['plan_name']) : '<span style="color:var(--muted)">—</span>' ?></td>
-        <td><?= $s['ends_at'] ? date('d/m/Y', strtotime((string)$s['ends_at'])) : '<span style="color:var(--muted)">حتى الإلغاء</span>' ?></td>
+        <td><?= !empty($s['expires_at']) ? date('d/m/Y', strtotime((string)$s['expires_at'])) : '<span style="color:var(--muted)">حتى الإلغاء</span>' ?></td>
         <td><span style="background:<?= ['active'=>'rgba(34,197,94,.1);color:#16a34a','expired'=>'rgba(239,68,68,.1);color:#dc2626','cancelled'=>'rgba(245,158,11,.1);color:#d97706'][$s['status']] ?? 'var(--surface2)' ?>;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:800"><?= ['active'=>'نشط','expired'=>'منتهي','cancelled'=>'ملغي'][$s['status']] ?? $s['status'] ?></span></td>
         <td><?php if ($s['status'] === 'active'): ?>
           <form method="POST" style="display:inline"><input type="hidden" name="_csrf" value="<?= csrfToken() ?>"><input type="hidden" name="action" value="cancel"><input type="hidden" name="sub_id" value="<?= (int)$s['id'] ?>"><button class="btn danger sm" type="submit" data-confirm="إلغاء الاشتراك؟">إلغاء</button></form>

@@ -7,6 +7,12 @@ declare(strict_types=1);
 
 // Resolve all paths absolutely.
 define('PROJECT_ROOT', '/home/ubuntu/nova_new');
+
+// Enable error display for diagnosing 500 errors (development)
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+ini_set('error_log', PROJECT_ROOT . '/backend/php_errors.log');
 define('PUBLIC_DIR', PROJECT_ROOT . '/backend/public');
 
 // ---------- 0) Load .env ----------

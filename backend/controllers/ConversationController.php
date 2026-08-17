@@ -311,7 +311,7 @@ class ConversationController
     private function getOtherParticipant(int $convId, int $myId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT u.id, u.uuid, u.name, u.username, u.avatar, u.is_online, u.last_seen
+            'SELECT u.id, u.uuid, u.name, u.username, u.avatar, u.is_online, u.last_seen, u.is_verified
              FROM conversation_members cm
              JOIN users u ON u.id = cm.user_id
              WHERE cm.conversation_id = ? AND cm.user_id != ? AND cm.left_at IS NULL

@@ -75,14 +75,14 @@ $active_users = $pdo->query(
      ORDER BY u.last_seen DESC LIMIT 20'
 )->fetchAll() ?: [];
 
-// الأجهزة المتصلة
+// الأجهزة المتصلة (الجدول الفعلي: user_devices بأعمدة device_uuid, device_name, platform, app_version, last_active_at)
 $connected_devices = $pdo->query(
-    'SELECT dr.id, COALESCE(dr.device_model, dr.os_name) as device_name, dr.platform,
-            dr.app_version, COALESCE(dr.last_seen, dr.first_seen) as last_active_at, u.name as user_name
-     FROM device_registrations dr
-     JOIN users u ON u.id = dr.user_id
-     WHERE dr.is_active = 1
-     ORDER BY dr.last_seen DESC LIMIT 20'
+    'SELECT d.id, d.device_name, d.platform, d.device_uuid,
+            d.app_version, d.last_active_at, u.name as user_name, u.is_online
+     FROM user_devices d
+     JOIN users u ON u.id = d.user_id
+     WHERE d.last_active_at >= NOW() - INTERVAL 1 HOUR
+     ORDER BY d.last_active_at DESC LIMIT 20'
 )->fetchAll() ?: [];
 
 // استخدام قاعدة البيانات
@@ -284,7 +284,7 @@ include __DIR__ . '/includes/sidebar.php';
                                 </span>
                             </td>
                             <td style="padding: 12px;"><small><?= htmlspecialchars($device['app_version'] ?? '-') ?></small></td>
-                            <td style="padding: 12px;"><small><?= $device['last_active_at'] ? date('H:i', strtotime($device['last_active_at'])) : '-' ?></small></td>
+                            <td style="padding: 12px;"><small><?= !empty($device['last_active_at']) ? date('H:i', strtotime($device['last_active_at'])) : '-' ?></small></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -303,7 +303,7 @@ include __DIR__ . '/includes/sidebar.php';
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
         <div style="padding: 15px; background: #f8f9fa; border-radius: 4px;">
             <p style="color: #666; margin-bottom: 5px;">حجم قاعدة البيانات</p>
-            <h4 style="font-size: 20px; color: #333; margin: 0;"><?= number_format($db_size, 2) ?> MB</h4>
+            <h4 style="font-size: 20px; color: #333; margin: 0;"><?= number_format((float)$db_size, 2) ?> MB</h4>
         </div>
         <div style="padding: 15px; background: #f8f9fa; border-radius: 4px;">
             <p style="color: #666; margin-bottom: 5px;">عدد الجداول</p>

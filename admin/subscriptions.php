@@ -20,9 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->prepare('UPDATE user_subscriptions SET status = "cancelled" WHERE user_id = ? AND status = "active"')->execute([$userId]);
             $pdo->prepare(
-                'INSERT INTO user_subscriptions (user_id, plan_id, status, activated_by, ends_at)
-                 VALUES (?, ?, "active", ?, ?)'
-            )->execute([$userId, $planId, $admin['id'], $ends]);
+                'INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
+                 VALUES (?, ?, "active", NOW(), ?)'
+            )->execute([$userId, $planId, $ends]);
             $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
             logAudit($admin, 'SUBSCRIPTION_ACTIVATE', 'user', $userId, "تفعيل اشتراك على الباقة #{$planId} — حساب مميز");
             $message = 'تم تفعيل الاشتراك وعلامة التحقق الزرقاء';
@@ -47,14 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Expire overdue
-try { $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND ends_at IS NOT NULL AND ends_at < NOW()"); } catch (\Throwable $e) {}
+try { $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()"); } catch (\Throwable $e) {}
 
 $search = trim($_GET['q'] ?? '');
 $where = $search !== '' ? 'WHERE u.name LIKE ? OR u.phone LIKE ?' : '';
 $params = $search !== '' ? ["%$search%", "%$search%"] : [];
 $rows = $pdo->prepare(
     "SELECT u.id, u.name, u.phone, u.is_verified,
-            us.id sub_id, us.plan_id, us.status, us.ends_at
+            us.id sub_id, us.plan_id, us.status, us.expires_at
      FROM users u
      LEFT JOIN user_subscriptions us ON us.user_id = u.id
        AND us.id = (SELECT MAX(id) FROM user_subscriptions us3 WHERE us3.user_id = u.id)
@@ -102,7 +102,7 @@ foreach ($subs as $s):
 <tr>
   <td><b><?= htmlspecialchars((string)$s['name']) ?></b><br><small style="color:var(--muted)"><?= htmlspecialchars((string)$s['phone']) ?></small></td>
   <td><?= $planRef ? htmlspecialchars((string)$planRef) : '<span style="color:var(--muted)">لا يوجد</span>' ?></td>
-  <td><?= $s['ends_at'] ? date('d/m/Y H:i', strtotime((string)$s['ends_at'])) : '—' ?></td>
+  <td><?= !empty($s['expires_at']) ? date('d/m/Y H:i', strtotime((string)$s['expires_at'])) : '—' ?></td>
   <td><span style="background:<?= $statusStyle[$status] ?? 'var(--surface2)' ?>;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:800"><?= ['active'=>'نشط','expired'=>'منتهي','cancelled'=>'ملغي'][$status] ?? $status ?></span></td>
   <td style="text-align:center"><?= (int)$s['is_verified'] ? '<span style="color:#2563eb">✓ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
   <td><?php if ($status === 'active'): ?>

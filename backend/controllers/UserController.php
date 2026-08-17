@@ -129,7 +129,7 @@ class UserController
 
         $search = '%' . $query . '%';
         $stmt   = $this->pdo->prepare(
-            'SELECT id, uuid, name, username, avatar, is_online, last_seen
+            'SELECT id, uuid, name, username, avatar, is_online, last_seen, is_verified
              FROM users
              WHERE (name LIKE ? OR username LIKE ? OR phone LIKE ?)
                AND id != ? AND is_blocked = 0
@@ -239,7 +239,7 @@ class UserController
 
         $stmt = $this->pdo->prepare(
             'SELECT c.id, c.contact_user_id, c.nickname, c.created_at,
-                    u.name, u.username, u.phone, u.avatar, u.is_online, u.last_seen
+                    u.name, u.username, u.phone, u.avatar, u.is_online, u.last_seen, u.is_verified
              FROM contacts c
              JOIN users u ON u.id = c.contact_user_id
              WHERE c.user_id = ? AND c.is_blocked = 0
@@ -357,7 +357,7 @@ class UserController
     private function getPublicProfile(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, uuid, name, username, bio, avatar, status_text, is_online, last_seen
+            'SELECT id, uuid, name, username, bio, avatar, status_text, is_online, last_seen, is_verified
              FROM users WHERE id = ? AND is_blocked = 0 LIMIT 1'
         );
         $stmt->execute([$id]);

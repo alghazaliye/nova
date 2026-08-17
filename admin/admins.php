@@ -20,32 +20,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $name = trim($_POST['name'] ?? '');
         $email = trim($_POST['email'] ?? '');
-        $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
         $role_id = (int)($_POST['role_id'] ?? 0);
         
-        if (!$name || !$email || !$username || !$password || !$role_id) {
+        if (!$name || !$email || !$password || !$role_id) {
             $error = 'جميع الحقول مطلوبة';
         } elseif (strlen($password) < 8) {
             $error = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
-        } elseif (strlen($username) < 3) {
-            $error = 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل';
         } else {
             try {
-                // التحقق من عدم وجود اسم مستخدم مكرر
-                $stmt = $pdo->prepare('SELECT id FROM admins WHERE username = ? LIMIT 1');
-                $stmt->execute([$username]);
+                // التحقق من عدم وجود بريد مكرر
+                $stmt = $pdo->prepare('SELECT id FROM admins WHERE email = ? LIMIT 1');
+                $stmt->execute([$email]);
                 if ($stmt->fetch()) {
-                    $error = 'اسم المستخدم موجود بالفعل';
+                    $error = 'البريد الإلكتروني موجود بالفعل';
                 } else {
                     $password_hash = password_hash($password, PASSWORD_BCRYPT);
                     $stmt = $pdo->prepare(
-                        'INSERT INTO admins (name, email, username, password_hash, role_id, is_active, created_at)
-                         VALUES (?, ?, ?, ?, ?, 1, NOW())'
+                        'INSERT INTO admins (name, email, password_hash, role_id, is_active, created_at)
+                         VALUES (?, ?, ?, ?, 1, NOW())'
                     );
-                    $stmt->execute([$name, $email, $username, $password_hash, $role_id]);
+                    $stmt->execute([$name, $email, $password_hash, $role_id]);
                     $message = 'تم إضافة المشرف بنجاح';
-                    logAudit($admin, 'CREATE', 'admin', $pdo->lastInsertId(), "إضافة مشرف: $email ($username)");
+                    logAudit($admin, 'CREATE', 'admin', (int)$pdo->lastInsertId(), "إضافة مشرف: $email");
                 }
             } catch (Exception $e) {
                 $error = 'خطأ في إضافة المشرف: ' . $e->getMessage();
@@ -58,28 +55,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $admin_id = (int)($_POST['admin_id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
         $email = trim($_POST['email'] ?? '');
-        $username = trim($_POST['username'] ?? '');
         $role_id = (int)($_POST['role_id'] ?? 0);
         $is_active = (int)($_POST['is_active'] ?? 0);
         
-        if (!$admin_id || !$name || !$email || !$username || !$role_id) {
+        if (!$admin_id || !$name || !$email || !$role_id) {
             $error = 'جميع الحقول مطلوبة';
-        } elseif (strlen($username) < 3) {
-            $error = 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل';
         } else {
             try {
-                // التحقق من عدم وجود اسم مستخدم مكرر (ما عدا الحالي)
-                $stmt = $pdo->prepare('SELECT id FROM admins WHERE username = ? AND id != ? LIMIT 1');
-                $stmt->execute([$username, $admin_id]);
+                // التحقق من عدم وجود بريد مكرر (ما عدا الحالي)
+                $stmt = $pdo->prepare('SELECT id FROM admins WHERE email = ? AND id != ? LIMIT 1');
+                $stmt->execute([$email, $admin_id]);
                 if ($stmt->fetch()) {
-                    $error = 'اسم المستخدم موجود بالفعل';
+                    $error = 'البريد الإلكتروني موجود بالفعل';
                 } else {
                     $stmt = $pdo->prepare(
-                        'UPDATE admins SET name = ?, email = ?, username = ?, role_id = ?, is_active = ? WHERE id = ?'
+                        'UPDATE admins SET name = ?, email = ?, role_id = ?, is_active = ? WHERE id = ?'
                     );
-                    $stmt->execute([$name, $email, $username, $role_id, $is_active, $admin_id]);
+                    $stmt->execute([$name, $email, $role_id, $is_active, $admin_id]);
                     $message = 'تم تحديث المشرف بنجاح';
-                    logAudit($admin, 'UPDATE', 'admin', $admin_id, "تحديث مشرف: $email ($username)");
+                    logAudit($admin, 'UPDATE', 'admin', $admin_id, "تحديث مشرف: $email");
                 }
             } catch (Exception $e) {
                 $error = 'خطأ في تحديث المشرف: ' . $e->getMessage();
@@ -95,14 +89,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'لا يمكنك حذف حسابك الخاص';
         } elseif ($admin_id > 0) {
             try {
-                $stmt = $pdo->prepare('SELECT email, username FROM admins WHERE id = ?');
+                $stmt = $pdo->prepare('SELECT email FROM admins WHERE id = ?');
                 $stmt->execute([$admin_id]);
                 $deleted_admin = $stmt->fetch();
                 
                 $stmt = $pdo->prepare('DELETE FROM admins WHERE id = ?');
                 $stmt->execute([$admin_id]);
                 $message = 'تم حذف المشرف بنجاح';
-                logAudit($admin, 'DELETE', 'admin', $admin_id, "حذف مشرف: " . ($deleted_admin['email'] ?? 'unknown') . " (" . ($deleted_admin['username'] ?? '') . ")");
+                logAudit($admin, 'DELETE', 'admin', $admin_id, "حذف مشرف: " . ($deleted_admin['email'] ?? 'unknown'));
             } catch (Exception $e) {
                 $error = 'خطأ في حذف المشرف: ' . $e->getMessage();
             }
@@ -112,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // جلب البيانات
 $admins = $pdo->query(
-    'SELECT a.id, a.name, a.email, a.username, a.is_active, a.last_login_at, a.created_at, r.name role_name 
+    'SELECT a.id, a.name, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
      FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC'
 )->fetchAll();
 
@@ -223,10 +217,6 @@ include __DIR__ . '/includes/sidebar.php';
                 <input type="email" id="email" name="email" required placeholder="example@domain.com" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
             </div>
             <div>
-                <label for="username" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">اسم المستخدم:</label>
-                <input type="text" id="username" name="username" required placeholder="اسم المستخدم (فريد)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
-            </div>
-            <div>
                 <label for="password" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">كلمة المرور:</label>
                 <input type="password" id="password" name="password" required placeholder="كلمة مرور قوية (8+ أحرف)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
             </div>
@@ -264,7 +254,6 @@ include __DIR__ . '/includes/sidebar.php';
             <?php foreach ($admins as $a): ?>
                 <tr style="border-bottom: 1px solid #ddd; hover: background: #f9f9f9;">
                     <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
-                    <td style="padding: 12px;"><code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">@<?= htmlspecialchars($a['username'] ?? '-') ?></code></td>
                     <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
                     <td style="padding: 12px;"><span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px;"><?= htmlspecialchars($a['role_name']) ?></span></td>
                     <td style="padding: 12px;">
@@ -276,7 +265,7 @@ include __DIR__ . '/includes/sidebar.php';
                         <small><?= $a['last_login_at'] ? date('d/m/Y H:i', strtotime($a['last_login_at'])) : '⏳ لم يدخل بعد' ?></small>
                     </td>
                     <td style="padding: 12px;">
-                        <button onclick="editAdmin(<?= $a['id'] ?>, '<?= htmlspecialchars($a['name']) ?>', '<?= htmlspecialchars($a['email']) ?>', '<?= htmlspecialchars($a['username'] ?? '') ?>', <?= $a['is_active'] ?>)" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; font-size: 12px;">✏️ تعديل</button>
+                        <button onclick="editAdmin(<?= $a['id'] ?>, '<?= htmlspecialchars($a['name']) ?>', '<?= htmlspecialchars($a['email']) ?>', <?= $a['is_active'] ?>)" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; font-size: 12px;">✏️ تعديل</button>
                         <form method="POST" style="display: inline;">
                             <input type="hidden" name="_csrf" value="<?= htmlspecialchars(csrfToken()) ?>">
                             <input type="hidden" name="action" value="delete">
@@ -368,10 +357,6 @@ include __DIR__ . '/includes/sidebar.php';
                 <input type="email" id="editEmail" name="email" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             </div>
             <div>
-                <label for="editUsername" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">اسم المستخدم:</label>
-                <input type="text" id="editUsername" name="username" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-            </div>
-            <div>
                 <label for="editIsActive" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">الحالة:</label>
                 <select id="editIsActive" name="is_active" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                     <option value="1">🟢 نشط</option>
@@ -397,11 +382,10 @@ include __DIR__ . '/includes/sidebar.php';
 
 <!-- تحديث تلقائي للمراقبة الحية -->
 <script>
-function editAdmin(id, name, email, username, isActive) {
+function editAdmin(id, name, email, isActive) {
     document.getElementById('editAdminId').value = id;
     document.getElementById('editName').value = name;
     document.getElementById('editEmail').value = email;
-    document.getElementById('editUsername').value = username;
     document.getElementById('editIsActive').value = isActive ? '1' : '0';
     document.getElementById('editModal').style.display = 'flex';
 }
