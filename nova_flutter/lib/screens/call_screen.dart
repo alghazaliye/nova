@@ -126,8 +126,19 @@ class _CallScreenState extends State<CallScreen> {
         _startWebRTC();
       }
 
+      // المتصل يبدأ WebRTC فورًا (كاميرا + عرض فيديو محلي) ولا ينتظر القبول
+      if (_isOutgoingFromData && _svc == null && _status == 'ringing') {
+        _startWebRTC();
+      }
+
       if (_answered && _terminalStatuses.contains(status)) {
         _closeScreen('انتهت المكالمة');
+        return;
+      }
+
+      // إذا انتهت المكالمة قبل بدء WebRTC (رفض سريع) نظيف الشاشة
+      if (_terminalStatuses.contains(status) && _svc == null) {
+        _closeScreen('لم يتم الرد');
         return;
       }
 

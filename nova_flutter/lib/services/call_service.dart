@@ -56,26 +56,36 @@ class CallService {
       ],
     });
 
-    // التقاط الكاميرا والميكروفون
-    try {
-      final stream = await navigator.mediaDevices.getUserMedia({
-        'audio': true,
-        'video': true,
-      });
-      _localStream = stream;
+    // التقاط الكاميرا والميكروفون (مع إعادة المحاولة لأن المتصفح قد يرفض الطلب الأول)
+    MediaStream? acquired;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        acquired = await navigator.mediaDevices.getUserMedia({
+          'audio': true,
+          'video': true,
+        });
+        break;
+      } catch (e) {
+        debugPrint('CallService: محاولة الكاميرا $attempt فشلت: $e');
+        if (attempt < 2) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+    }
+    if (acquired == null) {
+      try {
+        acquired = await navigator.mediaDevices.getUserMedia({'audio': true});
+      } catch (e) {
+        debugPrint('CallService: لا يوجد صوت ولا كاميرا: $e');
+      }
+    }
+    if (acquired != null) {
+      _localStream = acquired;
+      final stream = acquired;
       stream.getTracks().forEach((track) {
         _pc!.addTrack(track, stream);
       });
       localRenderer.srcObject = stream;
-    } catch (e) {
-      debugPrint('CallService: فشل الوصول للكاميرا — صوت فقط: $e');
-      try {
-        final audioOnly =
-            await navigator.mediaDevices.getUserMedia({'audio': true});
-        _localStream = audioOnly;
-        audioOnly.getTracks().forEach((track) => _pc!.addTrack(track, audioOnly));
-        localRenderer.srcObject = audioOnly;
-      } catch (_) {}
     }
 
     // استقبال الإشارات من الطرف الآخر
