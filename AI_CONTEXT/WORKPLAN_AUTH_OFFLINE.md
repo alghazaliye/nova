@@ -434,3 +434,28 @@ Remaining:
 5. Final report to user.
 
 Environment: local PHP server pid 75610 port 8080 running; Docker nova514 on 8082 OK; GitHub alghazaliye/nova main.
+
+## تقرير المستخدم (Aug 19): صفحة admin/otp-registrations.php لا تعرض طلبات الأرقام الجديدة
+
+### التشخيص (تم):
+1. واجهة JS كانت تقرأ `data.items` بينما registrationsIndex API يعيد `data.rows` → قائمة فارغة.
+2. متغير `API` لم يكن معرّفًا في سكربت الصفحة (fetch يرمي ReferenceError) → "فشل التحميل".
+3. API فعلاً يعمل: تسجيل رقم جديد (POST /auth/register) يُدرج في otp_verifications (status=sent). curl مباشر على /admin/otp/registrations يرجع rowsLen=4 مع token admin صحيح.
+
+### الإصلاحات المطبقة على /home/ubuntu/nova_new/admin/otp-registrations.php:
+- إضافة `const API = '/api/v1';` بداية السكربت
+- `regs = data.rows || []` + فحص !data.success + إحصاءات محسوبة محليًا من regs
+
+### حالة الاختبار بالمتصفح (جارٍ):
+- بعد reload: tbody يعرض "تم" (رسالة API) بدل الصفوف — يعني loadRegs نجح لكن الصفوف لا تُرسم.
+- فحص الكونسول: regs=0 عند أول استدعاء (قبل const API)، بعد const API: loadRegs() → regs.length? ثم renderRegs؟
+- احتمال: data.success غير موجود في رد API (الرد: {rows,total,pages,current_page,per_page,message:'تم'} بدون success) → `if (!data.success)` يرجع مبكرًا ويعرض رسالة فشل! هذا يحجب كل شيء.
+- **الحل**: تسجيل رقم جديد + فحص الرد + تعديل الفحص ليكون على data.rows وليس success.
+
+### الخادم المحلي 8080 يعمل + رابط المستخدم العام يعمل.
+
+### ✅ تم الإصلاح والاختبار الكامل (Aug 19, otp-registrations):
+- إصلاحان: `const API = '/api/v1'` + `data.rows` بدل `data.items` + فحص res.ok بدل data.success
+- اختبار عملي: تسجيل رقم جديد +9665088887777 → ظهر في الصفحة id=43 فورًا مع 5 طلبات + الإحصاءات صحيحة
+- المتبقي: فحص هل نفس الخلل (API متغير/بُنية استجابة) في صفحات admin الأخرى — فحصت: otp-providers/otp-settings/auth-settings/email-providers/email-registrations كلها تملك `const API` ✅. فقط otp-registrations كانت ناقصة.
+- المتبقي: git commit + push (الإصلاح).

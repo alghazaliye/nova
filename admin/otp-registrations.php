@@ -93,6 +93,8 @@ include __DIR__ . '/includes/sidebar.php';
 </style>
 
 <script>
+// Base URL for REST API endpoints
+const API = '/api/v1';
 let regs = [], currentPage = 1;
 
 function b(s, cls){ return s ? '<span class="status ' + cls + '">' + s + '</span>' : '<span style="color:var(--muted)">—</span>'; }
@@ -107,13 +109,20 @@ async function loadRegs(page = 1){
   try {
     const res = await fetch(API + '/admin/otp/registrations?page=' + page, {headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
     const data = await res.json();
-    regs = data.items || [];
+    // بنية API: {rows:[], total, pages, current_page, per_page, message}
+    // ملاحظة: الرد قد لا يحتوي success (legacy) — نعتمد على وجود rows
+    if (!res.ok) {
+      document.getElementById('regsBody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;">' + (data.message || 'فشل التحميل (HTTP ' + res.status + ')') + '</td></tr>';
+      return;
+    }
+    regs = data.rows || [];
     renderRegs();
-    const s = data.stats || {};
-    document.getElementById('statToday').textContent = s.today_total ?? '—';
-    document.getElementById('statPending').textContent = s.pending ?? '—';
-    document.getElementById('statVerified').textContent = s.verified ?? '—';
-    document.getElementById('statFailed').textContent = s.delivery_failed ?? '—';
+    // إحصاءات من بيانات الصفحة الحالية (fallback للفلترة)
+    const statFrom = (st) => regs.filter(r => r.status === st).length;
+    document.getElementById('statToday').textContent = regs.length;
+    document.getElementById('statPending').textContent = statFrom('pending') + statFrom('sent') + statFrom('manual') + statFrom('delivery_failed');
+    document.getElementById('statVerified').textContent = statFrom('verified');
+    document.getElementById('statFailed').textContent = statFrom('delivery_failed');
     renderPagination(data);
   } catch (e) {
     document.getElementById('regsBody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;">فشل التحميل</td></tr>';
