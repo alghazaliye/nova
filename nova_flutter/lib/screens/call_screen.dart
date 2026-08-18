@@ -27,6 +27,7 @@ class _CallScreenState extends State<CallScreen> {
   bool _muted = false;
   bool _videoPaused = false;
   bool _callAcceptedByPeer = false; // تم قبول الطرف الآخر للمكالمة (للبدء WebRTC)
+  bool _webrtcStarted = false; // جلسة WebRTC بدأت (لعرض معاينة الفيديو المحلي)
   DateTime? _startedAt;
   CallService? _svc;
 
@@ -99,6 +100,9 @@ class _CallScreenState extends State<CallScreen> {
         peerId: widget.callData['caller_id']?.toString() ??
             widget.callData['peer_id']?.toString(),
       );
+      if (!mounted) return;
+      _webrtcStarted = true;
+      setState(() {});
       if (_isOutgoingFromData) {
         await svc.startCall();
       } else {
@@ -123,7 +127,9 @@ class _CallScreenState extends State<CallScreen> {
       final peerAccepted = (status == 'answered' || status == 'accepted');
       if (peerAccepted && !_callAcceptedByPeer && _svc == null) {
         _callAcceptedByPeer = true;
+        _answered = true;
         _startWebRTC();
+        if (mounted) setState(() {});
       }
 
       // المتصل يبدأ WebRTC فورًا (كاميرا + عرض فيديو محلي) ولا ينتظر القبول
@@ -204,33 +210,41 @@ class _CallScreenState extends State<CallScreen> {
         child: Stack(
           children: [
             // الفيديو البعيد (الطرف الآخر) — يملأ الشاشة بالكامل عند قبول المكالمة
-            if (_answered && isVideo)
+            if (_answered && isVideo && _svc != null)
               Positioned.fill(
                 child: RTCVideoView(
-                  _svc?.remoteRenderer ?? RTCVideoRenderer(),
+                  _svc!.remoteRenderer,
                   objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                   mirror: false,
                 ),
               ),
 
             // الفيديو المحلي (كاميرا المستخدم) — ركن صغير
-            if (_answered && isVideo && _svc != null)
+            // يظهر فور بدء WebRTC (معاينة أثناء الرنين) وبعد القبول
+            if (_webrtcStarted && isVideo && _svc != null)
               Positioned(
-                top: 20,
+                top: _answered ? 20 : null,
+                bottom: _answered ? null : 160,
                 right: 20,
                 width: 110,
                 height: 150,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
-                  child: RTCVideoView(
-                    _svc!.localRenderer,
-                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    mirror: true,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                    ),
+                    child: RTCVideoView(
+                      _svc!.localRenderer,
+                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      mirror: true,
+                    ),
                   ),
                 ),
               ),
 
-            // أثناء الرنين: واجهة الاتصال (صورة + اسم + أزرار)
+            // أثناء الرنين: واجهة الاتصال (صورة + اسم + أزرار) — تُعرض فوق معاينة الفيديو المحلي
             if (!_answered)
               Center(
                 child: Column(

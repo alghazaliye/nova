@@ -28,7 +28,7 @@ function navActive(string $page, string $current): string {
     <div><b><?= APP_NAME ?> Admin</b><small>لوحة إدارة المنصة</small></div>
   </div>
 
-  <nav class="nav">
+  <nav class="nav" id="sideNav">
     <div class="navtitle">الرئيسية</div>
     <a href="index.php" class="<?= navActive('index', $currentPage) ?>">
       <span>▦</span> لوحة التحكم
@@ -111,9 +111,23 @@ function navActive(string $page, string $current): string {
   </div>
 </aside>
 
+<script>
+// إغلاق القائمة الجانبية تلقائيًا بعد النقر على أي رابط (على الهاتف)
+(function(){
+  const nav = document.getElementById('sideNav');
+  if (!nav) return;
+  nav.addEventListener('click', function(){
+    if (window.innerWidth <= 760) {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarBackdrop').classList.remove('open');
+    }
+  });
+})();
+</script>
+
 <main class="main">
   <header class="top">
-    <button class="menu" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+    <button class="menu" onclick="document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sidebarBackdrop').classList.toggle('open')">☰</button>
     <h1 id="topTitle"><?= htmlspecialchars($pageTitle ?? 'لوحة التحكم') ?></h1>
     <div class="search">
       <span>⌕</span>

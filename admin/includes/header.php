@@ -31,6 +31,9 @@
     }
 
     * { box-sizing: border-box }
+    @media (max-width: 760px) {
+      html, body { overflow-x: hidden }
+    }
     body {
       margin: 0;
       background: var(--bg);
@@ -88,6 +91,16 @@
       top: 0; z-index: 10
     }
     .menu { display: none; font-size: 24px }
+    .sidebar-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 19;
+    }
+    .sidebar-backdrop.open { display: block }
+    @media (hover: none) and (pointer: coarse) {
+      .nav a { min-height: 46px; padding: 13px 12px }
+    }
     .top h1 { font-size: 20px; margin: 0; flex: 1 }
     .top .search { width: min(340px, 34vw); height: 42px }
     .search {
@@ -164,8 +177,8 @@
       .grid2 { grid-template-columns: 1fr }
     }
     @media (max-width: 760px) {
-      .sidebar { transform: translateX(100%) }
-      .sidebar.open { transform: none }
+      .sidebar { transform: translateX(100%) !important }
+      .sidebar.open { transform: none !important }
       .main { margin-right: 0 }
       .menu { display: block }
       .top { padding: 0 14px }
@@ -174,7 +187,13 @@
       .stats { grid-template-columns: 1fr 1fr }
       .pagehead { align-items: flex-start; flex-wrap: wrap }
     }
+    @media (max-width: 400px) {
+      .stats { grid-template-columns: 1fr }
+      .top h1 { font-size: 16px }
+      .icon { width: 38px; height: 38px }
+    }
   </style>
 </head>
 <body>
   <div class="layout">
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="document.getElementById('sidebar').classList.remove('open'); this.classList.remove('open')"></div>

@@ -61,9 +61,15 @@ class CallService {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         acquired = await navigator.mediaDevices.getUserMedia({
-          'audio': true,
-          'video': true,
+          'audio': {'echoCancellation': true, 'noiseSuppression': true},
+          'video': {
+            'facingMode': 'user',
+            'width': {'ideal': 640},
+            'height': {'ideal': 480},
+            'frameRate': {'ideal': 24},
+          },
         });
+        debugPrint('CallService: تم التقاط الوسائط: video=${acquired.getVideoTracks().length} audio=${acquired.getAudioTracks().length}');
         break;
       } catch (e) {
         debugPrint('CallService: محاولة الكاميرا $attempt فشلت: $e');
@@ -84,19 +90,31 @@ class CallService {
       final stream = acquired;
       stream.getTracks().forEach((track) {
         _pc!.addTrack(track, stream);
+        debugPrint('CallService: أُضيف المسار: ${track.kind} enabled=${track.enabled}');
       });
+      // معاينة الفيديو المحلي فورًا (حتى أثناء الرنين)
       localRenderer.srcObject = stream;
+    } else {
+      debugPrint('CallService: تنبيه — لم يتم التقاط أي وسائط (لا كاميرا ولا صوت)');
     }
+
+    // تتبع حالة ICE للتشخيص
+    _pc!.onIceGatheringState = (state) {
+      debugPrint('CallService: ICE gathering: $state');
+    };
 
     // استقبال الإشارات من الطرف الآخر
     _pc!.onTrack = (RTCTrackEvent event) {
+      debugPrint('CallService: onTrack: ${event.track.kind} streams=${event.streams.length}');
       if (event.streams.isNotEmpty) {
         remoteRenderer.srcObject = event.streams.first;
+        debugPrint('CallService: تم ربط البث البعيد (${event.track.kind})');
       } else {
         debugPrint('CallService: track بدون streams: ${event.track.kind}');
       }
     };
     _pc!.onAddStream = (MediaStream stream) {
+      debugPrint('CallService: onAddStream');
       remoteRenderer.srcObject = stream;
     };
 
