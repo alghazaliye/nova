@@ -6,6 +6,9 @@ import '../utils/nova_ui.dart';
 import 'web_login_screen.dart';
 import 'privacy_screen.dart';
 import '../utils/avatar_picker.dart';
+import '../offline/network_detector.dart';
+import '../offline/media_store.dart';
+import 'package:flutter/material.dart' show Icons;
 
 /// تبويب الإعدادات — تصميم القالب الجديد مع الوظائف الحقيقية
 class SettingsScreen extends StatefulWidget {
@@ -17,6 +20,65 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
+
+  /// حالة الاتصال الحالية من مراقبة الشبكة (Offline-First)
+  String get _netStatus {
+    switch (NetworkDetector.instance.state) {
+      case NovaNetworkState.online:
+        return 'متصل بالخادم';
+      case NovaNetworkState.serverDown:
+        return 'الشبكة تعمل والخادم غير متاح — وضع غير متصل';
+      case NovaNetworkState.offline:
+        return 'لا يوجد اتصال بالإنترنت — وضع غير متصل';
+    }
+  }
+
+  Future<void> _showStorageDialog() async {
+    Map<String, int> usage = {};
+    try {
+      usage = await MediaStore.usageByCategory();
+    } catch (_) {}
+    final sizeMB = (usage.values.fold<int>(0, (s, v) => s + v) / 1024 / 1024)
+        .toStringAsFixed(1);
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('التخزين المحلي'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('الحجم الكلي: $sizeMB MB',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            if (usage.isNotEmpty)
+              ...usage.entries.map((e) => Text('${e.key}: ${e.value} KB')),
+            const SizedBox(height: 8),
+            const Text(
+                'الرسائل والمحادثةات تُحفظ تلقائيًا وتعمل في الوضع غير المتصل.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () async {
+                Navigator.pop(c);
+                try {
+                  await MediaStore.clearCache();
+                  if (mounted) showToast(context, 'تم مسح التخزين المؤقت');
+                } catch (_) {
+                  if (mounted) showToast(context, 'تعذر مسح التخزين');
+                }
+              },
+              child: const Text('مسح التخزين المؤقت',
+                  style: TextStyle(color: Colors.red))),
+          TextButton(
+              onPressed: () => Navigator.pop(c), child: const Text('حسنًا')),
+        ],
+      ),
+    );
+  }
 
   Future<void> _updateProfile() async {
     final auth = context.read<AuthProvider>();
@@ -106,6 +168,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Icon(icon, size: 20, color: color ?? c.text),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +326,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 subtitle: 'NOVA Messenger v3.6.0 (Flutter)',
                                 onTap: () => _infoDialog('حول NOVA Messenger',
                                     'الإصدار: 3.6.0 (Flutter)\n\n• رسائل فورية مع تعديل وحذف لدى الطرفين\n• مكالمات صوتية وفيديو\n• القصص (الحالة)\n• الأجهزة المرتبطة (QR) بحدود الباقة\n• حسابات موثّقة بعلامة زرقاء\n• باقات الاشتراك (مجانية/ذهبية/بلاتينية)\n• نظام حظر الحسابات من لوحة الإدارة\n• إشعارات فورية FCM'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SectionTitle('التخزين والبيانات المحلية'),
+                        NovaCard(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Column(
+                            children: [
+                              RowItem(
+                                leading: _iconBox(icon: Icons.cloud_off_outlined),
+                                title: 'حالة الاتصال',
+                                subtitle: _netStatus,
+                                onTap: () => _infoDialog('الوضع غير المتصل',
+                                    'يعمل التطبيق بالوضع غير المتصل: الرسائل تُحفظ محليًا وتُرسل تلقائيًا عند عودة الاتصال، والمحادثات تبقى متاحة من الذاكرة المحلية.'),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.storage_outlined),
+                                title: 'التخزين المحلي',
+                                subtitle: 'الرسائل والمحادثةات والوسائط',
+                                onTap: () => _showStorageDialog(),
                               ),
                             ],
                           ),

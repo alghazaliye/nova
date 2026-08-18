@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../offline/local_nova_db.dart';
+import '../offline/local_sync_service.dart';
+import '../offline/outbox_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -346,6 +349,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _ctrl.clear();
     if (mounted) setState(() => _replyingTo = null);
     final me = context.read<AuthProvider>().user;
+    final nowIso = DateTime.now().toIso8601String();
     final temp = NovaMessage(
       id: -1,
       uuid: clientId,
@@ -353,11 +357,23 @@ class _ChatScreenState extends State<ChatScreen> {
       type: 'text',
       body: text,
       replyToMessageId: replyId,
-      status: 'sent',
-      createdAt: DateTime.now().toIso8601String(),
+      status: 'sending',
+      createdAt: nowIso,
     );
     setState(() => _messages.add(temp));
     _scrollToBottom();
+    // Offline-First: حفظ الرسالة محليًا فورًا (تبقى ظاهرة حتى لو انقطع الاتصال)
+    LocalMessage? localRow;
+    try {
+      localRow = await LocalSyncService.storePendingMessage(
+        conversationId: widget.conv.id,
+        localUuid: clientId,
+        senderId: me?.id ?? 0,
+        type: 'text',
+        body: text,
+        replyToServerId: replyId,
+      );
+    } catch (_) {}
     try {
       final res = await ApiService.post(
           '/conversations/${widget.conv.id}/messages',
@@ -368,20 +384,79 @@ class _ChatScreenState extends State<ChatScreen> {
             if (replyId != null) 'reply_to_message_id': replyId,
           });
       if (res['success'] == true && res['data'] != null) {
+        final confirmed = NovaMessage.fromJson(
+            Map<String, dynamic>.from(res['data'] as Map<String, dynamic>));
         setState(() {
           _messages.removeWhere((m) => m.uuid == clientId);
-          _messages.add(NovaMessage.fromJson(
-              Map<String, dynamic>.from(res['data'] as Map<String, dynamic>)));
+          _messages.add(confirmed);
         });
         _scrollToBottom();
+        // تحديث الحالة المحلية إلى synced
+        if (localRow != null) {
+          try {
+            await LocalSyncService.upsertMessages([
+              {
+                'id': confirmed.id,
+                'client_message_id': clientId,
+                'conversation_id': widget.conv.id,
+                'sender_id': confirmed.senderId,
+                'type': confirmed.type,
+                'body': confirmed.body,
+                'reply_to_message_id': confirmed.replyToMessageId,
+                'status': confirmed.status,
+                'created_at': confirmed.createdAt,
+                'is_edited': confirmed.isEdited ? 1 : 0,
+                'file_path': confirmed.filePath,
+                'thumbnail_path': confirmed.thumbnailPath,
+                'mime_type': confirmed.mimeType,
+                'file_size': confirmed.fileSize,
+                'width': confirmed.width,
+                'height': confirmed.height,
+                'duration': confirmed.duration,
+              },
+            ]);
+          } catch (_) {}
+        }
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(res['message'] ?? 'فشل الإرسال')));
+        if (localRow != null) {
+          // فشل الخادم: دفع إلى طابور المزامنة بدلًا من فقدان الرسالة
+          try {
+            await OutboxService.push(
+              operation: 'SEND_MESSAGE',
+              entityRef: '${localRow!.id}',
+              payload: {
+                'conversation_id': widget.conv.id,
+                'client_message_id': clientId,
+                'type': 'text',
+                'body': text,
+                if (replyId != null) 'reply_to_message_id': replyId,
+              },
+            );
+          } catch (_) {}
+        }
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('خطأ في الاتصال')));
+      }
+      if (localRow != null && mounted) {
+        // دفع إلى طابور المزامنة للإرسال تلقائيًا عند عودة الاتصال
+        try {
+          await OutboxService.push(
+            operation: 'SEND_MESSAGE',
+            entityRef: '${localRow!.id}',
+            payload: {
+              'conversation_id': widget.conv.id,
+              'client_message_id': clientId,
+              'type': 'text',
+              'body': text,
+              if (replyId != null) 'reply_to_message_id': replyId,
+            },
+          );
+        } catch (_) {}
       }
     }
   }

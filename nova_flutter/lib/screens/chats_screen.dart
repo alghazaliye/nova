@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
+import '../offline/local_sync_service.dart';
 import '../services/api_service.dart';
 import '../providers/auth_provider.dart';
 import 'chat_screen.dart';
@@ -353,8 +354,52 @@ class _ChatsTabState extends State<ChatsTab> {
             .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
             .toList();
         _mergeCalls(loaded);
+        // Offline-First: حفظ المحادثات محليًا للمزامنة عند عدم الاتصال
+        try {
+          await LocalSyncService.upsertChats(loaded
+              .map((cv) => <String, dynamic>{
+                    'id': cv.id,
+                    'uuid': cv.uuid,
+                    'name': cv.name,
+                    'title': cv.name,
+                    'avatar': cv.avatar,
+                    'last_message': cv.lastMessage,
+                    'last_message_at': cv.lastMessageAt,
+                    'updated_at': cv.lastMessageAt,
+                    'unread_count': cv.unreadCount,
+                    'type': cv.isGroup ? 'group' : 'private',
+                    'is_group': cv.isGroup,
+                    'group_id': cv.groupId,
+                    'member_count': cv.memberCount,
+                    'is_muted': 0,
+                    'is_pinned': 0,
+                  })
+              .toList());
+        } catch (_) {}
       }
     } catch (_) {}
+    // عند فشل الشبكة: استعادة آخر نسخة محلية من Drift
+    if (loaded == null) {
+      try {
+        final rows = await LocalSyncService.cachedChats();
+        if (rows.isNotEmpty) {
+          loaded = rows.map((r) => Conversation(
+                id: r.id,
+                uuid: r.chatId,
+                name: r.title,
+                avatar: r.avatar,
+                lastMessage: r.lastMessagePreview.isEmpty ? null : r.lastMessagePreview,
+                lastMessageAt: (r.lastMessageAt ?? '').isEmpty ? null : r.lastMessageAt,
+                unreadCount: r.unreadCount,
+                members: [],
+                isGroup: r.isGroup,
+                memberCount: r.memberCount,
+                groupId: r.groupId,
+              )).toList();
+          _mergeCalls(loaded);
+        }
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
       if (loaded != null) {

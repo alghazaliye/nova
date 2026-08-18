@@ -4,6 +4,51 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 
+/// إعدادات طرق المصادقة (من GET /auth/config) — تحكم ديناميكي في شاشات
+/// التسجيل والدخول (هاتف/بريد/اسم مستخدم ON/OFF من لوحة الإدارة).
+class AuthConfig {
+  final bool phoneRegistration;
+  final bool emailRegistration;
+  final bool phoneLogin;
+  final bool emailLogin;
+  final bool usernameLogin;
+  final bool phoneOtpEnabled;
+  final bool emailOtpEnabled;
+
+  const AuthConfig({
+    this.phoneRegistration = true,
+    this.emailRegistration = true,
+    this.phoneLogin = true,
+    this.emailLogin = true,
+    this.usernameLogin = true,
+    this.phoneOtpEnabled = true,
+    this.emailOtpEnabled = true,
+  });
+
+  factory AuthConfig.fromJson(Map<String, dynamic> j) {
+    final reg = Map<String, dynamic>.from(j['registration'] ?? {});
+    final login = Map<String, dynamic>.from(j['login'] ?? {});
+    final otp = Map<String, dynamic>.from(j['otp'] ?? {});
+    return AuthConfig(
+      phoneRegistration: reg['phone'] != false,
+      emailRegistration: reg['email'] != false,
+      phoneLogin: login['phone'] != false,
+      emailLogin: login['email'] != false,
+      usernameLogin: login['username'] != false,
+      phoneOtpEnabled:
+          Map<String, dynamic>.from(otp['phone'] ?? {})['enabled'] != false,
+      emailOtpEnabled:
+          Map<String, dynamic>.from(otp['email'] ?? {})['enabled'] != false,
+    );
+  }
+
+  /// هل أي طريقة تسجيل متاحة؟
+  bool get registrationEnabled => phoneRegistration || emailRegistration;
+
+  /// هل أي طريقة دخول متاحة؟
+  bool get loginEnabled => phoneLogin || emailLogin || usernameLogin;
+}
+
 /// إعدادات التطبيق العامة (من GET /settings)
 class AppSettings {
   final bool allowCalls;
@@ -51,8 +96,23 @@ class AppSettings {
 class AuthProvider extends ChangeNotifier {
   NovaUser? _user;
   AppSettings? _appSettings;
+  AuthConfig? _authConfig;
   bool _loading = false;
   String? _error;
+
+  /// إعدادات المصادقة الديناميكية (طرق التسجيل/الدخول من لوحة الإدارة)
+  AuthConfig? get authConfig => _authConfig;
+
+  /// GET /auth/config
+  Future<void> fetchAuthConfig() async {
+    try {
+      final res = await ApiService.get('/auth/config');
+      if (res['success'] == true && res['data'] != null) {
+        _authConfig = AuthConfig.fromJson(Map<String, dynamic>.from(res['data']));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
 
   NovaUser? get user => _user;
 
@@ -142,6 +202,141 @@ class AuthProvider extends ChangeNotifier {
         'app_version': '3.6.0',
         'platform': kIsWeb ? 'web' : 'android',
       };
+
+  /// POST /auth/register-email — إنشاء حساب بالبريد (يُرسل OTP بريد)
+  Future<bool> registerEmail(String email, {String? name}) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    final res = await ApiService.post('/auth/register-email', body: {
+      'email': email,
+      'name': name ?? email,
+      'phone': '',
+      'device_uuid': await getDeviceFingerprint(),
+      ...deviceInfo,
+    });
+    _loading = false;
+    if (res['success'] != true) {
+      _error = res['message'] ?? 'فشل في التسجيل بالبريد';
+      notifyListeners();
+      return false;
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// POST /auth/verify-email-otp — تفعيل الحساب بالبريد (يُعيد التوكن)
+  Future<bool> verifyEmailOtp(String email, String otp) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    final res = await ApiService.post('/auth/verify-email-otp', body: {
+      'email': email,
+      'otp': otp,
+      'device_uuid': await getDeviceFingerprint(),
+      ...deviceInfo,
+    });
+    _loading = false;
+    if (res['success'] != true) {
+      _error = res['message'] ?? 'رمز التحقق غير صحيح';
+      notifyListeners();
+      return false;
+    }
+    final data = res['data'] as Map<String, dynamic>? ?? {};
+    final token = data['token'] as String?;
+    if (token != null) {
+      _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
+      await saveToken(token, userId: _user?.id);
+      registerCurrentDevice();
+      await fetchAppSettings();
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// POST /auth/resend-email-otp — إعادة إرسال رمز البريد
+  Future<bool> resendEmailOtp(String email) async {
+    try {
+      final res = await ApiService.post('/auth/resend-email-otp', body: {'email': email});
+      return res['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// POST /auth/login-email — دخول بالبريد + كلمة المرور
+  Future<bool> loginEmail(String email, String password) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    final res = await ApiService.post('/auth/login-email', body: {
+      'email': email,
+      'password': password,
+      'device_uuid': await getDeviceFingerprint(),
+      ...deviceInfo,
+    });
+    _loading = false;
+    if (res['success'] != true) {
+      _error = res['message'] ?? 'البريد أو كلمة المرور غير صحيحة';
+      notifyListeners();
+      return false;
+    }
+    final data = res['data'] as Map<String, dynamic>? ?? {};
+    final token = data['token'] as String?;
+    if (token != null) {
+      _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
+      await saveToken(token, userId: _user?.id);
+      registerCurrentDevice();
+      await fetchAppSettings();
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// POST /auth/login-username — دخول باسم المستخدم + كلمة المرور
+  Future<bool> loginUsername(String username, String password) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    final res = await ApiService.post('/auth/login-username', body: {
+      'username': username,
+      'password': password,
+      'device_uuid': await getDeviceFingerprint(),
+      ...deviceInfo,
+    });
+    _loading = false;
+    if (res['success'] != true) {
+      _error = res['message'] ?? 'اسم المستخدم أو كلمة المرور غير صحيحة';
+      notifyListeners();
+      return false;
+    }
+    final data = res['data'] as Map<String, dynamic>? ?? {};
+    final token = data['token'] as String?;
+    if (token != null) {
+      _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
+      await saveToken(token, userId: _user?.id);
+      registerCurrentDevice();
+      await fetchAppSettings();
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// POST /auth/set-password — تعيين أو تغيير كلمة المرور (بعد ربط البريد)
+  Future<bool> setPassword(String password) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    final res = await ApiService.post('/auth/set-password', body: {'password': password});
+    _loading = false;
+    if (res['success'] != true) {
+      _error = res['message'] ?? 'فشل في تعيين كلمة المرور';
+      notifyListeners();
+      return false;
+    }
+    notifyListeners();
+    return true;
+  }
 
   /// POST /auth/register
   Future<bool> register(String phone,

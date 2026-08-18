@@ -9,9 +9,14 @@ import 'screens/chats_screen.dart';
 import 'screens/chat_screen.dart';
 import 'services/api_service.dart';
 import 'models/user_model.dart';
+import 'offline/network_detector.dart';
+import 'offline/outbox_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Offline-First bootstrap: مراقبة الشبكة ومزامنة الطابور عند العودة
+  final detector = NetworkDetector.instance;
+  OutboxService.start(detector);
   runApp(const NovaApp());
 }
 

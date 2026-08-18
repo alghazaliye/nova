@@ -346,3 +346,91 @@
 6. Render.com لاحقًا
 
 **ملاحظة**: health endpoint GET /api/v1/health موجود ✅ في index.php (خط 512) — مطلوب لمراقبة Offline-First.
+
+## Progress update (Phase 3 completed, Phase 4 in progress — Aug 19, 2026):
+
+### Phase 3 DONE ✅:
+- migrate_auth.sql idempotent (conditional PREPARE for users columns/email index)
+- Docker image nova-messenger:514 built & tested: register→verify→set-password→login-email→login-username all 200 ✅; user_subscriptions table present from entrypoint
+- set_exception_handler دائم في backend/public/index.php الأصلي (JSON INTERNAL_ERROR 500 production-safe)
+- git commit + tag v5.2.0 + push + GitHub Release: https://github.com/alghazaliye/nova/releases/tag/v5.2.0
+- Container nova514 يعمل على :8082 (nova513 محذوف)
+
+### Phase 4 Offline-First — progress:
+- pubspec.yaml: drift ^2.21.0, sqlite3_flutter_libs, path_provider, connectivity_plus ^6.0.5, sqflite_common_ffi, sqflite, rxdart, crypto + dev: build_runner, drift_dev — flutter pub get نجح
+- أنشأت lib/offline/:
+  - local_nova_db.dart (Drift: local_chats, local_messages, local_users, local_media, local_outbox, local_sync_state; upsertChat helper; schemaVersion=1)
+  - local_nova_db_provider.dart (singleton NativeDatabase.createInBackground, wipeLocalData عند logout)
+  - network_detector.dart (NovaNetworkState: online/serverDown/offline; probe كل 30s + listener; GET /health)
+  - media_store.dart (downloadMedia local-first, clearCache, usageByCategory)
+- المتبقي:
+  1. outbox_service.dart + sync_engine.dart (push outbox بـexponential backoff 2/5/10/30، pull incremental بـlast_sync_ts من conversation updated_at + messages updated_at)
+  2. local_sync_service.dart (upsert محادثات/رسائل/مستخدمين، personal-delete sync)
+  3. dart run build_runner generate .g.dart
+  4. دمج: auth_provider (registerEmail/verifyEmailOtp/loginEmail/loginUsername/fetchAuthConfig) + chats_screen (local-first) + chat_screen (send offline, status chips) + settings_screen (storage page)
+  5. flutter analyze + APK build + رفع + تقرير
+- Backend جاهز: client_message_id idempotency ✅ (uq_messages_client_message_id), health endpoint ✅, before_id pagination ✅
+- env Flutter: export PATH=/home/ubuntu/flutter/bin:$PATH; JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64; ANDROID_HOME=/home/ubuntu/Android; GRADLE_OPTS="-Xmx512m"; _JAVA_OPTIONS="-Xmx1g"
+
+## Phase 4 debug notes (Aug 19):
+
+Created lib/offline/: local_nova_db.dart, local_nova_db_provider.dart, network_detector.dart, media_store.dart, local_sync_service.dart, outbox_service.dart, sync_engine.dart. pubspec updated (drift+sqlite3_flutter_libs+path_provider+connectivity_plus+sqflite+sqflite_common_ffi+rxdart+crypto+build_runner+drift_dev), pub get OK, build_runner generated .g.dart.
+
+**BUG discovered in .g.dart**: duplicate definition — local_nova_db.g.dart:3050 `class $LocalMediaTable extends LocalMedia` and 3343 `class LocalMedia extends DataClass` → same name. @DataClassName('LocalMedia') present on LocalMedia table but drift still generated DataClass named LocalMedia (same as table name — conflict). Fix: rename the TABLE class or DataClass. Correct approach: use distinct names: keep @DataClassName('LocalMediaRecord') on LocalMedia table (or rename table to LocalMediaTable class). Other tables: LocalChats→LocalChat, LocalMessages→LocalMessage, LocalUsers→LocalUser already OK (plural table ≠ singular class). So ONLY LocalMedia (singular both) conflicts. Fix: @DataClassName('LocalMediaRecord') on LocalMedia table + update all usages in media_store.dart/outbox_service/local_sync_service.
+
+Also fix in outbox_service.dart: import OrderingTerm from drift (import 'package:drift/drift.dart' as drift; use drift.OrderingTerm). Same in sync_engine.dart. Remove unused _backoffFor in outbox.
+
+**Drift row access**: rows expose plain fields (row.localPath is String) — media_store errors were cascade from duplicate class; after fixing name conflict, row.localPath access works (DataClass has plain fields confirmed: class LocalMedia extends DataClass { final int id; ... }).
+
+**Next after fix**: rebuild build_runner, re-analyze, then integrate into UI:
+- chats_screen: local-first (fallback localChats select, then API refresh)
+- chat_screen: _sendMessage writes Local DB immediately with status pending_sync + outbox push SEND_MESSAGE; display local messages from db.localMessages streamed (watch)
+- auth_provider: fetchAuthConfig + registerEmail/verifyEmailOtp/loginEmail/loginUsername (API paths: /auth/register-email, /auth/verify-email-otp, /auth/login-email {email,password}, /auth/login-username {username,password}, /auth/config GET)
+- settings_screen: storage usage page (MediaStore.usageByCategory + clearCache)
+- flutter analyze lib/ whole, then flutter build apk (env in previous notes), commit/push v5.3.0 + report.
+
+## Phase 5 progress (Aug 19):
+
+Offline core DONE (lib/offline/, analyze clean): local_nova_db (Drift; LocalChats/LocalMessages/LocalUsers/LocalMedia[DataClassName LocalMediaRecord]/LocalOutbox/LocalSyncState; companion names: LocalChatCompanion, LocalMessageCompanion, LocalUsersCompanion, LocalMediaCompanion(!), OutboxItemCompanion, SyncStateCompanion; DataClasses: LocalChat, LocalMessage, LocalUser, LocalMediaRecord, OutboxItem, SyncState; constructor: LocalNovaDb(super.executor)).
+
+auth_provider.dart UPDATED: added AuthConfig class + fetchAuthConfig + registerEmail + verifyEmailOtp + resendEmailOtp + loginEmail(email,password) + loginUsername(username,password) + setPassword.
+
+phone_screen.dart REWRITTEN (217→dynamic): tabs هاتف/بريد/اسم مستخدم حسب authConfig; single-mode when 1 tab enabled; disabled-login message; _doPhoneLogin/_doEmailLogin/_doUsernameLogin; _handleLoginResult.
+
+Remaining Phase 5:
+1. chats_screen.dart: add offline layer — LocalSyncService.upsertChats after fetch + fallback when serverDown; show NovaNetworkState chip.
+2. chat_screen.dart: _sendMessage writes local_messages first (status pending_sync) + OutboxService.push SEND_MESSAGE; show local messages on top when offline; message status chip (pending_sync/offline/syncing).
+3. settings screen: add storage page (MediaStore.usageByCategory, clearCache).
+4. main.dart: init NetworkDetector + OutboxService.start at app start (check where provider listens).
+5. flutter analyze whole lib, flutter build apk, commit+tag v5.3.0, report.
+
+Key API paths: /auth/config, /auth/register-email, /auth/verify-email-otp, /auth/resend-email-otp, /auth/login-email, /auth/login-username, /auth/set-password, /health.
+chat_screen: message types text/structured; client_message_id uuid via _uuid.v4(); _sendStructuredMessage for media types. chats_screen: _load at line 346 (ApiService.get /conversations).
+
+## Phase 5 continuation (Aug 19, after chats/chat_screen/phone_screen):
+
+DONE: chats_screen._load: saves via LocalSyncService.upsertChats(toJson-map) + cachedChats fallback (rows→Conversation manual ctor). chat_screen._sendMessage: storePendingMessage + OutboxService.push(operation:'SEND_MESSAGE', entityRef:'${localRow!.id}', payload:{conversation_id,...}). Imports added in chat_screen (local_nova_db.dart, local_sync_service.dart, outbox_service.dart) and chats_screen (local_sync_service.dart). phone_screen.dart rewritten: tabs per authConfig; phone screen fixed errors. All analyze clean.
+
+NOTE: outbox_service.drain() processes SEND_MESSAGE via _sendTextMessage(p): reads payload['conversation_id'], 'client_message_id', 'type', 'body', 'reply_to_message_id' — matches my payload keys. Good.
+
+Remaining:
+1. main.dart: init NetworkDetector.start() + OutboxService.start() + SyncEngine.start() at app bootstrap; also registerCurrentDevice? check main.dart structure first.
+2. settings_screen.dart: add storage section — MediaStore.usageByCategory() + clearCache(), show offline indicator (NetworkDetector state).
+3. chat_screen: optionally load cached messages locally before API.
+4. flutter analyze full lib/, fix, flutter build apk (env vars known), git commit+tag v5.3.0, release notes, report.
+
+## Phase 5 progress update 2 (Aug 19):
+
+DONE: main.dart bootstrap — NetworkDetector.instance.start(), OutboxService.start(), SyncEngine.start() added in main(). chat_screen imports + storePendingMessage + OutboxService.push wired in _sendMessage. chats_screen offline layer done. phone_screen dynamic tabs done. auth_provider: AuthConfig + email/username methods. All clean.
+
+NetworkDetector API: NetworkDetector.instance (singleton), start(), state (NovaNetworkState.online/serverDown/offline), addListener.
+SyncEngine.start()/drain(); OutboxService.start() listens detector and calls drain() on online.
+
+Remaining:
+1. settings_screen: storage page using MediaStore.usageByCategory() + clearCache() + offline status chip (NetworkDetector.instance.state). Check MediaStore static API names first.
+2. chat_screen: preload local messages when offline? optional.
+3. flutter analyze lib/ full; flutter build apk (env: PATH=/home/ubuntu/flutter/bin, JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64, ANDROID_HOME=/home/ubuntu/Android, GRADLE_OPTS="-Xmx512m", _JAVA_OPTIONS="-Xmx1g"; cmd: flutter build apk --release --android-skip-build-dependency-validation).
+4. git: cd /home/ubuntu/nova_new, add -A, commit, tag v5.3.0, push --tags, release create v5.3.0 with APK zip.
+5. Final report to user.
+
+Environment: local PHP server pid 75610 port 8080 running; Docker nova514 on 8082 OK; GitHub alghazaliye/nova main.
