@@ -257,10 +257,42 @@ foreach ($candidates as $candidate) {
 if (preg_match('#^/media/(.+)$#i', $uri, $mm)) {
     $file = rtrim($_ENV['STORAGE_PATH'] ?? (PROJECT_ROOT . '/backend/storage'), '/') . '/' . $mm[1];
     if (is_file($file) && strpos($file, '..') === false) {
-        header('Content-Type: application/octet-stream');
+        static $mimeTypes = [
+            'mp4' => 'video/mp4', 'webm' => 'video/webm', 'mov' => 'video/quicktime',
+            'm4v' => 'video/x-m4v',
+            'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'ogg' => 'audio/ogg',
+            'weba' => 'audio/webm', 'm4a' => 'audio/mp4', 'aac' => 'audio/aac',
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+            'gif' => 'image/gif', 'webp' => 'image/webp',
+        ];
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
         header('Access-Control-Allow-Origin: *');
         header('Accept-Ranges: bytes');
-        readfile($file);
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(204);
+            return true;
+        }
+        $size = filesize($file);
+        header('Content-Length: ' . $size);
+        $range = $_SERVER['HTTP_RANGE'] ?? null;
+        if ($range && preg_match('/^bytes=(\d*)-(\d*)$/', $range, $rm)) {
+            $start = $rm[1] !== '' ? (int)$rm[1] : 0;
+            $end = $rm[2] !== '' ? (int)$rm[2] : $size - 1;
+            if ($start >= $size) {
+                http_response_code(416);
+                header("Content-Range: bytes */{$size}");
+                return true;
+            }
+            http_response_code(206);
+            header("Content-Range: bytes {$start}-{$end}/{$size}");
+            $fp = fopen($file, 'rb');
+            fseek($fp, $start);
+            echo fread($fp, $end - $start + 1);
+            fclose($fp);
+        } else {
+            readfile($file);
+        }
         return true;
     }
 }

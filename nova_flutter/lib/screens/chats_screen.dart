@@ -87,10 +87,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
         final callerId = call['caller_id']?.toString();
         final calleeId = call['callee_id']?.toString();
         final me = ApiService.userId.toString();
-        final amParticipant =
-            callerId == me || calleeId == me || (call['participants'] is List);
-        if (!amParticipant) continue;
+        if (callerId != me && calleeId != me) continue;
         call['is_outgoing'] = callerId == me;
+        if (ModalRoute.of(context)?.isCurrent != true) continue;
         await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => CallScreen(callData: call)));
         return;

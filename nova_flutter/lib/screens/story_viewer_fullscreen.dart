@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
@@ -432,11 +433,34 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
   Widget _contentWidget(NovaColors c) {
     final fileUrl = _current['file_url']?.toString() ?? '';
     if (_current['type'] == 'image' && fileUrl.isNotEmpty) {
-      return Image.network(
-        ApiService.mediaUrl(fileUrl),
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded,
-            size: 72, color: Colors.white38),
+      // نمط واتساب: خلفية ضبابية من الصورة + الصورة الكاملة في المنتصف
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          // خلفية ضبابية ممتدة مثل واتساب
+          Positioned.fill(
+            child: Image.network(
+              ApiService.mediaUrl(fileUrl),
+              fit: BoxFit.cover,
+              color: Colors.black45,
+              colorBlendMode: BlendMode.darken,
+            ),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+              child: Container(color: Colors.black26),
+            ),
+          ),
+          Center(
+            child: Image.network(
+              ApiService.mediaUrl(fileUrl),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded,
+                  size: 72, color: Colors.white38),
+            ),
+          ),
+        ],
       );
     }
     if (_current['type'] == 'video') {

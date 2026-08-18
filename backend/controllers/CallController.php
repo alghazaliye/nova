@@ -184,6 +184,16 @@ class CallController
                  WHERE status IN ("calling", "ringing")
                    AND created_at < DATE_SUB(NOW(), INTERVAL 60 SECOND)'
             )->execute();
+            // إنهاء المكالمات "answered" المعلقة التي لا تملك ended_at
+            // (سقطت دون إنهاء صريح — أكثر من 5 دقائق) حتى لا تفتح شاشة المكالمة
+            // لدى المستخدمين عند كل دخول.
+            $this->pdo->prepare(
+                'UPDATE calls SET status = "ended", ended_at = COALESCE(ended_at, NOW()),
+                        duration = COALESCE(duration, TIMESTAMPDIFF(SECOND, started_at, NOW()) * 1000)
+                 WHERE status IN ("answered", "accepted")
+                   AND ended_at IS NULL
+                   AND created_at < DATE_SUB(NOW(), INTERVAL 300 SECOND)'
+            )->execute();
         } catch (\Throwable $e) {
             error_log('Incoming call cleanup error: ' . $e->getMessage());
         }
@@ -211,6 +221,19 @@ class CallController
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = min(50, (int)($_GET['limit'] ?? 20));
         $offset = ($page - 1) * $limit;
+
+        // إنهاء المكالمات المعلقة (answered بدون ended_at) أكثر من 5 دقائق
+        try {
+            $this->pdo->prepare(
+                'UPDATE calls SET status = "ended", ended_at = NOW(),
+                        duration = COALESCE(duration, TIMESTAMPDIFF(SECOND, started_at, NOW()) * 1000)
+                 WHERE status IN ("answered", "accepted")
+                   AND ended_at IS NULL
+                   AND created_at < DATE_SUB(NOW(), INTERVAL 300 SECOND)'
+            )->execute();
+        } catch (\Throwable $e) {
+            error_log('Stale call cleanup error: ' . $e->getMessage());
+        }
 
         $stmt = $this->pdo->prepare(
             'SELECT c.id, c.uuid, c.caller_id,

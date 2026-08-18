@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
@@ -38,39 +41,115 @@ class _StoriesScreenState extends State<StoriesScreen> {
   }
 
   Future<void> _publishStory() async {
-    final ctrl = TextEditingController();
-    final text = await showDialog<String>(
+    if (!mounted) return;
+    final choice = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Text('نشر قصة'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: 'اكتب قصتك (نص)'),
+        title: const Text('نشر حالة'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('اختر نوع الحالة', style: TextStyle(fontSize: 15)),
+            SizedBox(height: 10),
+            Text('صورة من المعرض أو نص بسيط', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(c, null),
+              onPressed: () => Navigator.pop(c, 'cancel'),
               child: const Text('إلغاء')),
           TextButton(
-              onPressed: () => Navigator.pop(c, ctrl.text.trim()),
-              child: const Text('نشر')),
+              onPressed: () => Navigator.pop(c, 'photo'),
+              child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [Icon(Icons.image, size: 18), SizedBox(width: 6), Text('نشر صورة')])),
+          TextButton(
+              onPressed: () => Navigator.pop(c, 'text'),
+              child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [Icon(Icons.text_fields, size: 18), SizedBox(width: 6), Text('نشر نص')])),
         ],
       ),
     );
-    if (text == null || text.isEmpty || !mounted) return;
-    final res = await ApiService.post('/stories', body: {
-      'type': 'text',
-      'text': text,
-      'client_message_id': _uuid.v4(),
-    });
-    if (!mounted) return;
-    if (res['success'] == true) {
-      _load();
-      if (mounted) showToast(context, 'تم نشر القصة');
+    if (!mounted || choice == null || choice == 'cancel') return;
+
+    if (choice == 'photo') {
+      try {
+        final picker = ImagePicker();
+        final XFile? img = await picker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 85,
+          maxWidth: 1600,
+          maxHeight: 1600,
+        );
+        if (img == null || !mounted) return;
+        await _uploadStoryMedia(img);
+      } catch (e) {
+        if (mounted) showToast(context, 'تعذر اختيار الصورة: $e');
+      }
     } else {
-      if (mounted) showToast(context, res['message'] ?? 'فشل النشر');
+      final ctrl = TextEditingController();
+      final text = await showDialog<String>(
+        context: context,
+        builder: (c) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: const Text('نشر قصة نصية'),
+          content: TextField(
+            controller: ctrl,
+            maxLines: 4,
+            decoration: const InputDecoration(hintText: 'اكتب قصتك'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, null), child: const Text('إلغاء')),
+            TextButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('نشر')),
+          ],
+        ),
+      );
+      if (text == null || text.isEmpty || !mounted) return;
+      final res = await ApiService.post('/stories', body: {
+        'type': 'text',
+        'text': text,
+        'privacy': 'all',
+        'client_message_id': _uuid.v4(),
+      });
+      if (!mounted) return;
+      if (res['success'] == true) {
+        _load();
+        if (mounted) showToast(context, 'تم نشر القصة');
+      } else {
+        if (mounted) showToast(context, res['message'] ?? 'فشل النشر');
+      }
+    }
+  }
+
+  /// رفع صورة كحالة عبر multipart إلى /stories/{id}/upload
+  Future<void> _uploadStoryMedia(XFile file) async {
+    if (!mounted) return;
+    final meId = context.read<AuthProvider>().user?.id;
+    if (meId == null) return;
+    try {
+      http.MultipartFile mf;
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        mf = http.MultipartFile.fromBytes('file', bytes,
+            filename: file.name);
+      } else {
+        mf = await http.MultipartFile.fromPath('file', file.path,
+            filename: file.name);
+      }
+      final res = await ApiService.uploadMultipart(
+          '/stories/${meId}/upload', [mf], fields: {'privacy': 'all'});
+      if (!mounted) return;
+      if (res['success'] == true) {
+        _load();
+        if (mounted) showToast(context, 'تم نشر الحالة');
+      } else {
+        if (mounted) showToast(context, res['message'] ?? 'فشل النشر');
+      }
+    } catch (e) {
+      if (mounted) showToast(context, 'فشل رفع الصورة: $e');
     }
   }
 
@@ -234,14 +313,25 @@ class _StoriesScreenState extends State<StoriesScreen> {
                                                   TabChip(label: 'قصتي'),
                                               ]),
                                               const SizedBox(height: 4),
-                                              Text(
-                                                  _storyText(s).length > 60
-                                                      ? '${_storyText(s).substring(0, 60)}...'
-                                                      : _storyText(s),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                      fontSize: 13, color: c.muted)),
+                                              Row(children: [
+                                                if ((s['type']?.toString() == 'image'))
+                                                  Icon(Icons.image, size: 13, color: c.accent),
+                                                if ((s['type']?.toString() == 'video'))
+                                                  Icon(Icons.videocam, size: 13, color: c.accent),
+                                                if (s['type']?.toString() == 'text')
+                                                  Icon(Icons.text_fields, size: 13, color: c.muted),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                      _storyText(s).length > 50
+                                                          ? '${_storyText(s).substring(0, 50)}...'
+                                                          : _storyText(s),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                          fontSize: 13, color: c.muted)),
+                                                ),
+                                              ]),
                                             ],
                                           ),
                                         ),
