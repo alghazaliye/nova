@@ -1,10 +1,35 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nova_flutter/utils/nova_web_state.dart' show novaHref;
 
 /// خدمة الاتصال بخادم NOVA Messenger API
 class ApiService {
-  static const String baseUrl =
+  static const String _defaultUrl =
       'https://8080-i0y331w4apy035oayp9qf-247b94fb.us3.manus.computer/api/v1';
+
+  /// تجاوز يدوي للرابط الأساسي (يُستخدم لتغيير الخادم عند النشر)
+  static String? baseUrlOverride;
+
+  /// الرابط الأساسي — قابل للتغيير عبر baseUrlOverride أو ?api=HOST في الويب
+  static String get baseUrl {
+    final ov = baseUrlOverride;
+    if (ov != null && ov.trim().isNotEmpty) {
+      final u = ov.trim().replaceAll(RegExp(r'/+$'), '');
+      return u.endsWith('/api/v1') ? u : '$u/api/v1';
+    }
+    if (kIsWeb) {
+      try {
+        final params = Uri.parse(novaHref()).queryParameters;
+        final api = params['api'];
+        if (api != null && api.trim().isNotEmpty) {
+          final u = api.trim().replaceAll(RegExp(r'/+$'), '');
+          return u.endsWith('/api/v1') ? u : '$u/api/v1';
+        }
+      } catch (_) {}
+    }
+    return _defaultUrl;
+  }
 
   static String? token;
   static int userId = 0;

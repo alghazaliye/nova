@@ -307,6 +307,7 @@ class _ChatsTabState extends State<ChatsTab> {
         final convs = (res['data'] as List)
             .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
             .toList();
+        _mergeCalls(convs);
         // إشعار ويب عند وصول رسائل جديدة
         int total = 0;
         String? latestSender;
@@ -351,6 +352,7 @@ class _ChatsTabState extends State<ChatsTab> {
         loaded = (res['data'] as List)
             .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
             .toList();
+        _mergeCalls(loaded);
       }
     } catch (_) {}
     if (!mounted) return;
@@ -365,6 +367,200 @@ class _ChatsTabState extends State<ChatsTab> {
       _loading = false;
     });
     _openAutoChat();
+  }
+
+  /// دمج آخر مكالمة لكل محادثة من سجل /calls
+  void _mergeCalls(List<Conversation> convs) {
+    try {
+      final me = ApiService.userId.toString();
+      ApiService.get('/calls', query: {'limit': '100'}).then((res) {
+        if (!mounted || res['success'] != true) return;
+        final data = res['data'];
+        if (data is! List) return;
+        final calls = <String, Map<String, dynamic>>{};
+        for (final raw in data) {
+          if (raw is! Map) continue;
+          final c = Map<String, dynamic>.from(raw);
+          final callerId = c['caller_id']?.toString() ?? '';
+          final calleeId = c['callee_id']?.toString() ?? '';
+          if (callerId.isEmpty || calleeId.isEmpty) continue;
+          final other = callerId == me ? calleeId : callerId;
+          final existing = calls[other];
+          final createdAt =
+              (c['created_at'] ?? c['started_at'] ?? '').toString();
+          final existingAt = (existing?['created_at'] ?? '').toString();
+          if (existing == null || createdAt.compareTo(existingAt) > 0) {
+            calls[other] = {
+              ...c,
+              'direction': callerId == me ? 'out' : 'in',
+            };
+          }
+        }
+        if (!mounted) return;
+        setState(() {
+          _conversations = convs
+              .map((cv) {
+                final lc = calls[cv.otherUserId.toString()];
+                if (lc == null) return cv;
+                final Map<String, dynamic> j = {
+                  'id': cv.id,
+                  'uuid': cv.uuid,
+                  'name': cv.name,
+                  'avatar': cv.avatar,
+                  'last_message': cv.lastMessage,
+                  'unread_count': cv.unreadCount,
+                      'members': cv.members
+                      .map((m) => <String, dynamic>{
+                            'id': m.id,
+                            'uuid': m.uuid,
+                            'name': m.name,
+                            'phone': m.phone,
+                            'avatar': m.avatar,
+                            'is_online': m.isOnline ? 1 : 0,
+                            'is_verified': m.isVerified ? 1 : 0,
+                            'last_seen': m.isOnline
+                                ? DateTime.now().toIso8601String()
+                                : null,
+                          })
+                      .toList(),
+                  'is_verified': cv.isVerified ? 1 : 0,
+                  'last_call': lc,
+                  'last_message_at': cv.lastMessageAt ?? '',
+                  'type': cv.isGroup ? 'group' : 'private',
+                };
+                if (cv.phone.isNotEmpty) j['phone'] = cv.phone;
+                if (cv.isGroup) {
+                  j['is_group'] = true;
+                  j['group_id'] = cv.groupId;
+                  j['member_count'] = cv.memberCount;
+                }
+                return Conversation.fromJson(j);
+              })
+              .toList();
+          _applyFilter();
+        });
+      });
+    } catch (_) {}
+  }
+
+  /// إعادة الاتصال بنفس نوع آخر مكالمة
+  Future<void> _reCall(Conversation conv) async {
+    final lc = conv.lastCall;
+    if (lc == null) return;
+    final type = (lc['call_type'] ?? 'voice').toString();
+    try {
+      final res = await ApiService.post('/calls', body: {
+        'callee_id': conv.otherUserId,
+        'call_type': type,
+      });
+      if (!mounted) return;
+      if (res['success'] == true && res['data'] is Map) {
+        final call = Map<String, dynamic>.from(res['data'] as Map);
+        call['is_outgoing'] = true;
+        await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => CallScreen(callData: call)));
+      } else {
+        showToast(context, res['message'] ?? 'فشل بدء المكالمة');
+      }
+        } catch (_) {
+      if (mounted) showToast(context, 'فشل بدء المكالمة');
+    }
+  }
+
+  /// سطر آخر مكالمة في بطاقة المحادثة
+  Widget _buildCallRow(Conversation conv) {
+    final c = NovaColors.of(context);
+    final lc = conv.lastCall!;
+    final status = (lc['status'] ?? '').toString();
+    final direction = (lc['direction'] ?? 'out').toString();
+    final type = (lc['call_type'] ?? 'voice').toString();
+    final isMissed = status == 'missed';
+    final isRejected = status == 'rejected';
+    final isActive = status == 'ringing' ||
+        status == 'answered' ||
+        status == 'accepted' ||
+        status == 'calling';
+    final color = isMissed
+        ? const Color(0xFFE53935)
+            : (isRejected
+            ? c.muted
+            : const Color(0xFF128C7E)); // سطر المكالمات
+    IconData icon;
+    String label;
+    if (isMissed) {
+      icon = direction == 'out' ? Icons.call_missed : Icons.call_missed_outlined;
+      label = direction == 'out' ? 'مكالمة مفقودة' : 'مكالمة فائتة';
+    } else if (isRejected) {
+      icon = Icons.call_end;
+      label = 'مرفوضة';
+    } else if (isActive) {
+      icon = Icons.phone_callback;
+      label = 'جارية الآن';
+    } else if (direction == 'out') {
+      icon = Icons.call_made;
+      label = 'مكالمة صادرة';
+    } else {
+      icon = Icons.call_received;
+      label = 'مكالمة واردة';
+    }
+    final time = _formatCallTime(lc['started_at']?.toString() ??
+        lc['created_at']?.toString() ??
+        '');
+    final dur = lc['duration'];
+    final durationTxt = dur != null &&
+            int.tryParse(dur.toString()) != null &&
+            int.parse(dur.toString()) > 0
+        ? ' · ${_formatDuration(int.parse(dur.toString()))}'
+        : '';
+    final callTypeIcon = type == 'video' ? Icons.videocam : Icons.call;
+    return GestureDetector(
+      onTap: () => _reCall(conv),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(
+          children: [
+            Icon(callTypeIcon, size: 11, color: c.muted),
+            const SizedBox(width: 4),
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                '$label$durationTxt',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: color),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(time,
+                style: TextStyle(fontSize: 10, color: c.muted.withOpacity(0.85))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatCallTime(String at) {
+    if (at.isEmpty) return '';
+    try {
+      final d = DateTime.parse(at);
+      final now = DateTime.now();
+      final diff = now.difference(d);
+      if (diff.inMinutes < 1) return 'الآن';
+      if (diff.inHours < 1) return 'منذ ${diff.inMinutes} د';
+      if (diff.inDays < 1) return 'منذ ${diff.inHours} س';
+      if (diff.inDays < 7) return 'منذ ${diff.inDays} يوم';
+      return '${d.month}/${d.day}/${d.year.toString().substring(2)}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static String _formatDuration(int ms) {
+    final sec = (ms / 1000).floor();
+    final m = sec ~/ 60;
+    final s = sec % 60;
+    return m > 0 ? '${m}د${s.toString().padLeft(2, '0')}ث' : '$sث';
   }
 
   Future<void> _openAutoChat() async {
@@ -1054,6 +1250,10 @@ class _ChatsTabState extends State<ChatsTab> {
                                         ],
                                       ),
                                     ),
+                                    if (conv.isGroup)
+                                      const SizedBox.shrink()
+                                    else if (conv.lastCall != null)
+                                      _buildCallRow(conv),
                                     if (conv.unreadCount > 0)
                                       UnreadBadge(count: conv.unreadCount),
                                   ],

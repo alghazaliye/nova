@@ -32,7 +32,6 @@ class AuthController
             ->required('phone', 'رقم الهاتف')
             ->phone('phone', 'رقم الهاتف');
 
-        $countryCode = ($body['country_code'] ?? '') !== '' ? trim((string)$body['country_code'], '+') : null;
         if (isset($body['name']) && trim((string)$body['name']) !== '') {
             $v->minLength('name', 2, 'الاسم')->maxLength('name', 150, 'الاسم');
         }
@@ -41,7 +40,7 @@ class AuthController
             Response::validationError($v->errors());
         }
 
-        // WhatsApp-style flow: phone + optional country_code; name/email optional
+        // WhatsApp-style: phone + optional country_code; name/email optional
         $countryCode = $v->sanitizeString('country_code');
         $countryCode = ($countryCode !== '') ? trim($countryCode, '+') : null;
         $phone = $v->sanitizeString('phone');
@@ -65,16 +64,35 @@ class AuthController
             Response::error('رقم الهاتف مسجل مسبقاً', 'PHONE_EXISTS', 409);
         }
 
-                // Generate and store OTP (no expiry: remains valid until used/replaced)
-        $otp       = $this->generateOtp();
-        $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
-        $neverExpires = '2099-12-31 23:59:59';
-        $this->storeOtp($phone, $otpHash, $neverExpires, $name);
+        // ---- New multi-provider OTP pipeline ----
+        require_once __DIR__ . '/../otp/OtpProviderInterface.php';
+        require_once __DIR__ . '/../otp/OtpTemplate.php';
+        require_once __DIR__ . '/../otp/OtpService.php';
+        $otpService = new OtpService();
 
-        // Send OTP (in dev mode, return it directly)
-        $responseData = ['message' => 'تم إرسال رمز التحقق'];
+        // Rate limit check (phone + IP per hour)
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+        $rateError = $otpService->checkRateLimit($phone, $ip, 'registration');
+        if ($rateError !== null) {
+            Response::error($rateError, 'OTP_RATE_LIMITED', 429);
+        }
+
+        // Resend cooldown
+        $cooldown = $otpService->resendCooldown($phone);
+        if ($cooldown > 0) {
+            Response::error("يمكنك إعادة الإرسال بعد {$cooldown} ثانية", 'OTP_COOLDOWN', 429);
+        }
+
+        $res = $otpService->createAndSend($phone, $name, $ip, $_SERVER['HTTP_USER_AGENT'] ?? '');
+
+        $responseData = [
+            'message' => $res['message'],
+            'delivery_mode' => $res['delivery_mode'],
+            'cooldown' => $res['cooldown'],
+        ];
         if ($this->isDevelopmentOtp()) {
-            $responseData['otp_dev'] = $otp; // Remove in production
+            // Dev-mode: code is deterministic (OTP_TEST_CODE env) — kept for existing test users
+            $responseData['otp_dev'] = $this->generateOtp(); // Remove in production
         }
 
         Response::success($responseData, 'تم إرسال رمز التحقق إلى رقم هاتفك');
@@ -101,15 +119,47 @@ class AuthController
             ? $v->sanitizeString('name')
             : null;
 
-        // Verify OTP
-        $otpData = $this->getStoredOtp($phone);
-        if (!$otpData) {
-            Response::error('رمز التحقق غير موجود. اطلب رمزًا جديدًا', 'OTP_EXPIRED', 400);
+        // ---- Verify via the multi-provider OTP pipeline (new) ----
+        // Migration: legacy OTPs stored in app_settings (otp_<md5>) are upgraded on the fly:
+        // if no row exists in otp_verifications, fall back to the legacy store once.
+        require_once __DIR__ . '/../otp/OtpProviderInterface.php';
+        require_once __DIR__ . '/../otp/OtpTemplate.php';
+        require_once __DIR__ . '/../otp/OtpService.php';
+        $otpService = new OtpService();
+
+        $legacyOtp = null;
+
+        // ---- Verify via the multi-provider OTP pipeline (new) ----
+        try {
+            $result = $otpService->verify($phone, $otp);
+        } catch (\Throwable $e) {
+            // Pipeline failure (e.g. table missing in very old schema): fall back to legacy store
+            error_log('OTP pipeline error, falling back to legacy: ' . $e->getMessage());
+            $result = ['verified' => false, 'message' => 'فشل التحقق من المزود'] + ['error_code' => 'OTP_SERVICE_ERROR'];
         }
 
+        // Fallback: legacy app_settings OTP (dev test mode keeps 123456 alive)
+        if (!$result['verified']) {
+            $legacyOtp = $this->getStoredOtp($phone);
+            if ($legacyOtp) {
+                if ($this->isDevelopmentOtp() && $otp === ($_ENV['OTP_TEST_CODE'] ?? '123456')) {
+                    $result = ['verified' => true];
+                    $this->clearOtp($phone);
+                } elseif (!password_verify($otp, $legacyOtp['otp_hash'] ?? '')) {
+                    $legacyOtp = null;
+                } else {
+                    $result = ['verified' => true];
+                    $this->clearOtp($phone);
+                }
+            }
+        }
 
-        if (!password_verify($otp, $otpData['otp_hash'])) {
-            Response::error('رمز التحقق غير صحيح', 'OTP_INVALID', 400);
+        if (!$result || !$result['verified']) {
+            $msg = ($result && isset($result['message'])) ? $result['message'] : 'رمز التحقق غير صحيح';
+            $code = ($result && isset($result['error_code'])) ? $result['error_code'] : 'OTP_INVALID';
+            $extra = ['attempts_left' => $result['attempts_left'] ?? null];
+            $extra = array_filter($extra, static fn ($x) => $x !== null);
+            Response::error($msg, $code, 400, $extra);
         }
 
         // Create or update user
@@ -119,7 +169,17 @@ class AuthController
 
         if (!$user) {
             $uuid = UuidHelper::generate();
-            $displayName = $name ?? $otpData['name'];
+            // Prefer the name collected during register (stored in otp_verifications) if not sent in body
+            $collectedName = null;
+            try {
+                $vStmt = $this->pdo->prepare('SELECT name FROM otp_verifications WHERE phone_number = ? ORDER BY id DESC LIMIT 1');
+                $vStmt->execute([$phone]);
+                $vRow = $vStmt->fetch();
+                if ($vRow && trim((string)$vRow['name']) !== '') {
+                    $collectedName = $vRow['name'];
+                }
+            } catch (\Throwable $e) {}
+            $displayName = $name ?? $collectedName ?? ($legacyOtp['name'] ?? 'مستخدم NOVA');
             $stmt = $this->pdo->prepare(
                 'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
                  VALUES (?, ?, ?, 0, NOW(), NOW())'
@@ -148,10 +208,8 @@ class AuthController
             }
         }
 
-        // Clear OTP (in dev mode keep it alive so test users can re-login with the same code)
-        if (!($this->isDevelopmentOtp() && ($_ENV['APP_ENV'] ?? 'production') === 'development')) {
-            $this->clearOtp($phone);
-        }
+        // Clear any leftover legacy OTP
+        $this->clearOtp($phone);
 
         // Create session token
         $token    = $this->createSession($userId, $body['device_uuid'] ?? null, $body['fcm_token'] ?? null);
@@ -190,18 +248,102 @@ class AuthController
             Response::success(['message' => 'تم إرسال رمز التحقق إذا كان الرقم مسجلاً']);
         }
 
-        // Generate OTP
-        $otp       = $this->generateOtp();
-        $otpHash   = password_hash($otp, PASSWORD_BCRYPT);
-        $neverExpires = '2099-12-31 23:59:59';
-        $this->storeOtp($phone, $otpHash, $neverExpires, '');
+        // ---- New multi-provider OTP pipeline ----
+        require_once __DIR__ . '/../otp/OtpProviderInterface.php';
+        require_once __DIR__ . '/../otp/OtpTemplate.php';
+        require_once __DIR__ . '/../otp/OtpService.php';
+        $otpService = new OtpService();
 
-        $responseData = ['message' => 'تم إرسال رمز التحقق'];
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+        $rateError = $otpService->checkRateLimit($phone, $ip, 'login');
+        if ($rateError !== null) {
+            Response::success(['message' => 'تم إرسال رمز التحقق إذا كان الرقم مسجلاً']);
+        }
+
+        $cooldown = $otpService->resendCooldown($phone);
+        if ($cooldown > 0) {
+            Response::error("يمكنك إعادة الإرسال بعد {$cooldown} ثانية", 'OTP_COOLDOWN', 429);
+        }
+
+        $res = $otpService->createAndSend($phone, '', $ip, $_SERVER['HTTP_USER_AGENT'] ?? '');
+
+        $responseData = [
+            'message' => 'تم إرسال رمز التحقق',
+            'delivery_mode' => $res['delivery_mode'],
+            'cooldown' => $res['cooldown'],
+        ];
         if ($this->isDevelopmentOtp()) {
-            $responseData['otp_dev'] = $otp;
+            $responseData['otp_dev'] = $this->generateOtp();
         }
 
         Response::success($responseData, 'تم إرسال رمز التحقق');
+    }
+
+    // POST /api/v1/auth/resend-otp
+    public function resendOtp(): void
+    {
+        RateLimitMiddleware::checkByIp();
+        $this->assertOtpProviderAvailable();
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $phone = trim((string)($body['phone'] ?? ''));
+        $otpId = (int)($body['otp_id'] ?? 0);
+        if ($phone === '') {
+            Response::validationError(['phone' => 'رقم الهاتف مطلوب']);
+        }
+
+        require_once __DIR__ . '/../otp/OtpProviderInterface.php';
+        require_once __DIR__ . '/../otp/OtpTemplate.php';
+        require_once __DIR__ . '/../otp/OtpService.php';
+        $otpService = new OtpService();
+
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+        $rateError = $otpService->checkRateLimit($phone, $ip, 'resend');
+        if ($rateError !== null) {
+            Response::error($rateError, 'OTP_RATE_LIMITED', 429);
+        }
+
+        $res = $otpService->resend($otpId > 0 ? $otpId : $this->findActiveOtpId($phone), $ip, $_SERVER['HTTP_USER_AGENT'] ?? '');
+        if (!$res['success']) {
+            $code = $res['error_code'] ?? 'ERROR';
+            $out = ['success' => false, 'message' => $res['message'] ?? 'فشل إعادة الإرسال', 'error_code' => $code];
+            if (isset($res['cooldown'])) {
+                $out['cooldown'] = (int)$res['cooldown'];
+            }
+            http_response_code(in_array($code, ['OTP_COOLDOWN', 'OTP_RATE_LIMITED', 'OTP_MAX_RESENDS'], true) ? 429 : 400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode($out, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $responseData = [
+            'message' => 'تم إعادة إرسال رمز التحقق',
+            'otp_id' => $res['otp_id'] ?? null,
+            'delivery_mode' => $res['delivery_mode'],
+            'cooldown' => $res['cooldown'],
+        ];
+        if ($this->isDevelopmentOtp()) {
+            $responseData['otp_dev'] = $this->generateOtp();
+        }
+
+        Response::success($responseData, 'تم إعادة إرسال رمز التحقق');
+    }
+
+    /** Find the latest pending otp_verifications id for a phone (legacy-free lookup) */
+    private function findActiveOtpId(string $phone): int
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT id FROM otp_verifications
+                 WHERE phone_number = ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')
+                 ORDER BY id DESC LIMIT 1'
+            );
+            $stmt->execute([$phone]);
+            $row = $stmt->fetch();
+            return $row ? (int)$row['id'] : 0;
+        } catch (\Throwable $e) {
+            return 0;
+        }
     }
 
     // POST /api/v1/auth/logout
@@ -333,8 +475,18 @@ class AuthController
             return;
         }
 
-        // SMS delivery is intentionally fail-closed until a real provider is wired.
-        Response::error('مزود رسائل التحقق غير مهيأ بعد', 'OTP_PROVIDER_NOT_CONFIGURED', 503);
+        // Fail-closed: require at least one enabled provider in the new pipeline
+        try {
+            $stmt = $this->pdo->query("SELECT COUNT(*) c FROM otp_providers WHERE status = 'enabled' LIMIT 1");
+            $enabled = (int)($stmt->fetch()['c'] ?? 0);
+            if ($enabled > 0) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            // table may not exist in old schema — fall through to error
+        }
+
+        Response::error('مزود رسائل التحقق غير مهيأ بعد. يجب تفعيل مزود واحد على الأقل من لوحة التحكم', 'OTP_PROVIDER_NOT_CONFIGURED', 503);
     }
 
     private function storeOtp(string $phone, string $otpHash, string $expiresAt, string $name): void

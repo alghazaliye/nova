@@ -85,6 +85,15 @@ function navActive(string $page, string $current): string {
     <a href="services.php" class="<?= navActive('services', $currentPage) ?>">
       <span>🔧</span> إعدادات الخدمات
     </a>
+    <a href="otp-providers.php" class="<?= navActive('otp-providers', $currentPage) ?>">
+      <span>🔑</span> مزودو OTP
+    </a>
+    <a href="otp-registrations.php" class="<?= navActive('otp-registrations', $currentPage) ?>">
+      <span>📝</span> طلبات التسجيل
+    </a>
+    <a href="otp-settings.php" class="<?= navActive('otp-settings', $currentPage) ?>">
+      <span>⚙️</span> إعدادات OTP
+    </a>
     <a href="audit.php" class="<?= navActive('audit', $currentPage) ?>">
       <span>␷</span> سجل العمليات
     </a>

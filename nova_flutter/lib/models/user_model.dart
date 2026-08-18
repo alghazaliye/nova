@@ -73,6 +73,7 @@ class Conversation {
   final bool isGroup;
   final int? groupId;
   final int memberCount;
+  final Map<String, dynamic>? lastCall;
 
   Conversation({
     required this.id,
@@ -93,6 +94,7 @@ class Conversation {
     this.isGroup = false,
     this.groupId,
     this.memberCount = 0,
+    this.lastCall,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
@@ -120,6 +122,7 @@ class Conversation {
         isGroup: j['is_group'] == true || j['type'] == 'group',
         groupId: j['group_id'] != null ? int.tryParse(j['group_id'].toString()) : null,
         memberCount: j['member_count'] != null ? int.parse(j['member_count'].toString()) : 0,
+        lastCall: j['last_call'],
       );
 
   static String _memberPhone(Map<String, dynamic> j) {

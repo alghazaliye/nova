@@ -19,6 +19,7 @@ require_once __DIR__ . '/../controllers/StoryController.php';
 require_once __DIR__ . '/../controllers/CallController.php';
 require_once __DIR__ . '/../controllers/NotificationController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
+require_once __DIR__ . '/../controllers/AdminOtpController.php';
 require_once __DIR__ . '/../controllers/DeviceController.php';
 require_once __DIR__ . '/../controllers/GroupsController.php';
 
@@ -132,6 +133,9 @@ if ($uri === '/auth/login' && $method === 'POST') {
 }
 if ($uri === '/auth/verify-otp' && $method === 'POST') {
     (new AuthController())->verifyOtp();
+}
+if ($uri === '/auth/resend-otp' && $method === 'POST') {
+    (new AuthController())->resendOtp();
 }
 if ($uri === '/auth/logout' && $method === 'POST') {
     (new AuthController())->logout();
@@ -348,6 +352,53 @@ if (preg_match('#^/admin/subscriptions/(\d+)/cancel$#', $uri, $m) && $method ===
 if (preg_match('#^/admin/users/(\d+)/admin$#', $uri, $m) && $method === 'GET') {
     (new AdminController())->userAdmin((int)$m[1]);
 }
+// OTP Management Routes (Admin — JWT + RBAC protected)
+if ($uri === '/admin/otp/login' && $method === 'POST') {
+    (new AdminOtpController())->adminApiLogin();
+}
+if ($uri === '/admin/otp/providers' && $method === 'GET') {
+    (new AdminOtpController())->providersIndex();
+}
+if ($uri === '/admin/otp/providers' && $method === 'POST') {
+    (new AdminOtpController())->providersCreate();
+}
+if (preg_match('#^/admin/otp/providers/(\d+)$#', $uri, $m) && $method === 'GET') {
+    (new AdminOtpController())->providersShow((int)$m[1]);
+}
+if (preg_match('#^/admin/otp/providers/(\d+)$#', $uri, $m) && $method === 'PUT') {
+    (new AdminOtpController())->providersUpdate((int)$m[1]);
+}
+if (preg_match('#^/admin/otp/providers/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new AdminOtpController())->providersDelete((int)$m[1]);
+}
+if (preg_match('#^/admin/otp/providers/(\d+)/toggle$#', $uri, $m) && $method === 'POST') {
+    (new AdminOtpController())->providersToggle((int)$m[1]);
+}
+if (preg_match('#^/admin/otp/providers/(\d+)/test$#', $uri, $m) && $method === 'POST') {
+    (new AdminOtpController())->providersTest((int)$m[1]);
+}
+if ($uri === '/admin/otp/registrations' && $method === 'GET') {
+    (new AdminOtpController())->registrationsIndex();
+}
+if (preg_match('#^/admin/otp/registrations/(\d+)/code$#', $uri, $m) && $method === 'GET') {
+    (new AdminOtpController())->registrationsGetCode((int)$m[1]);
+}
+if (preg_match('#^/admin/otp/registrations/(\d+)/verify$#', $uri, $m) && $method === 'POST') {
+    (new AdminOtpController())->registrationsVerify((int)$m[1]);
+}
+if (preg_match('#^/admin/otp/registrations/(\d+)/cancel$#', $uri, $m) && $method === 'POST') {
+    (new AdminOtpController())->registrationsCancel((int)$m[1]);
+}
+if ($uri === '/admin/otp/stats' && $method === 'GET') {
+    (new AdminOtpController())->stats();
+}
+if ($uri === '/admin/otp/settings' && $method === 'GET') {
+    (new AdminOtpController())->settingsGet();
+}
+if ($uri === '/admin/otp/settings' && $method === 'POST') {
+    (new AdminOtpController())->settingsUpdate();
+}
+
 if ($uri === '/admin/devices' && $method === 'GET') {
     (new AdminController())->devicesIndex();
 }

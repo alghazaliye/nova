@@ -1,0 +1,16 @@
+nova_flutter
+AI_CONTEXT
+node_modules
+*.apk
+.git
+nova_flutter/.dart_tool
+nova_flutter/build
+nova_flutter/.flutter-plugins*
+nova_flutter/android/.gradle
+nova_flutter/android/app/build
+backend/php_errors.log
+backend/storage/rate-limit
+backend/storage/attachments
+backend/storage/avatars
+backend/storage/voices
+backend/uploads
