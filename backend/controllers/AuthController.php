@@ -19,12 +19,22 @@ class AuthController
     public function register(): void
     {
         RateLimitMiddleware::checkByIp();
+        // Server-side enforcement of registration methods
+        require_once __DIR__ . '/../helpers/AuthConfigService.php';
+        $cfg = new AuthConfigService();
+        $cfg->assertRegistrationMethod('phone');
+
         // OTP bypass from admin panel: otp_required = '0'
         if ($this->getAppSetting('otp_required') === '0') {
             $this->registerWithoutOtp();
             return;
         }
-        $this->assertOtpProviderAvailable();
+        // Phone OTP independently disabled → fail-closed unless dev test mode
+        if (!$cfg->isOtpEnabled('phone')) {
+            $this->assertOtpProviderAvailable();
+        } else {
+            $this->assertOtpProviderAvailable();
+        }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
@@ -233,6 +243,10 @@ class AuthController
             Response::validationError($v->errors());
         }
         $phone = trim($body['phone']);
+        // Server-side enforcement of login methods
+        require_once __DIR__ . '/../helpers/AuthConfigService.php';
+        $cfg = new AuthConfigService();
+        $cfg->assertLoginMethod('phone');
         // OTP bypass from admin panel: otp_required = '0'
         if ($this->getAppSetting('otp_required') === '0') {
             $this->loginOrCreateWithoutOtp($phone, null);

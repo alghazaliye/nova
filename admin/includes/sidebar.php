@@ -18,6 +18,7 @@ try {
 } catch (\Throwable $e) {}
 
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
+if (!isset($admin)) { $admin = ['name' => '', 'role_name' => '']; }
 function navActive(string $page, string $current): string {
     return $page === $current ? 'active' : '';
 }
@@ -84,6 +85,15 @@ function navActive(string $page, string $current): string {
     </a>
     <a href="services.php" class="<?= navActive('services', $currentPage) ?>">
       <span>🔧</span> إعدادات الخدمات
+    </a>
+    <a href="auth-settings.php" class="<?= navActive('auth-settings', $currentPage) ?>">
+      <span>🔐</span> المصادقة والتسجيل
+    </a>
+    <a href="email-providers.php" class="<?= navActive('email-providers', $currentPage) ?>">
+      <span>✉</span> مزودو البريد
+    </a>
+    <a href="email-registrations.php" class="<?= navActive('email-registrations', $currentPage) ?>">
+      <span>📧</span> طلبات تسجيل البريد
     </a>
     <a href="otp-providers.php" class="<?= navActive('otp-providers', $currentPage) ?>">
       <span>🔑</span> مزودو OTP

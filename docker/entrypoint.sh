@@ -26,6 +26,14 @@ if [ ! -d "$DATADIR/mysql" ]; then
         SEED="${SCHEMA%schema.sql}seed.sql"
         [ ! -f "$SEED" ] && [ -f /var/www/database/seed.sql ] && SEED=/var/www/database/seed.sql
         [ -f "$SEED" ] && mysql -h127.0.0.1 -P3306 -uroot "$MYSQL_DATABASE" < "$SEED" && echo "Seed imported"
+        MIGRATE=$(dirname "$SCHEMA")/migrate_otp.sql
+        if [ -f "$MIGRATE" ]; then
+            mysql -h127.0.0.1 -P3306 -uroot "$MYSQL_DATABASE" < "$MIGRATE" && echo "OTP migration imported"
+        fi
+        MIGRATE_AUTH=$(dirname "$SCHEMA")/migrate_auth.sql
+        if [ -f "$MIGRATE_AUTH" ]; then
+            mysql -h127.0.0.1 -P3306 -uroot "$MYSQL_DATABASE" < "$MIGRATE_AUTH" && echo "Auth migration imported"
+        fi
     fi
     kill $MYSQLPID 2>/dev/null
     mysqladmin -h127.0.0.1 -P3306 -uroot shutdown 2>/dev/null

@@ -25,6 +25,8 @@ COPY admin/ /var/www/admin/
 COPY web_app/ /var/www/html/public/web_app/
 COPY database/schema.sql /var/www/database/schema.sql
 COPY database/seed.sql /var/www/database/seed.sql
+COPY database/migrate_otp.sql /var/www/database/migrate_otp.sql
+COPY database/migrate_auth.sql /var/www/database/migrate_auth.sql
 
 # Permissions
 RUN chown -R www-data:www-data /var/www/html /var/www/admin \
@@ -35,6 +37,14 @@ RUN chown -R www-data:www-data /var/www/html /var/www/admin \
 # Startup script that boots MariaDB then Apache
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+ENV MYSQL_DATABASE=nova \
+    MYSQL_USER=nova_user \
+    MYSQL_PASSWORD=nova2026 \
+    JWT_SECRET=nova-docker-secret-key-2026 \
+    APP_ENV=production \
+    OTP_PROVIDER=test \
+    OTP_TEST_CODE=123456
 
 EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]

@@ -7,6 +7,14 @@
 
 declare(strict_types=1);
 
+// Production-safe global exception handler: convert uncaught exceptions to JSON 500
+if (PHP_SAPI !== 'cli') {
+    set_exception_handler(function (\Throwable $e): void {
+        if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
+        echo json_encode(['success'=>false,'message'=>'خطأ داخلي في الخادم','error_code'=>'INTERNAL_ERROR'],JSON_UNESCAPED_UNICODE);
+    });
+}
+
 // Bootstrap
 require_once __DIR__ . '/../config/app.php';
 
@@ -20,6 +28,8 @@ require_once __DIR__ . '/../controllers/CallController.php';
 require_once __DIR__ . '/../controllers/NotificationController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
 require_once __DIR__ . '/../controllers/AdminOtpController.php';
+require_once __DIR__ . '/../controllers/AdminAuthController.php';
+require_once __DIR__ . '/../controllers/EmailAuthController.php';
 require_once __DIR__ . '/../controllers/DeviceController.php';
 require_once __DIR__ . '/../controllers/GroupsController.php';
 
@@ -136,6 +146,29 @@ if ($uri === '/auth/verify-otp' && $method === 'POST') {
 }
 if ($uri === '/auth/resend-otp' && $method === 'POST') {
     (new AuthController())->resendOtp();
+}
+
+// Auth config + Email/Username auth routes
+if ($uri === '/auth/config' && $method === 'GET') {
+    (new EmailAuthController())->config();
+}
+if ($uri === '/auth/register-email' && $method === 'POST') {
+    (new EmailAuthController())->registerEmail();
+}
+if ($uri === '/auth/verify-email-otp' && $method === 'POST') {
+    (new EmailAuthController())->verifyEmailOtp();
+}
+if ($uri === '/auth/resend-email-otp' && $method === 'POST') {
+    (new EmailAuthController())->resendEmailOtp();
+}
+if ($uri === '/auth/login-email' && $method === 'POST') {
+    (new EmailAuthController())->loginEmail();
+}
+if ($uri === '/auth/login-username' && $method === 'POST') {
+    (new EmailAuthController())->loginUsername();
+}
+if ($uri === '/auth/set-password' && $method === 'POST') {
+    (new EmailAuthController())->setPassword();
 }
 if ($uri === '/auth/logout' && $method === 'POST') {
     (new AuthController())->logout();
@@ -397,6 +430,47 @@ if ($uri === '/admin/otp/settings' && $method === 'GET') {
 }
 if ($uri === '/admin/otp/settings' && $method === 'POST') {
     (new AdminOtpController())->settingsUpdate();
+}
+
+// Admin Auth Settings Routes (JWT + RBAC protected)
+if ($uri === '/admin/auth/settings' && $method === 'GET') {
+    (new AdminAuthController())->settingsGet();
+}
+if ($uri === '/admin/auth/settings' && $method === 'POST') {
+    (new AdminAuthController())->settingsUpdate();
+}
+if ($uri === '/admin/email-providers' && $method === 'GET') {
+    (new AdminAuthController())->providersIndex();
+}
+if ($uri === '/admin/email-providers' && $method === 'POST') {
+    (new AdminAuthController())->providersCreate();
+}
+if (preg_match('#^/admin/email-providers/(\d+)$#', $uri, $m) && $method === 'GET') {
+    (new AdminAuthController())->providersShow((int)$m[1]);
+}
+if (preg_match('#^/admin/email-providers/(\d+)$#', $uri, $m) && $method === 'PUT') {
+    (new AdminAuthController())->providersUpdate((int)$m[1]);
+}
+if (preg_match('#^/admin/email-providers/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new AdminAuthController())->providersDelete((int)$m[1]);
+}
+if (preg_match('#^/admin/email-providers/(\d+)/toggle$#', $uri, $m) && $method === 'POST') {
+    (new AdminAuthController())->providersToggle((int)$m[1]);
+}
+if (preg_match('#^/admin/email-providers/(\d+)/test$#', $uri, $m) && $method === 'POST') {
+    (new AdminAuthController())->providersTest((int)$m[1]);
+}
+if ($uri === '/admin/email-registrations' && $method === 'GET') {
+    (new AdminAuthController())->registrationsIndex();
+}
+if (preg_match('#^/admin/email-registrations/(\d+)/code$#', $uri, $m) && $method === 'GET') {
+    (new AdminAuthController())->registrationsGetCode((int)$m[1]);
+}
+if (preg_match('#^/admin/email-registrations/(\d+)/verify$#', $uri, $m) && $method === 'POST') {
+    (new AdminAuthController())->registrationsVerify((int)$m[1]);
+}
+if (preg_match('#^/admin/email-registrations/(\d+)/cancel$#', $uri, $m) && $method === 'POST') {
+    (new AdminAuthController())->registrationsCancel((int)$m[1]);
 }
 
 if ($uri === '/admin/devices' && $method === 'GET') {
