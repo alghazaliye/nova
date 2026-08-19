@@ -11,7 +11,6 @@ CREATE TABLE `admins` (
 ,  UNIQUE (`email`)
 ,  CONSTRAINT `fk_admins_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
 );
-CREATE TABLE sqlite_sequence(name,seq);
 CREATE TABLE `app_settings` (
   `id` integer  NOT NULL PRIMARY KEY AUTOINCREMENT
 ,  `setting_key` varchar(100) NOT NULL
