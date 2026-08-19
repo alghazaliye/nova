@@ -24,6 +24,8 @@ COPY web_app/ /var/www/html/web_app/
 COPY database/schema.sqlite.sql /var/www/html/database/schema.sqlite.sql
 COPY database/schema.sql /var/www/html/database/schema.sql
 COPY database/seed.sql /var/www/html/database/seed.sql
+COPY database/seed_production.sql /var/www/html/database/seed_production.sql
+COPY database/seed_providers.php /var/www/html/database/seed_providers.php
 COPY database/migrate_otp.sql /var/www/html/database/migrate_otp.sql
 COPY database/migrate_auth.sql /var/www/html/database/migrate_auth.sql
 
@@ -54,6 +56,12 @@ RUN { echo '#!/bin/sh'; \
       echo '  sqlite3 "$DB_PATH" < /var/www/html/database/schema.sqlite.sql'; \
       echo '  chown www-data:www-data "$DB_PATH"'; \
       echo '  [ -f /var/www/html/database/seed.sql ] && (sqlite3 "$DB_PATH" < /var/www/html/database/seed.sql 2>/dev/null || true);'; \
+      echo 'fi'; \
+      echo 'if [ -f /var/www/html/database/seed_production.sql ]; then'; \
+      echo '  sqlite3 "$DB_PATH" < /var/www/html/database/seed_production.sql 2>/dev/null || true'; \
+      echo 'fi'; \
+      echo 'if [ -f /var/www/html/database/seed_providers.php ]; then'; \
+      echo '  php /var/www/html/database/seed_providers.php || true'; \
       echo 'fi'; \
       echo 'PORT="${PORT:-8080}"'; \
       echo 'sed -i "s/^Listen .*/Listen ${PORT}/" /etc/apache2/ports.conf'; \
