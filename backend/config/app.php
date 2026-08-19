@@ -62,15 +62,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
  */
 function nova_get_auth_header(): string
 {
-    $value = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
-    // Proxy-proof fallback: some hosting proxies (e.g. Render edge) strip the
-    // Authorization header entirely. Pages can send X-Admin-Auth instead.
-    if ($value === '') {
-        $alt = $_SERVER['HTTP_X_ADMIN_AUTH'] ?? '';
-        if ($alt !== '') {
-            $value = 'Bearer ' . $alt;
+    // Collect candidate values from $_SERVER (Apache rewrites may prefix
+    // variables with REDIRECT_, and header names are normalized to HTTP_*).
+    $candidates = [];
+    foreach ($_SERVER as $name => $val) {
+        if (!is_string($val) || $val === '') {
+            continue;
+        }
+        $lc = strtolower($name);
+        if ($lc === 'http_authorization' || $lc === 'redirect_http_authorization') {
+            $candidates[] = $val;
+        } elseif ($lc === 'http_x_admin_auth' || $lc === 'redirect_http_x_admin_auth') {
+            $candidates[] = 'Bearer ' . $val;
         }
     }
+    $value = $candidates[0] ?? '';
     if ($value === '' && function_exists('apache_request_headers')) {
         $headers = apache_request_headers();
         foreach ($headers as $name => $val) {

@@ -151,6 +151,20 @@ if ($uri === '/_diag' && $method === 'GET') {
     }
     header('Content-Type: application/json; charset=utf-8');
     $diagOut = [];
+    // TEMPORARY: inspect incoming auth headers to debug the 401 issue
+    $diagOut['incoming_auth_headers'] = [];
+    foreach ($_SERVER as $k => $v) {
+        if (is_string($v) && stripos($k, 'AUTH') !== false) {
+            $diagOut['incoming_auth_headers'][$k] = $v;
+        }
+    }
+    if (function_exists('getallheaders')) {
+        foreach (getallheaders() as $n => $v) {
+            if (stripos($n, 'auth') !== false || stripos($n, 'authorization') !== false) {
+                $diagOut['incoming_auth_headers']['header:' . $n] = $v;
+            }
+        }
+    }
     $diagOut['env'] = [
         'DB_TYPE'             => (string)getenv('DB_TYPE'),
         'APP_ENV'             => (string)getenv('APP_ENV'),
