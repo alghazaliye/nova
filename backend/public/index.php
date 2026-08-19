@@ -189,8 +189,26 @@ if ($uri === '/_diag' && $method === 'GET') {
     } catch (Throwable $e) {
         $diagOut['delivery_logs_error'] = substr($e->getMessage(), 0, 150);
     }
+    // Direct SMTP test (shows the raw SMTP failure reason)
+    $svc = new EmailOtpService();
     try {
-        $diagOut['live_send_test'] = (new EmailOtpService())->createAndSend('mahumad7733@gmail.com', 'diag', 'test', '127.0.0.1', 'mahumad7733@gmail.com');
+        $row = $dPdo->query('SELECT * FROM email_providers WHERE id=1 AND status=\'enabled\' LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $cfg = [
+                'type' => 'smtp', 'host' => $row['host'], 'port' => (int)$row['port'],
+                'encryption' => $row['encryption'], 'username' => $row['username'],
+                'password' => OtpEncryption::decrypt((string)$row['password']),
+                'from_email' => $row['from_email'], 'from_name' => $row['from_name'],
+            ];
+            $diagOut['direct_smtp'] = $svc->sendSmtp($cfg, 'mahumad7733@gmail.com', '[NOVA] اختبار تشخيصي', 'هذا اختبار SMTP من لوحة التشخيص. توقيت الإرسال: ' . date('Y-m-d H:i:s'));
+        } else {
+            $diagOut['direct_smtp'] = ['success' => false, 'message' => 'لا يوجد مزود enabled id=1'];
+        }
+    } catch (Throwable $e) {
+        $diagOut['direct_smtp'] = ['success' => false, 'message' => 'ERROR: ' . substr($e->getMessage(), 0, 150)];
+    }
+    try {
+        $diagOut['live_send_test'] = $svc->createAndSend('mahumad7733@gmail.com', 'diag', 'test', '127.0.0.1', 'mahumad7733@gmail.com');
     } catch (Throwable $e) {
         $diagOut['live_send_test'] = ['error' => substr($e->getMessage(), 0, 200)];
     }
