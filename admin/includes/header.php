@@ -164,6 +164,75 @@
     .alert-success { background: #dcfae6; color: #087443; border: 1px solid #08744333; }
     .alert-danger { background: #fee4e2; color: #b42318; border: 1px solid #b4231833; }
 
+    /* ============================================================
+       Dark mode overrides: pages use hardcoded inline colors.
+       Force them to dark-safe values when [data-theme=dark].
+       ============================================================ */
+    [data-theme=dark] [style*="color: #333"],
+    [data-theme=dark] [style*="color:#333"] { color: var(--text) !important; }
+    [data-theme=dark] [style*="color: #666"],
+    [data-theme=dark] [style*="color:#666"] { color: var(--muted) !important; }
+    [data-theme=dark] [style*="color: #8b8fa8"],
+    [data-theme=dark] [style*="color:#8b8fa8"] { color: var(--muted) !important; }
+    [data-theme=dark] [style*="color: #0066cc"],
+    [data-theme=dark] [style*="color:#0066cc"] { color: #7ea6ff !important; }
+    [data-theme=dark] [style*="color: #667eea"],
+    [data-theme=dark] [style*="color:#667eea"] { color: #8f96ff !important; }
+    [data-theme=dark] [style*="color: #28a745"],
+    [data-theme=dark] [style*="color:#28a745"] { color: #3ddc84 !important; }
+    [data-theme=dark] [style*="color: #087443"],
+    [data-theme=dark] [style*="color:#087443"] { color: #3ddc84 !important; }
+    [data-theme=dark] [style*="color: #155724"],
+    [data-theme=dark] [style*="color:#155724"] { color: #3ddc84 !important; }
+    [data-theme=dark] [style*="color: #0c5460"],
+    [data-theme=dark] [style*="color:#0c5460"] { color: #53d8fb !important; }
+    [data-theme=dark] [style*="color: #856404"],
+    [data-theme=dark] [style*="color:#856404"] { color: #ffd33b !important; }
+    [data-theme=dark] [style*="color: #721c24"],
+    [data-theme=dark] [style*="color:#721c24"] { color: #ff7a6e !important; }
+    [data-theme=dark] [style*="color: #b42318"],
+    [data-theme=dark] [style*="color:#b42318"] { color: #ff7a6e !important; }
+    [data-theme=dark] [style*="color: #f5576c"],
+    [data-theme=dark] [style*="color:#f5576c"] { color: #ff8a9b !important; }
+    [data-theme=dark] [style*="color: #ff4757"],
+    [data-theme=dark] [style*="color:#ff4757"] { color: #ff6b78 !important; }
+    [data-theme=dark] [style*="color: #f0f0f5"],
+    [data-theme=dark] [style*="color:#f0f0f5"] { color: var(--text) !important; }
+
+    [data-theme=dark] [style*="background: #f8f9fa"],
+    [data-theme=dark] [style*="background:#f8f9fa"] { background: var(--surface2) !important; }
+    [data-theme=dark] [style*="background: #e7f3ff"],
+    [data-theme=dark] [style*="background:#e7f3ff"] { background: #1d3355 !important; }
+    [data-theme=dark] [style*="background: #d4edda"],
+    [data-theme=dark] [style*="background:#d4edda"] { background: #13402a !important; }
+    [data-theme=dark] [style*="background: #fff3cd"],
+    [data-theme=dark] [style*="background:#fff3cd"] { background: #4a3c10 !important; }
+    [data-theme=dark] [style*="background: #f8d7da"],
+    [data-theme=dark] [style*="background:#f8d7da"] { background: #4a1c20 !important; }
+    [data-theme=dark] [style*="background: #fee4e2"],
+    [data-theme=dark] [style*="background:#fee4e2"] { background: #4a1c20 !important; }
+    [data-theme=dark] [style*="background: #dcfae6"],
+    [data-theme=dark] [style*="background:#dcfae6"] { background: #13402a !important; }
+    [data-theme=dark] [style*="background: #cfe2ff"],
+    [data-theme=dark] [style*="background:#cfe2ff"] { background: #1d3355 !important; }
+    [data-theme=dark] [style*="background: #fff"] { background: var(--surface) !important; }
+    [data-theme=dark] [style*="background:#fff"] { background: var(--surface) !important; }
+    [data-theme=dark] [style*="background: white"] { background: var(--surface) !important; }
+    [data-theme=dark] .alert { background: var(--surface2) !important; }
+
+    [data-theme=dark] table,
+    [data-theme=dark] th,
+    [data-theme=dark] td { border-color: var(--line) !important; }
+    [data-theme=dark] tr, [data-theme=dark] tbody tr { background: transparent !important; }
+    [data-theme=dark] tbody tr:nth-child(odd) { background: rgba(255,255,255,0.03) !important; }
+
+    [data-theme=dark] .btn.danger { background: #4a1c20 !important; }
+    [data-theme=dark] .avatar { background: linear-gradient(135deg, #443d8f, #6b4fc9) !important; color: #fff !important; }
+    [data-theme=dark] .icon { background: var(--surface2) !important; }
+    [data-theme=dark] input, [data-theme=dark] select, [data-theme=dark] textarea { background: var(--surface2) !important; color: var(--text) !important; border-color: var(--line) !important; }
+    [data-theme=dark] ::placeholder { color: var(--muted); opacity: 1; }
+    [data-theme=dark] .card { background: var(--surface) !important; }
+
     .form-group { margin-bottom: 16px; }
     .form-label { display: block; font-size: 12px; font-weight: 800; margin-bottom: 6px; color: var(--muted); }
     .form-control {
