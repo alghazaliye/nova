@@ -14,7 +14,18 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="/">
+  <base href="/" id="dynamic-base">
+  <script>
+    // Dynamic base href: works whether served from root or a sub-path (e.g. /web_app/).
+    (function () {
+      try {
+        var p = window.location.pathname;
+        var base = p.lastIndexOf('/') > 0 ? p.substring(0, p.lastIndexOf('/') + 1) : '/';
+        var b = document.getElementById('dynamic-base');
+        if (b && b.getAttribute('href') !== base) b.setAttribute('href', base);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -134,6 +145,7 @@
     }
   </script>
 
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="flutter_bootstrap.js"></script>
+  <!-- base href set dynamically above, before flutter_bootstrap.js loads assets -->
 </body>
 </html>
