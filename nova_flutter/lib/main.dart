@@ -131,8 +131,29 @@ class _AppRouterState extends State<AppRouter> {
     // قفزة تلقائية إلى OTP عند وجود ?phone= في رابط الويب
     if (kIsWeb) {
       final uri = Uri.parse(Uri.base.toString());
-      final p = uri.queryParameters['phone'];
-      final otp = uri.queryParameters['otp'];
+      final params = uri.queryParameters;
+      // دعم ?token=<jwt> لاختبار الدخول المباشر عبر الرابط (ويب فقط)
+      final directToken = params['token'];
+      if (directToken != null && directToken.trim().length > 20) {
+        await AuthProvider.saveToken(directToken.trim());
+        ApiService.userId = int.tryParse(params['user_id'] ?? '') ?? 0;
+        if (mounted) {
+          // فتح مباشر لمحادثة معينة عبر &chat=<id> لأغراض الاختبار
+          final chatId = params['chat'];
+          if (chatId != null) {
+            _target = _ChatByIdLoader(id: int.tryParse(chatId) ?? 0);
+            _onAuthChanged();
+          } else {
+            _target = const ChatsScreen();
+            _onAuthChanged();
+          }
+          _checked = true;
+          setState(() {});
+        }
+        return;
+      }
+      final p = params['phone'];
+      final otp = params['otp'];
       if (p != null && p.length >= 7 && otp != null && otp.length >= 4) {
         final chatId = uri.queryParameters['chat'];
         final cid = chatId != null ? int.tryParse(chatId) : null;
@@ -170,6 +191,7 @@ class _AppRouterState extends State<AppRouter> {
         target = const ChatsScreen();
       }
       _onAuthChanged();
+      if (mounted) setState(() {}); // ضمان بناء الهدف المحدد في مسار الويب
     } else {
       target = const PhoneScreen();
     }

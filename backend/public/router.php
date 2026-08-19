@@ -176,11 +176,6 @@ foreach ($candidates as $candidate) {
                 ];
                 header('Content-Type: ' . ($mimeTypes[$origExt] ?? 'application/octet-stream'));
                 header('Vary: Accept-Encoding');
-                // Required for WASM multi-threading (SharedArrayBuffer)
-                if (strpos($uri, '/web_app/') === 0) {
-                    header('Cross-Origin-Opener-Policy: same-origin');
-                    header('Cross-Origin-Embedder-Policy: require-corp');
-                }
                 header('Content-Length: ' . filesize($compressed));
                 readfile($compressed);
                 return true;
@@ -222,11 +217,6 @@ foreach ($candidates as $candidate) {
             header('Access-Control-Allow-Headers: Range');
             header('Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges');
             header('Accept-Ranges: bytes');
-            // Required for WASM multi-threading (SharedArrayBuffer)
-            if (strpos($uri, '/web_app/') === 0) {
-                header('Cross-Origin-Opener-Policy: same-origin');
-                header('Cross-Origin-Embedder-Policy: require-corp');
-            }
             $size = filesize($resolved);
             header('Content-Length: ' . $size);
             if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d+)-(\d*)/', $_SERVER['HTTP_RANGE'], $rm)) {

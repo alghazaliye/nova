@@ -459,3 +459,43 @@ Environment: local PHP server pid 75610 port 8080 running; Docker nova514 on 808
 - اختبار عملي: تسجيل رقم جديد +9665088887777 → ظهر في الصفحة id=43 فورًا مع 5 طلبات + الإحصاءات صحيحة
 - المتبقي: فحص هل نفس الخلل (API متغير/بُنية استجابة) في صفحات admin الأخرى — فحصت: otp-providers/otp-settings/auth-settings/email-providers/email-registrations كلها تملك `const API` ✅. فقط otp-registrations كانت ناقصة.
 - المتبقي: git commit + push (الإصلاح).
+
+## تقرير المستخدم 2 (Aug 19): خيارات الدخول بالبريد لا تظهر في شاشة الدخول
+
+### التشخيص:
+- API /auth/config يرجع صحيح (phone/email/username login كلها true) — backend سليم.
+- root cause: رابط الويب العام (8080-...web_app) يُخدم من /home/ubuntu/nova_new/web_app مبني في 22:05 (قبل تعديل phone_screen الديناميكي ~23:40). main.dart.js القديم لا يحتوي fetchAuthConfig/phoneLogin.
+- يجب: إعادة بناء web wasm + نشره + إعادة expose.
+
+### إصلاح web build (جارٍ):
+- problem 1: sqlite3_flutter_libs (sqlite3 dart package) يستورد dart:ffi غير متاح في wasm → حُذف من pubspec.yaml (NativeDatabase على الموبايل لا يحتاجه؛ bundled binaries فقط).
+- problem 2: WasmDatabase.open لا يملك sqlite3Wasm/driftRuntime params في drift 2.21.0 (الاسم الصحيح: databaseName + databasePath؟) — يجب فحص signature الصحيحة في .pub-cache للـ drift 2.21.0.
+- الحل المؤقت المستخدم: نسختان من provider: local_nova_db_provider_web.dart (WasmDatabase) + local_nova_db_provider_mobile.dart (NativeDatabase)، والـstub الرئيسي conditional export.
+- env Flutter web build: export PATH=/home/ubuntu/flutter/bin:$PATH; flutter build web --release --wasm --no-tree-shake-icons
+- بعدها: نسخ build/web → /home/ubuntu/nova_new/web_app/ + gzip + base href + flutter.js fix (كما في بناء سابق) + إعادة expose.
+
+### ملاحظات APK:
+- APK v5.3.0 في /home/ubuntu/nova_new/nova_flutter/build/app/outputs/flutter-apk/app-release.apk (مرفوع في Release v5.3.0).
+- APK يحتوي الشاشة الديناميكية ✅. المشكلة فقط في رابط الويب القديم.
+
+## حالة web wasm boot (Aug 19):
+- web rebuilt بنجاح (--release --wasm، حذف sqlite3_flutter_libs من pubspec — NativeDatabase لا يحتاجه)، ونُشر إلى /home/ubuntu/nova_new/web_app/ مع sqlite3.wasm (من drift extension/devtools/build) + drift_worker.js + base href=/web_app/ + gzip.
+- router.php يخدم الملفات مع COOP/COEP + gzip ✅ (200 لكل: /web_app/، sqlite3.wasm، drift_worker.js، main.dart.wasm/js).
+- problem: في المتصفح يظهر "تعذّر تحميل التطبيق" بعد تحميل main.dart.js/mjs وskwasm. resources: main.dart.mjs=200، main.dart.js=200. السبب المحتمل: COEP require-corp يجعل main.dart.wasm يُحمَّل بدون cross-origin + main.dart.mjs module load. أو manifest.json 404 عادي. أو WASM يحتاج crossOriginIsolated.
+- ملاحظة: flutter_bootstrap في wasm mode يحمل main.dart.mjs فقط (JS entry loader). ربما فشل bootstrap في initEngine. يجب فحص console error بعد الضغط على إعادة المحاولة أو فحص network: main.dart.wasm هل حمّل؟ لم يظهر في performance entries! (entries آخر 6 ملفات لا تشمل main.dart.wasm). → main.dart.wasm لم يُحمَّل → bootstrap فشل قبله أو fetch للـwasm فشل بسبب COEP/CORP headers.
+- الحل التالي: فحص headers للـwasm + console بعد retry، أو تجربة بدون COEP headers للملفات الـstatic (COOP/COEP مطلوبة فقط لـSharedArrayBuffer في wasm threaded skwasm).
+
+## تشخيص فشل تحميل wasm (Aug 19 00:05):
+الصفحة تعمل عبر expose (https://8080-i0y331w4apy035oayp9qf-247b94fb.us3.manus.computer). flutter_bootstrap.js جديد (من Flutter 3.47.0 wasm) مع _flutter.buildConfig = {builds: [dart2wasm/skwasm, dart2js/canvaskit]}، وmain.dart.mjs حمّل (200). لكن main.dart.wasm لم تُحمَّل أبدًا (لا تظهر في performance entries رغم مرور دقيقتين). main.dart.js لم تُحمَّل في session الأخيرة (كانت قبل ذلك =200). لا أخطاء console ظاهرة.
+
+الفرضية: skwasmSingleThreaded يحتاج fetch main.dart.wasm عبر instantiateWasm callback من flutter.js loader (يُستدعى من _flutter.loader.load() في inline script نهاية index.html). هذا load() ينفَّذ في inline script أسفل الصفحة — يجب أن يعمل. لكن loader قد يُعيد محاولة wasm ثم يسقط لـdart2js — لكن dart2js لم يُحمَّل أيضًا! يعني loader علِق بعد اختيار skwasm.
+
+السبب المرجح: skwasm Single-threaded loader يستخدم main.dart.wasm عبر instantiateWasm لكن fetch من مسار base href صحيح... الأهم: قد يكون skwasm.wasm=200/transferSize=0 يعني CORS/encoding issue. أو loader يختار skwasm لكن instantiateWasm callback لا يصل أبدًا لأن bootstrap لم يعرّف onInstantiateWasm.
+
+الحل العملي المؤكد: إجبار canvaskit/dart2js فقط بحذف build dart2wasm من buildConfig (في index.html inline) — dart2js يعمل دائمًا في كل المتصفحات، وبطؤه مقبول. أو rebuild بدون --wasm (dart2js فقط): flutter build web --release.
+
+## قرار (Aug 19 00:06): 
+تعديل buildConfig يدويًا + load() ثاني لم يعمل أيضًا (تعذّر تحميل التطبيق). loader في Flutter 3.47 لا يدعم load متكرر بسهولة. الحل المضمون: إعادة بناء بـ dart2js فقط (بدون --wasm):
+flutter build web --release → نسخ إلى web_app + إعادة base href=/web_app/ + gzip.
+ملاحظة: COEP تمت إزالته من router.php (2 مواقع) لكن المشكلة لا علاقة لها بها — wasm loader لم يكن يحمل main.dart.wasm أصلًا في متصفح sandbox (ربما proxy يمنع wasm fetch أو WasmGC). dart2js يحل المشكلة نهائيًا.
+بعد البناء: git commit + push + رفع web_app.
