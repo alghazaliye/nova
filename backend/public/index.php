@@ -10,8 +10,11 @@ declare(strict_types=1);
 // Production-safe global exception handler: convert uncaught exceptions to JSON 500
 if (PHP_SAPI !== 'cli') {
     set_exception_handler(function (\Throwable $e): void {
+        error_log('[nova error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
         if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
-        echo json_encode(['success'=>false,'message'=>'خطأ داخلي في الخادم','error_code'=>'INTERNAL_ERROR'],JSON_UNESCAPED_UNICODE);
+        $env = $_ENV['APP_ENV'] ?? 'production';
+        $msg = ($env === 'development') ? $e->getMessage() : 'خطأ داخلي في الخادم';
+        echo json_encode(['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'],JSON_UNESCAPED_UNICODE);
     });
 }
 
