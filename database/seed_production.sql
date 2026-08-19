@@ -27,7 +27,26 @@ INSERT OR IGNORE INTO permissions (id, name, description) VALUES
   (13, 'settings.manage', 'إدارة الإعدادات'),
   (14, 'audit.view',      'عرض سجل العمليات'),
   (15, 'subscriptions.manage', 'إدارة الاشتراكات المميزة'),
-  (16, 'users.manage',    'إدارة المستخدمين والصلاحيات');
+  (16, 'users.manage',    'إدارة المستخدمين والصلاحيات'),
+  (17, 'auth.settings.view',   'عرض إعدادات المصادقة'),
+  (18, 'auth.settings.update', 'تعديل إعدادات المصادقة'),
+  (19, 'email.providers.view',   'عرض مزودي البريد'),
+  (20, 'email.providers.create', 'إنشاء مزود بريد'),
+  (21, 'email.providers.update', 'تعديل مزود بريد'),
+  (22, 'email.providers.delete', 'حذف مزود بريد'),
+  (23, 'email.providers.test',   'اختبار مزود بريد'),
+  (24, 'otp.settings',       'إدارة إعدادات OTP'),
+  (25, 'otp.providers.view',   'عرض مزودي OTP'),
+  (26, 'otp.providers.create', 'إنشاء مزود OTP'),
+  (27, 'otp.providers.update', 'تعديل مزود OTP'),
+  (28, 'otp.providers.delete', 'حذف مزود OTP'),
+  (29, 'otp.providers.enable', 'تفعيل مزود OTP'),
+  (30, 'otp.providers.test',   'اختبار مزود OTP'),
+  (31, 'otp.stats',            'عرض إحصائيات OTP'),
+  (32, 'registration.view',       'عرض طلبات التسجيل'),
+  (33, 'registration.verify',     'تأكيد طلب التسجيل'),
+  (34, 'registration.cancel',     'إلغاء طلب التسجيل'),
+  (35, 'registration.view_otp',   'عرض رموز OTP للتسجيل');
 
 -- Role permissions (super_admin gets all; moderator/support limited)
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
