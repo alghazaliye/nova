@@ -17,6 +17,41 @@ class EmailProviderManager
     public function __construct()
     {
         $this->pdo = Database::getInstance();
+        self::ensureSchema($this->pdo);
+    }
+
+    /**
+     * Auto-migrate: ensure email_providers has the columns required by this manager
+     * (needed when the live SQLite DB was created from an older schema).
+     */
+    private static function ensureSchema(PDO $pdo): void
+    {
+        static $done = false;
+        if ($done) return;
+        $done = true;
+        try {
+            $cols = [];
+            foreach ($pdo->query('PRAGMA table_info(email_providers)')->fetchAll() as $r) {
+                $cols[$r['name']] = true;
+            }
+            $missing = [
+                'encryption' => "ALTER TABLE email_providers ADD COLUMN encryption text NOT NULL DEFAULT 'tls'",
+                'api_base_url' => 'ALTER TABLE email_providers ADD COLUMN api_base_url varchar(300) DEFAULT NULL',
+                'api_key' => 'ALTER TABLE email_providers ADD COLUMN api_key text DEFAULT NULL',
+                'extra_config' => 'ALTER TABLE email_providers ADD COLUMN extra_config text DEFAULT NULL',
+            ];
+            foreach ($missing as $col => $sql) {
+                if (!isset($cols[$col])) {
+                    try {
+                        $pdo->exec($sql);
+                    } catch (Throwable $e) {
+                        // ignore if column now exists
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // non-fatal: schema check best-effort
+        }
     }
 
     private function encryptField(string $value): string
@@ -67,7 +102,7 @@ class EmailProviderManager
             (int)($data['is_fallback'] ?? 0),
             trim((string)($data['host'] ?? '')) ?: null,
             isset($data['port']) && $data['port'] !== '' ? (int)$data['port'] : null,
-            in_array((string)($data['encryption'] ?? 'tls'), ['none', 'ssl', 'tls'], true) ? $data['encryption'] : 'tls',
+            (($e = $data['encryption'] ?? null) !== null && in_array((string)$e, ['none', 'ssl', 'tls'], true)) ? $e : (($data['type'] ?? 'smtp') === 'http_rest' ? 'none' : 'tls'),
             trim((string)($data['username'] ?? '')) ?: null,
             $this->encryptField((string)($data['password'] ?? '')),
             trim((string)($data['from_email'] ?? '')) ?: null,
