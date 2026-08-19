@@ -5,6 +5,10 @@
  *
  * Handled adaptations (SQLite only):
  *   NOW()                        -> datetime('now','localtime')
+ *   CURDATE()                    -> date('now','localtime')
+ *   DATE_SUB(NOW(), INTERVAL n DAY) -> datetime('now','localtime','-n days')
+ *   NOW() - INTERVAL n HOUR        -> datetime('now','localtime','-n hours')
+ *   INTERVAL n DAY/HOUR            -> handled within DATE_SUB expressions
  *   INSERT IGNORE INTO ...       -> INSERT OR IGNORE INTO ...
  *   INSERT ... ON DUPLICATE KEY UPDATE col=val,...
  *     -> INSERT INTO ... VALUES (...) ON CONFLICT DO UPDATE SET col=val,...
@@ -47,15 +51,34 @@ class MysqlCompatPdo extends PDO
         }
         $needsWork = stripos($sql, 'ON DUPLICATE') !== false
             || stripos($sql, 'INSERT IGNORE') !== false
-            || stripos($sql, 'NOW()') !== false;
+            || stripos($sql, 'NOW()') !== false
+            || stripos($sql, 'CURDATE()') !== false
+            || stripos($sql, 'INTERVAL') !== false;
         if (!$needsWork) {
             return $sql;
         }
 
-        // 1) NOW() -> SQLite datetime
+        // 1) DATE_SUB(NOW(), INTERVAL n DAY/HOUR) -> SQLite datetime modifier
+        $sql = preg_replace_callback(
+            '/\bDATE_SUB\(\s*NOW\(\)\s*,\s*INTERVAL\s+(\d+)\s+(DAY|HOUR|MINUTE|SECOND)\s*\)/i',
+            static fn ($m) => "datetime('now','localtime','" . '-' . $m[1] . ' ' . strtolower($m[2]) . "s')",
+            $sql
+        );
+
+        // 2) NOW() - INTERVAL n HOUR/DAY -> SQLite datetime modifier
+        $sql = preg_replace_callback(
+            "/\bNOW\(\)\s*-\s*INTERVAL\s+(\d+)\s+(HOUR|DAY|MINUTE|SECOND)\b/i",
+            static fn ($m) => "datetime('now','localtime','" . '-' . $m[1] . ' ' . strtolower($m[2]) . "s')",
+            $sql
+        );
+
+        // 3) NOW() -> SQLite datetime
         $sql = preg_replace('/\bNOW\(\)/i', "datetime('now','localtime')", $sql);
 
-        // 2) INSERT IGNORE -> INSERT OR IGNORE
+        // 4) CURDATE() -> SQLite date
+        $sql = preg_replace('/\bCURDATE\(\)/i', "date('now','localtime')", $sql);
+
+        // 5) INSERT IGNORE -> INSERT OR IGNORE
         $sql = str_ireplace('INSERT IGNORE INTO', 'INSERT OR IGNORE INTO', $sql);
 
         // 3) INSERT ... ON DUPLICATE KEY UPDATE ...
@@ -66,7 +89,7 @@ class MysqlCompatPdo extends PDO
             $sql,
             $m
         )) {
-            $insert = $m[1];
+            $insert = $m[1]; // (upsert block unchanged)
             $updates = trim($m[2]);
 
             // Rewrite VALUES(col) references to SQLite's excluded.col
