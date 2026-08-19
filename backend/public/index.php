@@ -166,7 +166,7 @@ if ($uri === '/_diag' && $method === 'GET') {
     foreach ($dPdo->query('SELECT id, name, type, status, priority, host, port, encryption, username, from_email, length(password) AS pw_len FROM email_providers ORDER BY id') as $r) {
         $diagOut['providers'][] = ['id' => (int)$r['id'], 'name' => $r['name'], 'type' => $r['type'], 'status' => $r['status'], 'priority' => (int)$r['priority'], 'host' => $r['host'], 'port' => $r['port'] ? (int)$r['port'] : null, 'encryption' => $r['encryption'], 'username' => $r['username'], 'from_email' => $r['from_email'], 'pw_len' => $r['pw_len'] ? (int)$r['pw_len'] : null];
     }
-    $st2 = $dPdo->prepare('SELECT password FROM email_providers WHERE id=2');
+    $st2 = $dPdo->prepare('SELECT password FROM email_providers WHERE id=1');
     $st2->execute();
     $encPwd = (string)$st2->fetchColumn();
     $decPwd = '';
