@@ -10,18 +10,24 @@ if ($q !== '') {
     $where = 'WHERE u.name LIKE ? OR me.old_body LIKE ? OR me.new_body LIKE ?';
     $params = ["%$q%", "%$q%", "%$q%"];
 }
-$stmt = $pdo->prepare(
-    "SELECT me.id, me.message_id, me.conversation_id, me.user_id,
-            me.old_body, me.new_body, me.edited_at,
-            u.name AS editor_name, u.phone AS editor_phone,
-            c.title AS conv_title, c.type AS conv_type
-     FROM message_edits me
-     JOIN users u ON u.id = me.user_id
-     LEFT JOIN conversations c ON c.id = me.conversation_id
-     $where ORDER BY me.edited_at DESC LIMIT 200"
-);
-$stmt->execute($params);
-$rows = $stmt->fetchAll();
+// The message_edits table is not part of the deployed schema yet:
+// show an empty state instead of a fatal error when visiting this page.
+$tableExists = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_edits'")->fetchColumn();
+$rows = [];
+if ($tableExists) {
+    $stmt = $pdo->prepare(
+        "SELECT me.id, me.message_id, me.conversation_id, me.user_id,
+                me.old_body, me.new_body, me.edited_at,
+                u.name AS editor_name, u.phone AS editor_phone,
+                c.title AS conv_title, c.type AS conv_type
+         FROM message_edits me
+         JOIN users u ON u.id = me.user_id
+         LEFT JOIN conversations c ON c.id = me.conversation_id
+         $where ORDER BY me.edited_at DESC LIMIT 200"
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+}
 
 include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.php';
 ?>

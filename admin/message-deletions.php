@@ -10,18 +10,24 @@ if ($q !== '') {
     $where = 'WHERE u.name LIKE ? OR md.original_body LIKE ?';
     $params = ["%$q%", "%$q%"];
 }
-$stmt = $pdo->prepare(
-    "SELECT md.id, md.message_id, md.conversation_id, md.deleted_by,
-            md.original_body, md.original_type, md.scope_type, md.deleted_at,
-            u.name AS deleter_name, u.phone AS deleter_phone,
-            c.title AS conv_title, c.type AS conv_type
-     FROM message_deletions md
-     JOIN users u ON u.id = md.deleted_by
-     LEFT JOIN conversations c ON c.id = md.conversation_id
-     $where ORDER BY md.deleted_at DESC LIMIT 200"
-);
-$stmt->execute($params);
-$rows = $stmt->fetchAll();
+// The message_deletions table is not part of the deployed schema yet:
+// show an empty state instead of a fatal error when visiting this page.
+$tableExists = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_deletions'")->fetchColumn();
+$rows = [];
+if ($tableExists) {
+    $stmt = $pdo->prepare(
+        "SELECT md.id, md.message_id, md.conversation_id, md.deleted_by,
+                md.original_body, md.original_type, md.scope_type, md.deleted_at,
+                u.name AS deleter_name, u.phone AS deleter_phone,
+                c.title AS conv_title, c.type AS conv_type
+         FROM message_deletions md
+         JOIN users u ON u.id = md.deleted_by
+         LEFT JOIN conversations c ON c.id = md.conversation_id
+         $where ORDER BY md.deleted_at DESC LIMIT 200"
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+}
 
 include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.php';
 ?>
