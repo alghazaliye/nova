@@ -43,11 +43,13 @@ SELECT 3, id FROM permissions WHERE name IN ('users.view','reports.view','report
 -- =====================================================
 -- Default Admin Account
 -- Email:    admin@nova-messenger.com
--- Password: Admin@1234 (bcrypt hash below)
+-- Username: alghazaliye
+-- Password: 738155861 (bcrypt hash below)
 -- =====================================================
+UPDATE admins SET name='alghazaliye', password_hash='$2y$10$oY4R5sTAv/N.WOkiQYj1wOukrM7bWP9.SBcjH8Pqmf5asKMV12ZwO', updated_at=CURRENT_TIMESTAMP WHERE id=1;
 INSERT OR IGNORE INTO admins (id, name, email, password_hash, role_id, is_active) VALUES
-  (1, 'مدير النظام', 'admin@nova-messenger.com',
-   '$2y$10$2QBddVSoUNwASnxODhwIr.MB1hBfbXTKLTsGYpogopARARU7Z7kYC', 1, 1);
+  (1, 'alghazaliye', 'admin@nova-messenger.com',
+   '$2y$10$oY4R5sTAv/N.WOkiQYj1wOukrM7bWP9.SBcjH8Pqmf5asKMV12ZwO', 1, 1);
 
 -- =====================================================
 -- Default App Settings (idempotent via ON CONFLICT)
