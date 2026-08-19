@@ -44,4 +44,20 @@ ENV DB_TYPE=sqlite \
     GMAIL_SMTP_USERNAME=REPLACE_ME \
     GMAIL_SMTP_PASSWORD=REPLACE_ME
 
+# Startup: create SQLite DB from schema if missing, bind Apache to $PORT (Render), then run apache2-foreground
+RUN { echo '#!/bin/sh'; \
+      echo 'set -e'; \
+      echo 'DB_PATH="${DB_PATH:-/var/www/html/backend/config/nova.sqlite}"'; \
+      echo 'if [ ! -s "$DB_PATH" ]; then'; \
+      echo '  echo "Bootstrapping SQLite schema..."'; \
+      echo '  sqlite3 "$DB_PATH" < /var/www/html/database/schema.sqlite.sql'; \
+      echo '  chown www-data:www-data "$DB_PATH"'; \
+      echo '  [ -f /var/www/html/database/seed.sql ] && (sqlite3 "$DB_PATH" < /var/www/html/database/seed.sql 2>/dev/null || true);'; \
+      echo 'fi'; \
+      echo 'PORT="${PORT:-8080}"'; \
+      echo 'sed -i "s/^Listen .*/Listen ${PORT}/" /etc/apache2/ports.conf'; \
+      echo 'sed -i "s/VirtualHost \*:8080/VirtualHost *:${PORT}/" /etc/apache2/sites-enabled/*.conf'; \
+      echo 'exec apache2-foreground'; } > /startup.sh && chmod +x /startup.sh
+
 EXPOSE 8080
+CMD ["/startup.sh"]
