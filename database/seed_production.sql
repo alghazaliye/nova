@@ -69,7 +69,10 @@ INSERT INTO app_settings (setting_key, setting_value) VALUES
   ('default_language',      'ar'),
   ('default_timezone',      'Asia/Riyadh'),
   ('fcm_enabled',           '0'),
-  ('realtime_provider',     'polling')
+  ('realtime_provider',     'polling'),
+  ('auth_email_login',      '1'),
+  ('auth_phone_login',      '1'),
+  ('auth_username_login',   '1')
 ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime('now','localtime');
 
 -- =====================================================
