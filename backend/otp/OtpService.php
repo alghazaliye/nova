@@ -111,6 +111,7 @@ class OtpService
             'http_rest' => new HttpSmsProvider(),
             'test'      => new TestProvider(),
             'sms_mock'  => new SmsMockProvider(),
+            'sms'       => new TestProvider(), // legacy Dev placeholder type
             default     => throw new InvalidArgumentException("مزود OTP غير معروف: {$type}"),
         };
     }
