@@ -36,11 +36,12 @@ $todayStories   = statCount($pdo, 'SELECT COUNT(*) FROM stories WHERE DATE(creat
 $totalErrors    = statCount($pdo, 'SELECT COUNT(*) FROM audit_logs WHERE action IN ("ERROR", "FAILED")');
 $todayErrors    = statCount($pdo, 'SELECT COUNT(*) FROM audit_logs WHERE action IN ("ERROR", "FAILED") AND DATE(created_at) = CURDATE()');
 
-// Chart Data (Last 7 days)
+// Chart Data (Last 7 days) — SQLite-safe: use PHP dates so no MySQL functions are needed
+$sevenDaysAgo = date('Y-m-d H:i:s', time() - 7 * 86400);
 $stmt = $pdo->query(
     "SELECT DATE(created_at) AS day, COUNT(*) AS cnt
      FROM messages
-     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+     WHERE created_at >= '{$sevenDaysAgo}'
      GROUP BY DATE(created_at)
      ORDER BY day ASC"
 );
@@ -66,11 +67,9 @@ $systemHealth = [
 ];
 
 // Database size
-$dbSize = $pdo->query(
-    'SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb
-     FROM information_schema.tables
-     WHERE table_schema = DATABASE()'
-)->fetch()['size_mb'] ?? 0;
+// Database size — SQLite-safe: physical file size (MySQL info_schema not available in SQLite)
+$dbSizeDb = $_ENV['DB_PATH'] ?? realpath(__DIR__ . '/../../backend/config/nova.sqlite');
+$dbSize = ($dbSizeDb !== false && is_file($dbSizeDb)) ? round(filesize($dbSizeDb) / 1024 / 1024, 2) : 0;
 
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';

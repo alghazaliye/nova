@@ -77,20 +77,17 @@ $active_users = $pdo->query(
 
 // الأجهزة المتصلة (الجدول الفعلي: user_devices بأعمدة device_uuid, device_name, platform, app_version, last_active_at)
 $connected_devices = $pdo->query(
-    'SELECT d.id, d.device_name, d.platform, d.device_uuid,
+    "SELECT d.id, d.device_name, d.platform, d.device_uuid,
             d.app_version, d.last_active_at, u.name as user_name, u.is_online
      FROM user_devices d
      JOIN users u ON u.id = d.user_id
-     WHERE d.last_active_at >= NOW() - INTERVAL 1 HOUR
-     ORDER BY d.last_active_at DESC LIMIT 20'
+     WHERE d.last_active_at >= '" . date('Y-m-d H:i:s', time() - 3600) . "'
+     ORDER BY d.last_active_at DESC LIMIT 20"
 )->fetchAll() ?: [];
 
-// استخدام قاعدة البيانات
-$db_size = $pdo->query(
-    'SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb
-     FROM information_schema.tables
-     WHERE table_schema = DATABASE()'
-)->fetch()['size_mb'] ?? 0;
+// استخدام قاعدة البيانات — SQLite-safe: physical file size
+$db_size_db = $_ENV['DB_PATH'] ?? realpath(__DIR__ . '/../../backend/config/nova.sqlite');
+$db_size = ($db_size_db !== false && is_file($db_size_db)) ? round(filesize($db_size_db) / 1024 / 1024, 2) : 0;
 
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
