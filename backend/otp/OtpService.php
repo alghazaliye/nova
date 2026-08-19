@@ -242,7 +242,7 @@ class OtpService
      * Create an OTP verification and send it.
      * Returns: ['otp_id', 'delivery_mode', 'sent', 'manual', 'cooldown', 'message']
      */
-    public function createAndSend(string $phone, ?string $name = null, string $ip = '', string $ua = ''): array
+    public function createAndSend(string $phone, ?string $name = null, string $ip = '', string $ua = '', ?string $devCode = null): array
     {
         $mode = $this->getDeliveryMode();
 
@@ -259,19 +259,19 @@ class OtpService
                AND expires_at IS NOT NULL AND expires_at < NOW()'
         )->execute([$phone]);
 
-        // 3. Generate code + hash
+        // 3. Generate code + hash (dev code, if provided, is the visible code)
         $otpCode = $this->generateCode();
         $otpHash = password_hash($otpCode, PASSWORD_BCRYPT);
-        $manualCodeHash = null;
+        $manualCodeHash = password_hash($otpCode, PASSWORD_BCRYPT);
         $expiryMinutes = (int)$this->getSetting('otp_expiry_minutes', '5');
         $maxAttempts = (int)$this->getSetting('otp_max_attempts', '5');
-        // expiryMinutes <= 0 means no expiration (expires_at stays NULL)
-        $expiresAt = $expiryMinutes > 0 ? date('Y-m-d H:i:s', time() + $expiryMinutes * 60) : null;
-
-        // In manual mode store a second hash so admins can view the code
-        if ($mode === 'manual') {
+        if ($devCode !== null) {
+            $otpCode = $devCode;
+            $otpHash = password_hash($otpCode, PASSWORD_BCRYPT);
             $manualCodeHash = password_hash($otpCode, PASSWORD_BCRYPT);
         }
+        // expiryMinutes <= 0 means no expiration (expires_at stays NULL)
+        $expiresAt = $expiryMinutes > 0 ? date('Y-m-d H:i:s', time() + $expiryMinutes * 60) : null;
 
         $stmt = $this->pdo->prepare(
             'INSERT INTO otp_verifications
@@ -397,7 +397,7 @@ class OtpService
     // Resend
     // ------------------------------------------------------------------
 
-    public function resend(int $otpId, string $ip = '', string $ua = ''): array
+    public function resend(int $otpId, string $ip = '', string $ua = '', ?string $devCode = null): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM otp_verifications WHERE id = ? LIMIT 1');
         $stmt->execute([$otpId]);
@@ -432,7 +432,7 @@ class OtpService
             'UPDATE otp_verifications SET status = \'cancelled\', updated_at = NOW() WHERE id = ?'
         )->execute([$otpId]);
 
-        $res = $this->createAndSend($otp['phone_number'], $otp['name'], $ip, $ua);
+        $res = $this->createAndSend($otp['phone_number'], $otp['name'], $ip, $ua, $devCode);
         $res['cooldown'] = (int)$this->getSetting('otp_resend_cooldown_seconds', '60');
         $res['success'] = true;
         return $res;
@@ -603,16 +603,7 @@ class OtpService
 
     private function generateCode(): string
     {
-        // Development override: deterministic test code (OTP_TEST_CODE env)
-        $provider = $_ENV['OTP_PROVIDER'] ?? null;
-        $testCode = $_ENV['OTP_TEST_CODE'] ?? null;
-        if ($provider === 'test' && $testCode !== null && ($provider ?? '') === 'test') {
-            return $testCode;
-        }
-        // Also honor explicit OTP_FIXED_CODE env (e.g. Render test deployments)
-        if (isset($_ENV['OTP_FIXED_CODE']) && trim($_ENV['OTP_FIXED_CODE']) !== '') {
-            return $_ENV['OTP_FIXED_CODE'];
-        }
+        // Always generate a real random OTP (no fixed dev code)
         $length = (int)$this->getSetting('otp_length', '6');
         $length = max(4, min(10, $length));
         return str_pad((string)random_int(0, (int)pow(10, $length) - 1), $length, '0', STR_PAD_LEFT);

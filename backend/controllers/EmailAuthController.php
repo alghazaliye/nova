@@ -91,7 +91,9 @@ class EmailAuthController
         }
 
         $out = ['delivery_mode' => $res['delivery_mode'], 'cooldown' => $res['cooldown'] ?? 0];
-        if ($this->isDevTest()) $out['otp_dev'] = ($_ENV['OTP_TEST_CODE'] ?? '123456');
+        if ($this->isDevTest()) {
+            $out['otp_dev'] = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        }
 
         Response::success($out, 'تم إرسال رمز التحقق إلى بريدك الإلكتروني');
     }
@@ -195,7 +197,9 @@ class EmailAuthController
         }
 
         $out = ['delivery_mode' => $res['delivery_mode'], 'cooldown' => $res['cooldown'] ?? 0];
-        if ($this->isDevTest()) $out['otp_dev'] = ($_ENV['OTP_TEST_CODE'] ?? '123456');
+        if ($this->isDevTest()) {
+            $out['otp_dev'] = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        }
         Response::success($out, 'تم إعادة إرسال رمز التحقق إلى بريدك');
     }
 
@@ -384,7 +388,6 @@ class EmailAuthController
 
     private function isDevTest(): bool
     {
-        return ($_ENV['OTP_PROVIDER'] ?? 'sms') === 'test'
-            && ($_ENV['APP_ENV'] ?? 'production') !== 'production';
+        return ($_ENV['APP_ENV'] ?? 'production') !== 'production';
     }
 }

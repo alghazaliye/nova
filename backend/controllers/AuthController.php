@@ -93,16 +93,15 @@ class AuthController
             Response::error("يمكنك إعادة الإرسال بعد {$cooldown} ثانية", 'OTP_COOLDOWN', 429);
         }
 
-        $res = $otpService->createAndSend($phone, $name, $ip, $_SERVER['HTTP_USER_AGENT'] ?? '');
-
+        $devCode = $this->isDevelopmentOtp() ? $this->generateOtp() : null;
+        $res = $otpService->createAndSend($phone, $name, $ip, $_SERVER['HTTP_USER_AGENT'] ?? '', $devCode);
         $responseData = [
             'message' => $res['message'],
             'delivery_mode' => $res['delivery_mode'],
             'cooldown' => $res['cooldown'],
         ];
         if ($this->isDevelopmentOtp()) {
-            // Dev-mode: code is deterministic (OTP_TEST_CODE env) — kept for existing test users
-            $responseData['otp_dev'] = $this->generateOtp(); // Remove in production
+            $responseData['otp_dev'] = $devCode; // Remove in production
         }
 
         Response::success($responseData, 'تم إرسال رمز التحقق إلى رقم هاتفك');
@@ -152,10 +151,7 @@ class AuthController
         if (!$result['verified']) {
             $legacyOtp = $this->getStoredOtp($phone);
             if ($legacyOtp) {
-                if ($this->isDevelopmentOtp() && $otp === ($_ENV['OTP_TEST_CODE'] ?? '123456')) {
-                    $result = ['verified' => true];
-                    $this->clearOtp($phone);
-                } elseif (!password_verify($otp, $legacyOtp['otp_hash'] ?? '')) {
+                if (!password_verify($otp, $legacyOtp['otp_hash'] ?? '')) {
                     $legacyOtp = null;
                 } else {
                     $result = ['verified' => true];
@@ -279,15 +275,15 @@ class AuthController
             Response::error("يمكنك إعادة الإرسال بعد {$cooldown} ثانية", 'OTP_COOLDOWN', 429);
         }
 
-        $res = $otpService->createAndSend($phone, '', $ip, $_SERVER['HTTP_USER_AGENT'] ?? '');
-
+        $devCode = $this->isDevelopmentOtp() ? $this->generateOtp() : null;
+        $res = $otpService->createAndSend($phone, '', $ip, $_SERVER['HTTP_USER_AGENT'] ?? '', $devCode);
         $responseData = [
             'message' => 'تم إرسال رمز التحقق',
             'delivery_mode' => $res['delivery_mode'],
             'cooldown' => $res['cooldown'],
         ];
         if ($this->isDevelopmentOtp()) {
-            $responseData['otp_dev'] = $this->generateOtp();
+            $responseData['otp_dev'] = $devCode;
         }
 
         Response::success($responseData, 'تم إرسال رمز التحقق');
@@ -317,7 +313,8 @@ class AuthController
             Response::error($rateError, 'OTP_RATE_LIMITED', 429);
         }
 
-        $res = $otpService->resend($otpId > 0 ? $otpId : $this->findActiveOtpId($phone), $ip, $_SERVER['HTTP_USER_AGENT'] ?? '');
+        $devCode = $this->isDevelopmentOtp() ? $this->generateOtp() : null;
+        $res = $otpService->resend($otpId > 0 ? $otpId : $this->findActiveOtpId($phone), $ip, $_SERVER['HTTP_USER_AGENT'] ?? '', $devCode);
         if (!$res['success']) {
             $code = $res['error_code'] ?? 'ERROR';
             $out = ['success' => false, 'message' => $res['message'] ?? 'فشل إعادة الإرسال', 'error_code' => $code];
@@ -329,7 +326,6 @@ class AuthController
             echo json_encode($out, JSON_UNESCAPED_UNICODE);
             exit;
         }
-
         $responseData = [
             'message' => 'تم إعادة إرسال رمز التحقق',
             'otp_id' => $res['otp_id'] ?? null,
@@ -337,7 +333,7 @@ class AuthController
             'cooldown' => $res['cooldown'],
         ];
         if ($this->isDevelopmentOtp()) {
-            $responseData['otp_dev'] = $this->generateOtp();
+            $responseData['otp_dev'] = $devCode;
         }
 
         Response::success($responseData, 'تم إعادة إرسال رمز التحقق');
@@ -471,16 +467,13 @@ class AuthController
 
     private function generateOtp(): string
     {
-        if (($_ENV['OTP_PROVIDER'] ?? 'test') === 'test') {
-            return $_ENV['OTP_TEST_CODE'] ?? '123456';
-        }
+        // Always a real random code — dev visibility is handled via otp_dev field only
         return str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     }
 
     private function isDevelopmentOtp(): bool
     {
-        return ($_ENV['OTP_PROVIDER'] ?? 'sms') === 'test'
-            && ($_ENV['APP_ENV'] ?? 'production') !== 'production';
+        return ($_ENV['APP_ENV'] ?? 'production') !== 'production';
     }
 
     private function assertOtpProviderAvailable(): void

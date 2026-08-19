@@ -126,13 +126,6 @@ class EmailOtpService
     private function generateCode(): string
     {
         $provider = $_ENV['OTP_PROVIDER'] ?? null;
-        $testCode = $_ENV['OTP_TEST_CODE'] ?? null;
-        if ($provider === 'test' && $testCode !== null) {
-            return $testCode;
-        }
-        if (isset($_ENV['OTP_FIXED_CODE']) && trim($_ENV['OTP_FIXED_CODE']) !== '') {
-            return $_ENV['OTP_FIXED_CODE'];
-        }
         return str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     }
 
@@ -449,7 +442,7 @@ class EmailOtpService
     // Create + verify
     // ------------------------------------------------------------------
 
-    public function createAndSend(string $email, ?string $name, string $purpose, string $ip, string $ua): array
+    public function createAndSend(string $email, ?string $name, string $purpose, string $ip, string $ua, ?string $devCode = null): array
     {
         if (!$this->isEnabled()) {
             return ['success' => false, 'message' => 'التحقق بالبريد غير مفعّل', 'delivery_mode' => 'none', 'cooldown' => 0];
@@ -484,7 +477,7 @@ class EmailOtpService
         );
         $stmt->execute([
             $email, $name, $hash,
-            $manual ? password_hash($code, PASSWORD_BCRYPT) : null,
+            password_hash($code, PASSWORD_BCRYPT),
             $purpose, $manual ? 'manual' : 'pending',
             $maxAttempts, $deliveryMode, $expiry, $ip, $ua,
         ]);
@@ -556,7 +549,7 @@ class EmailOtpService
         return max(0, (int)$cooldown - (time() - $this->toUnixTs($row['last_req'])));
     }
 
-    public function resend(int $codeId, string $ip = '', string $ua = ''): array
+    public function resend(int $codeId, string $ip = '', string $ua = '', ?string $devCode = null): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM email_verification_codes WHERE id = ? LIMIT 1');
         $stmt->execute([$codeId]);
@@ -581,7 +574,7 @@ class EmailOtpService
         $this->pdo->prepare('UPDATE email_verification_codes SET resends = resends + 1, updated_at = NOW() WHERE id = ?')->execute([$codeId]);
         $this->pdo->prepare('UPDATE email_verification_codes SET status = \'cancelled\', updated_at = NOW() WHERE id = ?')->execute([$codeId]);
 
-        $res = $this->createAndSend((string)$otp['email'], $otp['name'], (string)$otp['purpose'], $ip, $ua);
+        $res = $this->createAndSend((string)$otp['email'], $otp['name'], (string)$otp['purpose'], $ip, $ua, $devCode);
         $res['success'] = true;
         $res['cooldown'] = $this->cooldownSeconds();
         return $res;
