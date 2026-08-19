@@ -117,6 +117,12 @@ if (strpos($uri, '/admin') === 0) {
     if ($adminRel === '' || $adminRel === '/') {
         $adminRel = '/index.php';
     }
+    // API routes under /admin/* (no .php extension) are handled by the
+    // main index.php router, not as admin panel files.
+    if (strpos($adminRel, '.php') === false && strpos($adminRel, '.') === false) {
+        require PUBLIC_DIR . '/index.php';
+        return true;
+    }
     $adminFile = realpath($adminDir . $adminRel);
     if ($adminFile !== false && is_file($adminFile) && strpos($adminFile, $adminDir) === 0) {
         require $adminFile;
