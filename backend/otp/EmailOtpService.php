@@ -201,23 +201,47 @@ class EmailOtpService
         $start = microtime(true);
         try {
             $tls = $enc !== 'none';
-            $proto = $tls ? 'tls://' : '';
+            // Use plain tcp:// and upgrade via STARTTLS explicitly (tls:// wrapper
+            // fails on hosts without accessible local CA trust such as Gmail).
+            $proto = ($tls && $enc === 'ssl') ? 'ssl://' : 'tcp://';
             $errno = 0; $errstr = '';
             $fp = @stream_socket_client($proto . $host . ':' . $port, $errno, $errstr, 15);
             if (!$fp) {
-                return ['success' => false, 'message' => 'فشل الاتصال بالخادم: ' . $errstr, 'http_code' => 0,
+                return ['success' => false, 'message' => 'فشل الاتصال بالخادم: ' . ($errstr ?: 'connection refused'), 'http_code' => 0,
                         'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
             }
             stream_set_timeout($fp, 15);
-            $getLine = static function () use ($fp): string {
+            $lastLineOk = static function (string $buf): bool {
+                // Multi-line SMTP replies (e.g. EHLO 250-...) end with a line whose
+                // 4th character is a space: '250 OK', '354 Go ahead', '535 ...'.
+                $pos = strrpos($buf, "\r\n");
+                $lastLine = ($pos !== false) ? substr($buf, $pos + 2) : $buf;
+                return (strlen($lastLine) >= 4 && $lastLine[3] === ' ');
+            };
+            // We keep the 15s stream timeout; fgets() inside the select loop returns
+            // data is available, so we combine it with stream_select for waits.
+            $getLine = static function () use ($fp, $lastLineOk): string {
                 $line = '';
-                while (!feof($fp)) {
-                    $line .= fgets($fp, 515);
-                    if (strlen($line) >= 4 && $line[3] === ' ') break;
+                $deadline = microtime(true) + 15;
+                while (!feof($fp) && microtime(true) < $deadline) {
+                    $readArr = [$fp];
+                    $writeArr = null;
+                    $errArr = null;
+                    $read = stream_select($readArr, $writeArr, $errArr, 1);
+                    if ($read === 0) continue;            // waiting for data
+                    if ($read === false) break;
+                    $chunk = fgets($fp, 515);
+                    if ($chunk === '' || $chunk === false) {
+                        // Nothing available right now and the reply is already
+                        // complete (last line starts with '2xx ') — stop waiting.
+                        if ($lastLineOk($line)) break;
+                        continue;
+                    }
+                    $line .= $chunk;
+                    if ($lastLineOk($line)) break;
                 }
                 return trim($line);
             };
-
             $banner = $getLine();
             if (!str_starts_with($banner, '220')) {
                 return ['success' => false, 'message' => 'رد غير متوقع من الخادم: ' . substr($banner, 0, 80), 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
@@ -228,19 +252,25 @@ class EmailOtpService
                 return $getLine();
             };
 
+            error_log('[smtp] step=ehlo1');
             $say('EHLO nova-messenger.local');
             if ($tls && $enc === 'tls') {
+                error_log('[smtp] step=starttls');
                 $r = $say('STARTTLS');
                 if (!str_starts_with($r, '220')) {
                     return ['success' => false, 'message' => 'STARTTLS مرفوض: ' . substr($r, 0, 80), 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
                 }
-                if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
+                error_log('[smtp] step=crypto');
+                stream_set_timeout($fp, 30);
+                if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
                     return ['success' => false, 'message' => 'فشل تفعيل TLS', 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
                 }
+                error_log('[smtp] step=ehlo2');
                 $say('EHLO nova-messenger.local');
             }
 
             if ($user !== '' && $pass !== '') {
+                error_log('[smtp] step=authlogin');
                 $r = $say('AUTH LOGIN');
                 if (!str_starts_with($r, '334')) {
                     return ['success' => false, 'message' => 'AUTH LOGIN مرفوض: ' . substr($r, 0, 80), 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];

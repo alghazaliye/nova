@@ -6,7 +6,8 @@
 declare(strict_types=1);
 
 // Resolve all paths absolutely.
-define('PROJECT_ROOT', '/home/ubuntu/nova_new');
+// backend/public/router.php → up two levels → project root (works on any host).
+define('PROJECT_ROOT', realpath(dirname(__DIR__, 2)) ?: dirname(__DIR__, 2));
 
 // Enable error display for diagnosing 500 errors (development)
 ini_set('display_errors', '1');

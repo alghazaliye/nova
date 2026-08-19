@@ -16,3 +16,4 @@ nova_flutter/android/.gradle/
 backend/storage/
 rate-limit/
 web_app/
+backend/config/nova.sqlite

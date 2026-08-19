@@ -1,50 +1,47 @@
-# Nova Messenger — production image (PHP 8.3 + MariaDB + Apache)
+# Nova Messenger — production image (PHP 8.3 + Apache + SQLite)
+# SQLite is the default database adapter (DB_TYPE=sqlite in backend/.env).
 FROM php:8.3-apache
 
 # Apache modules
 RUN a2enmod rewrite headers && \
     rm -rf /var/www/html
 
-# PHP extensions for MariaDB + image processing
+# PHP extensions: SQLite + image processing + zip
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libmariadb-dev-compat libmariadb-dev unzip mariadb-server \
-        libpng-dev libjpeg-dev libfreetype6-dev libzip-dev \
+        unzip libpng-dev libjpeg-dev libfreetype6-dev libzip-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) pdo_mysql mysqli gd zip opcache \
+    && docker-php-ext-install -j$(nproc) pdo_sqlite gd zip opcache \
     && rm -rf /var/lib/apt/lists/*
-
-# Server config: avoid reverse-DNS matching (host '127.0.0.1' != 'localhost')
-COPY docker/99-nova.cnf /etc/mysql/mariadb.conf.d/99-nova.cnf
 
 # Apache config
 COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 # Application code
-COPY backend/ /var/www/html/
-COPY admin/ /var/www/admin/
-COPY web_app/ /var/www/html/public/web_app/
-COPY database/schema.sql /var/www/database/schema.sql
-COPY database/seed.sql /var/www/database/seed.sql
-COPY database/migrate_otp.sql /var/www/database/migrate_otp.sql
-COPY database/migrate_auth.sql /var/www/database/migrate_auth.sql
+COPY backend/ /var/www/html/backend/
+COPY admin/ /var/www/html/admin/
+COPY web_app/ /var/www/html/web_app/
+COPY database/schema.sqlite.sql /var/www/html/database/schema.sqlite.sql
+COPY database/schema.sql /var/www/html/database/schema.sql
+COPY database/seed.sql /var/www/html/database/seed.sql
+COPY database/migrate_otp.sql /var/www/html/database/migrate_otp.sql
+COPY database/migrate_auth.sql /var/www/html/database/migrate_auth.sql
 
-# Permissions
-RUN chown -R www-data:www-data /var/www/html /var/www/admin \
-    && chmod -R 755 /var/www/html /var/www/admin \
-    && mkdir -p /var/www/html/storage /var/www/html/uploads /var/www/html/logs \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/uploads /var/www/html/logs
+# Writable directories (uploads, storage, sqlite db, logs)
+RUN mkdir -p /var/www/html/backend/config \
+             /var/www/html/backend/storage \
+             /var/www/html/backend/uploads \
+             /var/www/html/backend/logs \
+    && chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html
 
-# Startup script that boots MariaDB then Apache
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENV MYSQL_DATABASE=nova \
-    MYSQL_USER=nova_user \
-    MYSQL_PASSWORD=nova2026 \
-    JWT_SECRET=nova-docker-secret-key-2026 \
+# Runtime defaults — override with real values in Render environment variables.
+# Never commit real secrets to Git.
+ENV DB_TYPE=sqlite \
+    JWT_SECRET=REPLACE_ME \
     APP_ENV=production \
-    OTP_PROVIDER=test \
-    OTP_TEST_CODE=123456
+    OTP_PROVIDER=smtp \
+    ENCRYPTION_KEY=REPLACE_ME \
+    GMAIL_SMTP_USERNAME=REPLACE_ME \
+    GMAIL_SMTP_PASSWORD=REPLACE_ME
 
 EXPOSE 8080
-ENTRYPOINT ["/entrypoint.sh"]
