@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
  */
 function nova_get_auth_header(): string
 {
-    $value = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $value = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
     if ($value === '' && function_exists('apache_request_headers')) {
         $headers = apache_request_headers();
         foreach ($headers as $name => $val) {
