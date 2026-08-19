@@ -121,7 +121,7 @@ function showMsg(msg, ok){
 
 async function loadSettings(){
   try {
-    const res = await fetch(API + '/settings', {headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
+    const res = await fetch(API + '/settings', {headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}});
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'فشل التحميل');
     settings = j.settings || {};
@@ -177,7 +177,7 @@ async function saveSettings(){
   try {
     const res = await fetch(API + '/settings', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')},
+      headers: {'Content-Type': 'application/json', 'X-Admin-Auth': (localStorage.getItem('adminToken') || '')},
       body: JSON.stringify(data)
     });
     const j = await res.json();

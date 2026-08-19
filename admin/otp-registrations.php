@@ -107,7 +107,7 @@ function modeLabel(m){
 async function loadRegs(page = 1){
   currentPage = page;
   try {
-    const res = await fetch(API + '/admin/otp/registrations?page=' + page, {headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
+    const res = await fetch(API + '/admin/otp/registrations?page=' + page, {headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}});
     const data = await res.json();
     // بنية API: {rows:[], total, pages, current_page, per_page, message}
     // ملاحظة: الرد قد لا يحتوي success (legacy) — نعتمد على وجود rows
@@ -179,7 +179,7 @@ function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','
 
 async function viewCode(id){
   try {
-    const res = await fetch(API + '/admin/otp/registrations/' + id + '/code', {headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
+    const res = await fetch(API + '/admin/otp/registrations/' + id + '/code', {headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}});
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'لا يمكن عرض الرمز');
     document.getElementById('codeDisplay').textContent = j.otp_code;
@@ -198,7 +198,7 @@ async function manualVerify(id){
   if (!confirm('تأكيد هذا التسجيل يدويًا وإنشاء الحساب؟')) return;
   try {
     const res = await fetch(API + '/admin/otp/registrations/' + id + '/verify', {
-      method: 'POST', headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
+      method: 'POST', headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}});
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'فشل التأكيد');
     await loadRegs(currentPage);
@@ -209,7 +209,7 @@ async function cancel(id){
   if (!confirm('إلغاء هذا الطلب؟')) return;
   try {
     const res = await fetch(API + '/admin/otp/registrations/' + id + '/cancel', {
-      method: 'POST', headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
+      method: 'POST', headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}});
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'فشل الإلغاء');
     await loadRegs(currentPage);

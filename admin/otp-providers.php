@@ -147,7 +147,7 @@ function typeLabel(t){
 
 async function loadProviders(){
   try {
-    const res = await fetch(API + '/admin/otp/providers', {headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}});
+    const res = await fetch(API + '/admin/otp/providers', {headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}});
     if (res.status === 401 || res.status === 403) { document.getElementById('providersBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;">يجب تسجيل الدخول من التطبيق أو إعادة تسجيل دخول الإدارة مع JWT</td></tr>'; return; }
     const data = await res.json();
     providers = data.providers || [];
@@ -157,7 +157,7 @@ async function loadProviders(){
   }
   // Settings status line
   try {
-    const s = await fetch(API + '/admin/otp/settings', {headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}}).then(r => r.json());
+    const s = await fetch(API + '/admin/otp/settings', {headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}}).then(r => r.json());
     const st = s.settings || {};
     const modes = {auto:'تلقائي', manual:'يدوي', auto_fallback:'تلقائي + إرجاع يدوي'};
     document.getElementById('statusMode').textContent = modes[st.otp_delivery_mode] || st.otp_delivery_mode || '—';
@@ -318,7 +318,7 @@ async function saveProvider(e){
   try {
     const res = await fetch(url, {
       method: id ? 'PUT' : 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')},
+      headers: {'Content-Type': 'application/json', 'X-Admin-Auth': (localStorage.getItem('adminToken') || '')},
       body: JSON.stringify(data)
     });
     const j = await res.json();
@@ -332,7 +332,7 @@ async function toggle(id, status){
   try {
     const res = await fetch(API + '/admin/otp/providers/' + id + '/toggle', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')},
+      headers: {'Content-Type': 'application/json', 'X-Admin-Auth': (localStorage.getItem('adminToken') || '')},
       body: JSON.stringify({status})
     });
     const j = await res.json();
@@ -346,7 +346,7 @@ async function del(id){
   try {
     const res = await fetch(API + '/admin/otp/providers/' + id, {
       method: 'DELETE',
-      headers: {'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')}
+      headers: {'X-Admin-Auth': (localStorage.getItem('adminToken') || '')}
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'فشل الحذف');
@@ -371,7 +371,7 @@ async function testProvider(e){
   try {
     const res = await fetch(API + '/admin/otp/providers/' + document.getElementById('testId').value + '/test', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('adminToken') || '')},
+      headers: {'Content-Type': 'application/json', 'X-Admin-Auth': (localStorage.getItem('adminToken') || '')},
       body: JSON.stringify({phone: document.getElementById('testPhone').value})
     });
     const j = await res.json();
