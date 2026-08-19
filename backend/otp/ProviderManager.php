@@ -154,12 +154,17 @@ class ProviderManager
         if ($row['type'] === 'sms_mock' && !class_exists(SmsMockProvider::class, false)) {
             require_once __DIR__ . '/SmsMockProvider.php';
         }
+        if ($row['type'] === 'whatsapp_mock' && !class_exists(WhatsappMockProvider::class, false)) {
+            require_once __DIR__ . '/WhatsappMockProvider.php';
+        }
         $instance = match ($row['type']) {
-            'twilio'    => new TwilioProvider(),
-            'vonage'    => new VonageProvider(),
-            'http_rest' => new HttpSmsProvider(),
-            'test'      => new TestProvider(),
-            'sms_mock'  => new SmsMockProvider(),
+            'twilio'          => new TwilioProvider(),
+            'vonage'          => new VonageProvider(),
+            'http_rest'       => new HttpSmsProvider(),
+            'test'            => new TestProvider(),
+            'sms_mock'        => new SmsMockProvider(),
+            'whatsapp_mock'   => new WhatsappMockProvider(),
+            'whatsapp'        => new WhatsappMockProvider(),
             default     => throw new InvalidArgumentException("مزود غير معروف: {$row['type']}"),
         };
 

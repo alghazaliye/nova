@@ -109,10 +109,12 @@ class OtpService
             'twilio'    => new TwilioProvider(),
             'vonage'    => new VonageProvider(),
             'http_rest' => new HttpSmsProvider(),
-            'test'      => new TestProvider(),
-            'sms_mock'  => new SmsMockProvider(),
-            'sms'       => new TestProvider(), // legacy Dev placeholder type
-            default     => throw new InvalidArgumentException("مزود OTP غير معروف: {$type}"),
+            'test'           => new TestProvider(),
+            'sms_mock'       => new SmsMockProvider(),
+            'sms'            => new TestProvider(), // legacy Dev placeholder type
+            'whatsapp_mock'  => new WhatsappMockProvider(),
+            'whatsapp'       => new WhatsappMockProvider(), // human-friendly alias
+            default          => throw new InvalidArgumentException("مزود OTP غير معروف: {$type}"),
         };
     }
 

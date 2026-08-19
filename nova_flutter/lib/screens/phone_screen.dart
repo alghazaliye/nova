@@ -29,6 +29,9 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  /// true: الحساب الجديد يُدخل بالبريد + رمز OTP فقط (بدون كلمة مرور).
+  /// يُفعَّل تلقائيًا عندما يكون الحساب غير مسجل مسبقًا (login-email فشل بـ401).
+  bool? _emailNeedsOtp;
   TabController? _tabController;
   AuthConfig? _config;
 
@@ -116,13 +119,45 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
   Future<void> _doEmailLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (email.isEmpty || !email.contains('@') || password.isEmpty) {
-      _showError('أدخل البريد وكلمة المرور بشكل صحيح');
+    if (email.isEmpty || !email.contains('@')) {
+      _showError('أدخل بريدًا إلكترونيًا صحيحًا');
       return;
     }
     final auth = context.read<AuthProvider>();
+    // إذا لم يُدخل كلمة مرور أو كان الحساب جديدًا: مسار رمز OTP بالبريد
+    if (password.isEmpty || _emailNeedsOtp == true) {
+      final ok = await auth.registerEmail(email);
+      if (!mounted) return;
+      if (ok) {
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => OtpScreen(phone: email, isRegister: true)));
+      } else {
+        _showError(auth.error ?? 'فشل إرسال رمز التحقق');
+      }
+      return;
+    }
+    // دخول بالبريد + كلمة المرور (لحساب حالي)
     final ok = await auth.loginEmail(email, password);
-    if (ok && context.mounted) _handleLoginResult(auth);
+    if (!mounted) return;
+    if (!ok) {
+      // حساب غير مسجل أو كلمة مرور خاطئة: التحويل إلى مسار رمز OTP دون تعليق
+      setState(() => _emailNeedsOtp = true);
+      // إعادة المحاولة مباشرة برمز OTP (تسجيل/تفعيل)
+      final sent = await auth.registerEmail(email);
+      if (!mounted) return;
+      if (sent) {
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => OtpScreen(phone: email, isRegister: true)));
+      } else {
+        _showError(auth.error ?? 'فشل إرسال رمز التحقق');
+      }
+      return;
+    }
+    _handleLoginResult(auth);
   }
 
   Future<void> _doUsernameLogin() async {
@@ -353,25 +388,53 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
           ),
         ),
         const SizedBox(height: 14),
-        TextField(
-          controller: _passwordController,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: 'كلمة المرور',
-            filled: true,
-            fillColor: c.surface2,
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: c.line)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: c.accent)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        if (_emailNeedsOtp != true)
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: 'كلمة المرور (لحساب حالي)',
+              helperText: 'اتركه فارغًا للتسجيل بحساب جديد والوصول برمز OTP',
+              filled: true,
+              fillColor: c.surface2,
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: c.line)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: c.accent)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        _primaryButton('دخول', c, _doEmailLogin),
+        if (_emailNeedsOtp != true)
+          TextButton(
+            onPressed: () async {
+              final e = _emailController.text.trim();
+              if (!e.contains('@')) {
+                _showError('أدخل بريدك الإلكتروني أولًا');
+                return;
+              }
+              final auth = context.read<AuthProvider>();
+              final ok = await auth.registerEmail(e);
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إرسال رمز التحقق إلى بريدك')));
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => OtpScreen(phone: e, isRegister: true)));
+              } else {
+                _showError(auth.error ?? 'فشل إرسال الرمز');
+              }
+            },
+            child: const Text('ليس لديك كلمة مرور؟ ادخل برمز التحقق بالبريد',
+                style: TextStyle(fontSize: 12.5)),
+          ),
+        const SizedBox(height: 14),
+        _primaryButton(
+            _emailNeedsOtp == true ? 'إرسال رمز التحقق' : 'دخول', c, _doEmailLogin),
       ];
     }
     // اسم مستخدم

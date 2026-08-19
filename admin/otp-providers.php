@@ -78,6 +78,7 @@ include __DIR__ . '/includes/sidebar.php';
           <option value="vonage">Vonage</option>
           <option value="http_rest">HTTP REST (مزود مخصص)</option>
           <option value="sms_mock">رسائل نصية SMS (قناة تجربة)</option>
+          <option value="whatsapp_mock">واتساب WhatsApp (قناة تجربة)</option>
           <option value="test">مزود اختباري (تطوير فقط)</option>
         </select>
       </label>
@@ -142,7 +143,7 @@ function statusBadge(s){
 }
 
 function typeLabel(t){
-  const labels = {twilio:'Twilio', vonage:'Vonage', http_rest:'HTTP REST', sms_mock:'رسائل نصية (تجربة)', test:'اختباري'};
+  const labels = {twilio:'Twilio', vonage:'Vonage', http_rest:'HTTP REST', sms_mock:'رسائل نصية (تجربة)', whatsapp_mock:'واتساب (تجربة)', whatsapp:'واتساب', test:'اختباري'};
   return labels[t] || t;
 }
 
@@ -275,6 +276,8 @@ function renderTypeFields(){
       <p class="field-note">مزود عام لأي بوابة SMS. المتغيرات: {PHONE} رقم الهاتف، {OTP} الرمز، {MESSAGE} الرسالة كاملة.</p>`;
   } else if (type === 'sms_mock') {
     html = '<p class="field-note" style="color:var(--good);"><b>قناة تجربة داخلية:</b> رمز حقيقي (6 أرقام) يُولَّد ويُشفّر كالمزودات الحقيقية، لكن لا يُرسل SMS فعليًا. يمكنك قراءة الرمز من صفحة «طلبات التسجيل» (سجل التسليم) أو من الإشعار في لوحة التحكم. مثالي لتجربة مسار الرسائل النصية دون اشتراك في خدمة خارجية.</p>';
+  } else if (type === 'whatsapp_mock') {
+    html = '<p class="field-note" style="color:var(--good);"><b>قناة تجربة داخلية عبر واتساب:</b> رمز حقيقي (6 أرقام) يُولَّد ويُشفّر كالمزودات الحقيقية، لكن لا يُرسل واتساب فعليًا. يمكنك قراءة الرمز من صفحة «طلبات التسجيل» (سجل التسليم) أو من الإشعار في لوحة التحكم. مثالي لتجربة مسار تحقق واتساب لأي شخص يسجل دون اشتراك في خدمة خارجية. للإنتاج: استخدم نوع HTTP REST مع WhatsApp Cloud API (Meta) أو Twilio WhatsApp.</p>';
   } else if (type === 'test') {
     html = '<p class="field-note" style="color:var(--warn);"><b>تنبيه:</b> مزود الاختبار يعمل فقط في بيئة التطوير ويُعيد رمز OTP_TEST_CODE المحدد في الإعدادات (حاليًا: 123456).</p>';
   }
