@@ -340,11 +340,28 @@ class EmailOtpService
             $body = str_replace(['{OTP}', '{MINUTES}', '{APP_NAME}'], [$code, (string)$this->expiryMinutes(), 'NOVA Messenger'], $body);
         }
 
-        $payload = is_array($config['payload_template'] ?? null) ? $config['payload_template'] : [];
-        $payload[$toField] = $to;
-        $payload[$codeField] = $code;
-        if ($templateMode === 'inline') {
-            $payload['message'] = $body;
+        // Full JSON payload mode: supports providers like Brevo whose body schema
+        // cannot be expressed with a flat to/otp field (e.g. "to" must be an array).
+        $jsonTpl = (string)($config['payload_template_json'] ?? '');
+        if ($jsonTpl !== '') {
+            $filled = str_replace(
+                ['{TO}', '{OTP}', '{MINUTES}', '{APP_NAME}', '{SUBJECT}'],
+                [$to, $code, (string)$this->expiryMinutes(), 'NOVA Messenger', $template !== '' ? $template : 'رمز التحقق'],
+                $jsonTpl
+            );
+            $decoded = json_decode($filled, true);
+            if (!is_array($decoded)) {
+                return ['success' => false, 'message' => 'قالب JSON غير صالح', 'http_code' => 0, 'response_time_ms' => 0];
+            }
+            $payload = $decoded;
+            $method = strtoupper((string)($config['method'] ?? 'POST'));
+        } else {
+            $payload = is_array($config['payload_template'] ?? null) ? $config['payload_template'] : [];
+            $payload[$toField] = $to;
+            $payload[$codeField] = $code;
+            if ($templateMode === 'inline') {
+                $payload['message'] = $body;
+            }
         }
 
         $headers = ['Content-Type: ' . $contentType, 'Accept: application/json'];
