@@ -371,7 +371,7 @@ class EmailOtpService
             $successExpr = (string)($config['success_expr'] ?? '');
             if ($successExpr !== '') {
                 $data = json_decode($raw, true) ?? [];
-                $match = (string)$config['success_match'] ?? '1';
+                $match = (string)($config['success_match'] ?? '1');
                 $val = $data[$successExpr] ?? null;
                 if ($val === null || (string)$val !== $match) {
                     return ['success' => false, 'message' => 'الاستجابة لم تطابق التوقع: ' . substr($raw, 0, 120), 'http_code' => $httpCode, 'response_time_ms' => $time];

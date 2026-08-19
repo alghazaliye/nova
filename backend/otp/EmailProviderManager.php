@@ -202,8 +202,8 @@ class EmailProviderManager
             )->execute([
                 $email, $providerId,
                 $result['success'] ? 'sent' : 'failed',
-                $result['http_code'] ?: null,
-                $result['response_time_ms'] ?: null,
+                ($result['http_code'] ?? 0) ?: null,
+                ($result['response_time_ms'] ?? 0) ?: null,
                 ($result['success'] ? null : ($result['message'] ?? null)),
             ]);
         } catch (Throwable $e) {}
