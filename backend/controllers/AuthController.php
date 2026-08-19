@@ -361,7 +361,7 @@ class AuthController
     {
         $user = AuthMiddleware::authenticate();
 
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $authHeader = nova_get_auth_header() ?? '';
         $token      = substr($authHeader, 7);
         $tokenHash  = hash('sha256', $token);
 

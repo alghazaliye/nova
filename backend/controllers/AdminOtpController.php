@@ -97,7 +97,7 @@ class AdminOtpController
     {
         // Try session-bound JWT first (user JWT), then fall back to a
         // standalone admin JWT issued by /admin/otp/login (not session-bound).
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $authHeader = nova_get_auth_header() ?? '';
         $token = '';
         if (str_starts_with($authHeader, 'Bearer ')) {
             $token = substr($authHeader, 7);

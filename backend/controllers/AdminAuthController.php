@@ -41,7 +41,7 @@ class AdminAuthController
 
     private function authenticateAdmin(string $permission): array
     {
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $authHeader = nova_get_auth_header() ?? '';
         $token = str_starts_with($authHeader, 'Bearer ') ? substr($authHeader, 7) : '';
         if ($token === '') Response::unauthorized('يجب تسجيل الدخول أولاً');
 

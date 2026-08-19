@@ -14,7 +14,7 @@ class AuthMiddleware
      */
     public static function authenticate(): array
     {
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $authHeader = nova_get_auth_header() ?? '';
 
         if (!str_starts_with($authHeader, 'Bearer ')) {
             Response::unauthorized('يجب تسجيل الدخول أولاً');
@@ -59,7 +59,7 @@ class AuthMiddleware
      */
     public static function optionalAuth(): ?array
     {
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $authHeader = nova_get_auth_header() ?? '';
         if (!str_starts_with($authHeader, 'Bearer ')) {
             return null;
         }

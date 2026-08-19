@@ -55,6 +55,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+/**
+ * Read the Authorization header reliably across all SAPIs.
+ * Some Apache/CGI setups strip HTTP_AUTHORIZATION, so fall back to
+ * getallheaders()/apache_request_headers() when available.
+ */
+function nova_get_auth_header(): string
+{
+    $value = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if ($value === '' && function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        foreach ($headers as $name => $val) {
+            if (strtolower($name) === 'authorization' && $val) {
+                $value = (string)$val;
+                break;
+            }
+        }
+    }
+    return $value;
+}
+
 // Autoload helpers
 require_once __DIR__ . '/../helpers/Response.php';
 require_once __DIR__ . '/../helpers/Validator.php';
