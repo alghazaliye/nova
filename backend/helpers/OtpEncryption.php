@@ -21,8 +21,9 @@ class OtpEncryption
             return self::$key;
         }
 
-        // Prefer explicit env var, else use the setting from app_settings
-        $key = $_ENV['OTP_ENCRYPTION_KEY'] ?? null;
+        // Prefer explicit env var (both $_ENV and getenv cover Apache/mod_php and CLI),
+        // else use the setting from app_settings
+        $key = $_ENV['OTP_ENCRYPTION_KEY'] ?? getenv('OTP_ENCRYPTION_KEY') ?: null;
         if ($key === null) {
             try {
                 $pdo = Database::getInstance();
