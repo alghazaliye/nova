@@ -177,8 +177,20 @@ if ($uri === '/_diag' && $method === 'GET') {
         'decrypted_ok'   => ($decPwd !== '' && strpos($decPwd, 'DECRYPT_ERROR') !== 0),
         'decrypted_note' => ($decPwd === '' ? 'EMPTY (SMTP auth will fail)' : (strpos($decPwd, 'DECRYPT_ERROR') === 0 ? substr($decPwd, 0, 60) : 'len=' . strlen($decPwd))),
     ];
+    // Inspect columns of provider-related tables to spot missing columns
+    $diagOut['table_info'] = [
+        'email_providers' => array_map(fn ($r) => $r['name'], (array)$dPdo->query('PRAGMA table_info(email_providers)')->fetchAll(PDO::FETCH_ASSOC)),
+        'email_delivery_logs' => array_map(fn ($r) => $r['name'], (array)$dPdo->query('PRAGMA table_info(email_delivery_logs)')->fetchAll(PDO::FETCH_ASSOC)),
+    ];
+    $diagOut['last_delivery_error'] = null;
     try {
-        $diagOut['live_send_test'] = (new EmailOtpService())->createAndSend('mahumad7733@gmail.com', 'diag', 'test', '127.0.0.1', 'diag');
+        $r = $dPdo->query('SELECT error_message, status, http_code FROM email_delivery_logs ORDER BY id DESC LIMIT 5')->fetchAll(PDO::FETCH_ASSOC);
+        $diagOut['last_delivery_errors'] = $r ?: null;
+    } catch (Throwable $e) {
+        $diagOut['delivery_logs_error'] = substr($e->getMessage(), 0, 150);
+    }
+    try {
+        $diagOut['live_send_test'] = (new EmailOtpService())->createAndSend('mahumad7733@gmail.com', 'diag', 'test', '127.0.0.1', 'mahumad7733@gmail.com');
     } catch (Throwable $e) {
         $diagOut['live_send_test'] = ['error' => substr($e->getMessage(), 0, 200)];
     }
