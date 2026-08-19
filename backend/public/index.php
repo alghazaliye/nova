@@ -138,6 +138,54 @@ if (preg_match('#^/media/(.+)$#', $uri, $mediaMatch) || preg_match('#^/nova/back
 // Router
 // =====================================================
 
+// TEMPORARY diagnostic endpoint — remove after debugging
+require_once __DIR__ . '/../helpers/OtpEncryption.php';
+require_once __DIR__ . '/../otp/EmailOtpService.php';
+
+if ($uri === '/_diag' && $method === 'GET') {
+    $diagKey = (string)($_ENV['NOVA_DIAG_KEY'] ?? getenv('NOVA_DIAG_KEY') ?? '');
+    if (($_GET['key'] ?? '') !== $diagKey || $diagKey === '') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'forbidden', 'error_code' => 'FORBIDDEN']);
+        exit;
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    $diagOut = [];
+    $diagOut['env'] = [
+        'DB_TYPE'             => (string)getenv('DB_TYPE'),
+        'APP_ENV'             => (string)getenv('APP_ENV'),
+        'GMAIL_SMTP_USERNAME' => (string)getenv('GMAIL_SMTP_USERNAME'),
+        'GMAIL_SMTP_PASSWORD' => getenv('GMAIL_SMTP_PASSWORD') !== false ? (strlen((string)getenv('GMAIL_SMTP_PASSWORD')) ? 'SET(len=' . strlen((string)getenv('GMAIL_SMTP_PASSWORD')) . ')' : 'EMPTY') : 'NOT SET',
+        'OTP_ENCRYPTION_KEY'  => getenv('OTP_ENCRYPTION_KEY') !== false ? (strlen((string)getenv('OTP_ENCRYPTION_KEY')) ? 'SET(len=' . strlen((string)getenv('OTP_ENCRYPTION_KEY')) . ')' : 'EMPTY') : 'NOT SET',
+        'ENCRYPTION_KEY'      => getenv('ENCRYPTION_KEY') !== false ? (strlen((string)getenv('ENCRYPTION_KEY')) ? 'SET(len=' . strlen((string)getenv('ENCRYPTION_KEY')) . ')' : 'EMPTY') : 'NOT SET',
+    ];
+    $dbPath = getenv('DB_PATH') ?: __DIR__ . '/../config/nova.sqlite';
+    $dPdo = new PDO('sqlite:' . $dbPath);
+    $dPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $diagOut['providers'] = [];
+    foreach ($dPdo->query('SELECT id, name, type, status, priority, host, port, encryption, username, from_email, length(password) AS pw_len FROM email_providers ORDER BY id') as $r) {
+        $diagOut['providers'][] = ['id' => (int)$r['id'], 'name' => $r['name'], 'type' => $r['type'], 'status' => $r['status'], 'priority' => (int)$r['priority'], 'host' => $r['host'], 'port' => $r['port'] ? (int)$r['port'] : null, 'encryption' => $r['encryption'], 'username' => $r['username'], 'from_email' => $r['from_email'], 'pw_len' => $r['pw_len'] ? (int)$r['pw_len'] : null];
+    }
+    $st2 = $dPdo->prepare('SELECT password FROM email_providers WHERE id=2');
+    $st2->execute();
+    $encPwd = (string)$st2->fetchColumn();
+    $decPwd = '';
+    try { $decPwd = OtpEncryption::decrypt($encPwd); } catch (Throwable $e) { $decPwd = 'DECRYPT_ERROR: ' . substr($e->getMessage(), 0, 80); }
+    $diagOut['gmail'] = [
+        'encrypted_len'  => strlen($encPwd),
+        'decrypted_len'  => strlen($decPwd),
+        'decrypted_ok'   => ($decPwd !== '' && strpos($decPwd, 'DECRYPT_ERROR') !== 0),
+        'decrypted_note' => ($decPwd === '' ? 'EMPTY (SMTP auth will fail)' : (strpos($decPwd, 'DECRYPT_ERROR') === 0 ? substr($decPwd, 0, 60) : 'len=' . strlen($decPwd))),
+    ];
+    try {
+        $diagOut['live_send_test'] = (new EmailOtpService())->createAndSend('mahumad7733@gmail.com', 'diag', 'test', '127.0.0.1', 'diag');
+    } catch (Throwable $e) {
+        $diagOut['live_send_test'] = ['error' => substr($e->getMessage(), 0, 200)];
+    }
+    echo json_encode($diagOut, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    exit;
+}
+
 // Auth Routes
 if ($uri === '/auth/register' && $method === 'POST') {
     (new AuthController())->register();
