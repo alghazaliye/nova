@@ -46,7 +46,8 @@ ENV DB_TYPE=sqlite \
     ENCRYPTION_KEY=REPLACE_ME \
     OTP_ENCRYPTION_KEY=REPLACE_ME \
     GMAIL_SMTP_USERNAME=REPLACE_ME \
-    GMAIL_SMTP_PASSWORD=REPLACE_ME
+    GMAIL_SMTP_PASSWORD=REPLACE_ME \
+    NOVA_DIAG_KEY=REPLACE_ME
 
 # Startup: create SQLite DB from schema if missing, bind Apache to $PORT (Render), then run apache2-foreground
 RUN { echo '#!/bin/sh'; \
