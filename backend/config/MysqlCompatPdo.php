@@ -44,6 +44,18 @@ class MysqlCompatPdo extends PDO
         return parent::exec($this->adaptSql((string)$statement));
     }
 
+    public function query(?string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
+    {
+        $sql = $this->adaptSql((string)$query);
+        if ($fetchMode !== null && $fetchModeArgs !== []) {
+            return parent::query($sql, $fetchMode, ...$fetchModeArgs);
+        }
+        if ($fetchMode !== null) {
+            return parent::query($sql, $fetchMode);
+        }
+        return parent::query($sql);
+    }
+
     private function adaptSql(string $sql): string
     {
         if (!$this->isSqlite) {
@@ -53,7 +65,15 @@ class MysqlCompatPdo extends PDO
             || stripos($sql, 'INSERT IGNORE') !== false
             || stripos($sql, 'NOW()') !== false
             || stripos($sql, 'CURDATE()') !== false
-            || stripos($sql, 'INTERVAL') !== false;
+            || stripos($sql, 'INTERVAL') !== false
+            || stripos($sql, 'IF(') !== false;
+
+        // IF(cond, a, b) -> CASE WHEN cond THEN a ELSE b END (MySQL only)
+        $sql = preg_replace_callback(
+            '/\bIF\s*\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)/is',
+            static fn ($m) => '(CASE WHEN ' . $m[1] . ' THEN ' . $m[2] . ' ELSE ' . $m[3] . ' END)',
+            $sql
+        );
         if (!$needsWork) {
             return $sql;
         }
