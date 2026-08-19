@@ -496,7 +496,7 @@ class EmailOtpService
              WHERE email = ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')'
         )->execute([$email]);
 
-        $code = $this->generateCode();
+        $code = ($devCode !== null && trim($devCode) !== '') ? trim($devCode) : $this->generateCode();
         $hash = password_hash($code, PASSWORD_BCRYPT);
         $maxAttempts = $this->maxAttempts();
         $expiry = date('Y-m-d H:i:s', time() + $this->expiryMinutes() * 60);

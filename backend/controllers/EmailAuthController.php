@@ -85,14 +85,18 @@ class EmailAuthController
         $name = isset($body['name']) && trim((string)$body['name']) !== ''
             ? trim($v->sanitizeString('name')) : null;
 
-        $res = $service->createAndSend($email, $name, 'registration', $ip, $ua);
+        // Dev/test visibility: generate the real code here (same pattern as AuthController
+        // for phone OTP) and pass it to the service so the stored hash matches.
+        $devCode = $this->isDevTest() ? $this->generateOtp() : null;
+
+        $res = $service->createAndSend($email, $name, 'registration', $ip, $ua, $devCode);
         if (!$res['success']) {
             Response::error($res['message'] ?? 'فشل إرسال رمز التحقق', 'EMAIL_OTP_SEND_FAILED', 503);
         }
 
         $out = ['delivery_mode' => $res['delivery_mode'], 'cooldown' => $res['cooldown'] ?? 0];
-        if ($this->isDevTest()) {
-            $out['otp_dev'] = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        if ($devCode !== null) {
+            $out['otp_dev'] = $devCode; // Remove in production
         }
 
         Response::success($out, 'تم إرسال رمز التحقق إلى بريدك الإلكتروني');
@@ -184,8 +188,11 @@ class EmailAuthController
         $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
+        // Dev/test visibility: same real-code pattern as phone OTP resend.
+        $devCode = $this->isDevTest() ? $this->generateOtp() : null;
+
         $codeId = (int)($body['code_id'] ?? 0);
-        $res = $service->resend($codeId > 0 ? $codeId : $this->findActiveCodeId($email), $ip, $ua);
+        $res = $service->resend($codeId > 0 ? $codeId : $this->findActiveCodeId($email), $ip, $ua, $devCode);
         if (!$res['success']) {
             $code = $res['error_code'] ?? 'ERROR';
             $out = ['success' => false, 'message' => $res['message'] ?? 'فشل إعادة الإرسال', 'error_code' => $code];
@@ -197,10 +204,16 @@ class EmailAuthController
         }
 
         $out = ['delivery_mode' => $res['delivery_mode'], 'cooldown' => $res['cooldown'] ?? 0];
-        if ($this->isDevTest()) {
-            $out['otp_dev'] = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        if ($devCode !== null) {
+            $out['otp_dev'] = $devCode; // Remove in production
         }
         Response::success($out, 'تم إعادة إرسال رمز التحقق إلى بريدك');
+    }
+
+    private function generateOtp(): string
+    {
+        // Always a real random code — dev visibility is handled via otp_dev field only.
+        return str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     }
 
     private function findActiveCodeId(string $email): int
