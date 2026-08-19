@@ -24,7 +24,9 @@ class MysqlCompatPdo extends PDO
     {
         $this->isSqlite = str_starts_with($dsn, 'sqlite:');
         // Strip MySQL-specific option that SQLite does not understand
-        unset($options[PDO::MYSQL_ATTR_INIT_COMMAND]);
+        if ($this->isSqlite && defined('PDO::MYSQL_ATTR_INIT_COMMAND')) {
+            unset($options[PDO::MYSQL_ATTR_INIT_COMMAND]);
+        }
         parent::__construct($dsn, $user, $password, $options);
     }
 
