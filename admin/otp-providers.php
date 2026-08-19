@@ -77,6 +77,7 @@ include __DIR__ . '/includes/sidebar.php';
           <option value="twilio">Twilio</option>
           <option value="vonage">Vonage</option>
           <option value="http_rest">HTTP REST (مزود مخصص)</option>
+          <option value="sms_mock">رسائل نصية SMS (قناة تجربة)</option>
           <option value="test">مزود اختباري (تطوير فقط)</option>
         </select>
       </label>
@@ -141,7 +142,7 @@ function statusBadge(s){
 }
 
 function typeLabel(t){
-  const labels = {twilio:'Twilio', vonage:'Vonage', http_rest:'HTTP REST', test:'اختباري'};
+  const labels = {twilio:'Twilio', vonage:'Vonage', http_rest:'HTTP REST', sms_mock:'رسائل نصية (تجربة)', test:'اختباري'};
   return labels[t] || t;
 }
 
@@ -272,6 +273,8 @@ function renderTypeFields(){
       <label style="font-size:13px;">تعبير النجاح <span class="field-note">مثال: json.status=OK</span>
         <input name="success_expr" id="pfSx" class="input" placeholder="json.status=OK" dir="ltr" style="text-align:right;"></label>
       <p class="field-note">مزود عام لأي بوابة SMS. المتغيرات: {PHONE} رقم الهاتف، {OTP} الرمز، {MESSAGE} الرسالة كاملة.</p>`;
+  } else if (type === 'sms_mock') {
+    html = '<p class="field-note" style="color:var(--good);"><b>قناة تجربة داخلية:</b> رمز حقيقي (6 أرقام) يُولَّد ويُشفّر كالمزودات الحقيقية، لكن لا يُرسل SMS فعليًا. يمكنك قراءة الرمز من صفحة «طلبات التسجيل» (سجل التسليم) أو من الإشعار في لوحة التحكم. مثالي لتجربة مسار الرسائل النصية دون اشتراك في خدمة خارجية.</p>';
   } else if (type === 'test') {
     html = '<p class="field-note" style="color:var(--warn);"><b>تنبيه:</b> مزود الاختبار يعمل فقط في بيئة التطوير ويُعيد رمز OTP_TEST_CODE المحدد في الإعدادات (حاليًا: 123456).</p>';
   }

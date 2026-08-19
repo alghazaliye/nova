@@ -110,6 +110,7 @@ class OtpService
             'vonage'    => new VonageProvider(),
             'http_rest' => new HttpSmsProvider(),
             'test'      => new TestProvider(),
+            'sms_mock'  => new SmsMockProvider(),
             default     => throw new InvalidArgumentException("مزود OTP غير معروف: {$type}"),
         };
     }

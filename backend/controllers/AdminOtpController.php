@@ -27,6 +27,7 @@ require_once __DIR__ . '/../otp/TwilioProvider.php';
 require_once __DIR__ . '/../otp/VonageProvider.php';
 require_once __DIR__ . '/../otp/HttpSmsProvider.php';
 require_once __DIR__ . '/../otp/TestProvider.php';
+require_once __DIR__ . '/../otp/SmsMockProvider.php';
 require_once __DIR__ . '/../otp/OtpService.php';
 require_once __DIR__ . '/../otp/ProviderManager.php';
 require_once __DIR__ . '/../helpers/OtpEncryption.php';
@@ -167,7 +168,7 @@ class AdminOtpController
         $admin = $this->authenticateAdmin('otp.providers.create');
         $data = $this->json();
 
-        $types = ['twilio', 'vonage', 'http_rest', 'test'];
+        $types = ['twilio', 'vonage', 'http_rest', 'sms_mock', 'test'];
         $type = trim((string)($data['type'] ?? ''));
         if (!in_array($type, $types, true)) {
             $this->out(['error_code' => 'INVALID_TYPE'], 400, 'نوع المزود غير صالح: ' . htmlspecialchars($type));
@@ -296,7 +297,8 @@ class AdminOtpController
                 }
                 return true;
             case 'test':
-                return true; // no credentials required
+            case 'sms_mock':
+                return true; // no credentials required (internal trial channel)
             default:
                 return 'نوع المزود غير معروف';
         }

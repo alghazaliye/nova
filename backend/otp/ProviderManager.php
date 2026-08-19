@@ -151,11 +151,15 @@ class ProviderManager
             $template = 'رمز التحقق الخاص بك هو: {OTP}. صالح لمدة {MINUTES} دقيقة. لا تشاركه مع أي شخص. — {APP_NAME}';
         }
 
+        if ($row['type'] === 'sms_mock' && !class_exists(SmsMockProvider::class, false)) {
+            require_once __DIR__ . '/SmsMockProvider.php';
+        }
         $instance = match ($row['type']) {
             'twilio'    => new TwilioProvider(),
             'vonage'    => new VonageProvider(),
             'http_rest' => new HttpSmsProvider(),
             'test'      => new TestProvider(),
+            'sms_mock'  => new SmsMockProvider(),
             default     => throw new InvalidArgumentException("مزود غير معروف: {$row['type']}"),
         };
 

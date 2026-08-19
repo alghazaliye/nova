@@ -9,8 +9,12 @@ import '../utils/nova_web_state.dart';
 import 'otp_screen.dart';
 import 'chats_screen.dart';
 
+/// أنواع تبويبات شاشة الدخول
+enum _LoginTab { phone, email, username }
+
 /// شاشة تسجيل الدخول الديناميكية — تعرض طرق الدخول المتاحة حسب
 /// GET /auth/config من لوحة الإدارة (هاتف / بريد / اسم مستخدم).
+/// يظهر التبويب فقط إذا كانت الطريقة مفعّلة في لوحة التحكم.
 class PhoneScreen extends StatefulWidget {
   const PhoneScreen({super.key});
 
@@ -25,13 +29,12 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  late TabController _tabController;
+  TabController? _tabController;
   AuthConfig? _config;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AuthProvider>().fetchAuthConfig();
     });
@@ -86,22 +89,13 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
     }
   }
 
-  /// عدد التبويبات المفعّلة (هاتف/بريد/اسم مستخدم)
-  int get _enabledTabs {
-    var n = 0;
-    if (_config?.phoneLogin ?? true) n++;
-    if (_config?.emailLogin ?? true) n++;
-    if (_config?.usernameLogin ?? true) n++;
-    return n;
-  }
-
   @override
   void dispose() {
     _phoneController.dispose();
     _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -148,27 +142,49 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
       Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const ChatsScreen()),
           (route) => false);
-    } else if (_tabController.index == 0) {
-      // هاتف: OTP
-      Navigator.push(context,
-          MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false)));
+    } else {
+      // OTP فقط لطريقة الهاتف
+      final currentTab = _currentTabs.isNotEmpty ? _currentTabs[_tabController?.index ?? 0] : _LoginTab.phone;
+      if (currentTab == _LoginTab.phone) {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false)));
+      }
     }
-    // البريد واسم المستخدم لا يحتاجان OTP
+  }
+
+  /// التبويبات المفعّلة حاليًا حسب إعدادات لوحة التحكم (ترتيب: هاتف، بريد، اسم مستخدم)
+  List<_LoginTab> get _currentTabs {
+    final tabs = <_LoginTab>[];
+    if (_config?.phoneLogin ?? true) tabs.add(_LoginTab.phone);
+    if (_config?.emailLogin ?? true) tabs.add(_LoginTab.email);
+    if (_config?.usernameLogin ?? true) tabs.add(_LoginTab.username);
+    // ضمان عدم بقاء الشاشة فارغة: إذا لم تُحمَّل الإعدادات بعد، عرض الهاتف
+    if (tabs.isEmpty && _config == null) tabs.add(_LoginTab.phone);
+    return tabs;
+  }
+
+  /// إعادة إنشاء TabController عند تغيّر عدد التبويبات المفعّلة
+  void _rebuildTabController(int tabCount) {
+    final old = _tabController;
+    final keepIndex = (old != null && old.index < tabCount) ? old.index : 0;
+    _tabController = TabController(length: tabCount, vsync: this, initialIndex: keepIndex);
+    old?.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
-    _config ??= auth.authConfig;
-    // تحديد التبويبات المفعّلة من الإعدادات
-    final tabs = <Widget>[];
-    final phoneEnabled = _config?.phoneLogin ?? true;
-    final emailEnabled = _config?.emailLogin ?? true;
-    final usernameEnabled = _config?.usernameLogin ?? true;
-    if (phoneEnabled) tabs.add(const Tab(text: 'هاتف'));
-    if (emailEnabled) tabs.add(const Tab(text: 'بريد'));
-    if (usernameEnabled) tabs.add(const Tab(text: 'اسم مستخدم'));
+    final cfg = auth.authConfig;
+    if (cfg != null && cfg != _config) _config = cfg;
+
+    final tabs = _currentTabs;
+    // إعادة بناء المتحكم عند تغيّر عدد التبويبات (بسبب تغيير إعدادات الإدارة)
+    if (_tabController == null || _tabController!.length != tabs.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _rebuildTabController(tabs.length));
+      });
+    }
 
     Widget content;
     if (!(_config?.loginEnabled ?? true)) {
@@ -179,12 +195,7 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
       );
     } else if (tabs.length == 1) {
       // طريقة واحدة فقط: نموذج مباشر بدون تبويبات
-      content = _buildFormFor(tabs.length == 1 && phoneEnabled
-          ? 0
-          : (tabs.length == 1 && emailEnabled
-              ? 1
-              : 2),
-          c);
+      content = _buildFormFor(tabs.first, c);
     } else {
       content = Column(
         children: [
@@ -194,7 +205,7 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
               borderRadius: BorderRadius.circular(12),
             ),
             child: TabBar(
-              controller: _tabController,
+              controller: _tabController ?? TabController(length: tabs.length, vsync: this),
               onTap: (_) => setState(() {}),
               dividerColor: Colors.transparent,
               indicator: BoxDecoration(
@@ -203,11 +214,20 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
               ),
               labelColor: Colors.white,
               unselectedLabelColor: c.muted,
-              tabs: tabs,
+              tabs: tabs.map((t) {
+                switch (t) {
+                  case _LoginTab.phone:
+                    return const Tab(text: 'هاتف');
+                  case _LoginTab.email:
+                    return const Tab(text: 'بريد');
+                  case _LoginTab.username:
+                    return const Tab(text: 'اسم مستخدم');
+                }
+              }).toList(),
             ),
           ),
           const SizedBox(height: 24),
-          Expanded(child: _buildFormFor(_tabController.index, c)),
+          Expanded(child: _buildFormFor(tabs[_tabController?.index ?? 0], c)),
         ],
       );
     }
@@ -277,115 +297,124 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
     );
   }
 
-  /// بناء نموذج الدخول حسب التبويب المفعّل (0=هاتف، 1=بريد، 2=اسم مستخدم)
-  Widget _buildFormFor(int tabIndex, NovaColors c) {
+  /// بناء نموذج الدخول حسب نوع التبويب المفعّل
+  Widget _buildFormFor(_LoginTab tab, NovaColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (tabIndex == 0) ...[
-          IntlPhoneField(
-            controller: _phoneController,
-            decoration: InputDecoration(
-              labelText: 'رقم الهاتف',
-              filled: true,
-              fillColor: c.surface2,
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.line)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.accent)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            ),
-            initialCountryCode: 'SA',
-            languageCode: 'ar',
-            disableLengthCheck: true,
-            autovalidateMode: AutovalidateMode.disabled,
-            onChanged: (p) => _phone = p.completeNumber,
-          ),
-          const SizedBox(height: 20),
-          _primaryButton('التالي', c, _doPhoneLogin),
-        ] else if (tabIndex == 1) ...[
-          TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              labelText: 'البريد الإلكتروني',
-              filled: true,
-              fillColor: c.surface2,
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.line)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.accent)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: InputDecoration(
-              labelText: 'كلمة المرور',
-              filled: true,
-              fillColor: c.surface2,
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.line)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.accent)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 20),
-          _primaryButton('دخول', c, _doEmailLogin),
-        ] else ...[
-          TextField(
-            controller: _usernameController,
-            keyboardType: TextInputType.text,
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              labelText: 'اسم المستخدم',
-              filled: true,
-              fillColor: c.surface2,
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.line)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.accent)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: InputDecoration(
-              labelText: 'كلمة المرور',
-              filled: true,
-              fillColor: c.surface2,
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.line)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.accent)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 20),
-          _primaryButton('دخول', c, _doUsernameLogin),
-        ],
-      ],
+      children: _buildFormChildren(tab, c),
     );
+  }
+
+  List<Widget> _buildFormChildren(_LoginTab tab, NovaColors c) {
+    if (tab == _LoginTab.phone) {
+      return [
+        IntlPhoneField(
+          controller: _phoneController,
+          decoration: InputDecoration(
+            labelText: 'رقم الهاتف',
+            filled: true,
+            fillColor: c.surface2,
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.line)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.accent)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+          initialCountryCode: 'SA',
+          languageCode: 'ar',
+          disableLengthCheck: true,
+          autovalidateMode: AutovalidateMode.disabled,
+          onChanged: (p) => _phone = p.completeNumber,
+        ),
+        const SizedBox(height: 20),
+        _primaryButton('التالي', c, _doPhoneLogin),
+      ];
+    }
+    if (tab == _LoginTab.email) {
+      return [
+        TextField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            labelText: 'البريد الإلكتروني',
+            filled: true,
+            fillColor: c.surface2,
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.line)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.accent)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _passwordController,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'كلمة المرور',
+            filled: true,
+            fillColor: c.surface2,
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.line)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.accent)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _primaryButton('دخول', c, _doEmailLogin),
+      ];
+    }
+    // اسم مستخدم
+    return [
+      TextField(
+        controller: _usernameController,
+        keyboardType: TextInputType.text,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          labelText: 'اسم المستخدم',
+          filled: true,
+          fillColor: c.surface2,
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: c.line)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: c.accent)),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        ),
+      ),
+      const SizedBox(height: 14),
+      TextField(
+        controller: _passwordController,
+        obscureText: true,
+        decoration: InputDecoration(
+          labelText: 'كلمة المرور',
+          filled: true,
+          fillColor: c.surface2,
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: c.line)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: c.accent)),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        ),
+      ),
+      const SizedBox(height: 20),
+      _primaryButton('دخول', c, _doUsernameLogin),
+    ];
   }
 
   Widget _primaryButton(String label, NovaColors c, VoidCallback onPressed) {
