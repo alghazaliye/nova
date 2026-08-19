@@ -72,7 +72,10 @@ INSERT INTO app_settings (setting_key, setting_value) VALUES
   ('realtime_provider',     'polling'),
   ('auth_email_login',      '1'),
   ('auth_phone_login',      '1'),
-  ('auth_username_login',   '1')
+  ('auth_username_login',   '1'),
+  ('auth_email_registration',  '1'),
+  ('auth_phone_registration',  '1'),
+  ('otp_email_enabled',        '1')
 ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime('now','localtime');
 
 -- =====================================================
