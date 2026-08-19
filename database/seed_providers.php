@@ -65,7 +65,7 @@ function encryptPassword(string $plain): string
             // best-effort; fall back to the generated key for this run
         }
     }
-    $aesKey = substr(hash('sha256', (string)$key, true), 0, 32);
+    $aesKey = substr(hash('sha256', (string)$key), 0, 32); // hex key — MUST match OtpEncryption::getKey()
     $iv = random_bytes(12);
     $cipher = openssl_encrypt($plain, 'aes-256-gcm', $aesKey, OPENSSL_RAW_DATA, $iv, $tag);
     if ($cipher === false) {
