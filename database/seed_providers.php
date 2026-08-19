@@ -40,10 +40,30 @@ function encryptPassword(string $plain): string
         return '';
     }
     // Key resolution mirrors OtpEncryption::getKey():
-    // OTP_ENCRYPTION_KEY env var overrides app_settings otp_encryption_key.
+    // OTP_ENCRYPTION_KEY env var, then app_settings otp_encryption_key.
+    global $pdo, $dbPath;
     $key = getenv('OTP_ENCRYPTION_KEY') ?: null;
     if ($key === null || strlen($key) < 16) {
+        try {
+            $tmpPdo = new PDO('sqlite:' . $dbPath);
+            $tmpStmt = $tmpPdo->prepare("SELECT setting_value FROM app_settings WHERE setting_key = 'otp_encryption_key' LIMIT 1");
+            $tmpStmt->execute();
+            $row = $tmpStmt->fetch(PDO::FETCH_ASSOC);
+            $key = $row !== false ? trim((string)$row['setting_value']) : null;
+        } catch (Throwable $e) {
+            $key = null;
+        }
+    }
+    if ($key === null || strlen($key) < 16) {
         $key = bin2hex(random_bytes(16));
+        try {
+            $pdo->prepare("INSERT INTO app_settings (setting_key, setting_value)
+                VALUES ('otp_encryption_key', ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = CASE WHEN setting_value = '' THEN excluded.setting_value ELSE setting_value END")
+                ->execute([$key]);
+        } catch (Throwable $e) {
+            // best-effort; fall back to the generated key for this run
+        }
     }
     $aesKey = substr(hash('sha256', (string)$key, true), 0, 32);
     $iv = random_bytes(12);

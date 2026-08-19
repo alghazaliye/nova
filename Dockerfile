@@ -44,6 +44,7 @@ ENV DB_TYPE=sqlite \
     APP_ENV=production \
     OTP_PROVIDER=smtp \
     ENCRYPTION_KEY=REPLACE_ME \
+    OTP_ENCRYPTION_KEY=REPLACE_ME \
     GMAIL_SMTP_USERNAME=REPLACE_ME \
     GMAIL_SMTP_PASSWORD=REPLACE_ME
 
@@ -61,6 +62,7 @@ RUN { echo '#!/bin/sh'; \
       echo '  sqlite3 "$DB_PATH" < /var/www/html/database/seed_production.sql 2>/dev/null || true'; \
       echo 'fi'; \
       echo 'if [ -f /var/www/html/database/seed_providers.php ]; then'; \
+      echo '  export OTP_ENCRYPTION_KEY="${OTP_ENCRYPTION_KEY:-${ENCRYPTION_KEY:-}}"'; \
       echo '  php /var/www/html/database/seed_providers.php || true'; \
       echo 'fi'; \
       echo 'PORT="${PORT:-8080}"'; \
