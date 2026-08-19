@@ -189,7 +189,11 @@ class AdminAuthController
         }
 
         $mgr = new EmailProviderManager();
-        $res = $mgr->create($data);
+        try {
+            $res = $mgr->create($data);
+        } catch (Throwable $e) {
+            $this->out(['success' => false, 'error_code' => 'INTERNAL_ERROR'], 500, 'خطأ داخلي: ' . $e->getMessage());
+        }
         logAdminAudit($admin, 'EMAIL_PROVIDER_CREATED', 'email_providers', (int)$res['id'],
             'إضافة مزود بريد: ' . $data['name'] . ' (' . $data['type'] . ')');
         $this->out(['success' => true, 'id' => $res['id']], 201, 'تمت إضافة مزود البريد');
