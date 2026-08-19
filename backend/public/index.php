@@ -14,7 +14,9 @@ if (PHP_SAPI !== 'cli') {
         if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
         $env = $_ENV['APP_ENV'] ?? 'production';
         $msg = ($env === 'development') ? $e->getMessage() : 'خطأ داخلي في الخادم';
-        echo json_encode(['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'],JSON_UNESCAPED_UNICODE);
+        $payload = ['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'];
+        if (!headers_sent()) { header('X-Nova-Error: ' . base64_encode($e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine())); }
+        echo json_encode($payload,JSON_UNESCAPED_UNICODE);
     });
 }
 
