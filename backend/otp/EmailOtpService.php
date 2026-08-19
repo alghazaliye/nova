@@ -252,25 +252,20 @@ class EmailOtpService
                 return $getLine();
             };
 
-            error_log('[smtp] step=ehlo1');
             $say('EHLO nova-messenger.local');
             if ($tls && $enc === 'tls') {
-                error_log('[smtp] step=starttls');
                 $r = $say('STARTTLS');
                 if (!str_starts_with($r, '220')) {
                     return ['success' => false, 'message' => 'STARTTLS مرفوض: ' . substr($r, 0, 80), 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
                 }
-                error_log('[smtp] step=crypto');
                 stream_set_timeout($fp, 30);
                 if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
                     return ['success' => false, 'message' => 'فشل تفعيل TLS', 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
                 }
-                error_log('[smtp] step=ehlo2');
                 $say('EHLO nova-messenger.local');
             }
 
             if ($user !== '' && $pass !== '') {
-                error_log('[smtp] step=authlogin');
                 $r = $say('AUTH LOGIN');
                 if (!str_starts_with($r, '334')) {
                     return ['success' => false, 'message' => 'AUTH LOGIN مرفوض: ' . substr($r, 0, 80), 'http_code' => 0, 'response_time_ms' => (int)((microtime(true) - $start) * 1000)];
