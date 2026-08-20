@@ -23,7 +23,11 @@ class AuthConfig {
     this.usernameLogin = true,
     this.phoneOtpEnabled = true,
     this.emailOtpEnabled = true,
+    this.timezone = 'Asia/Riyadh',
   });
+
+  /// المنطقة الزمنية المعتمدة في إعدادات لوحة التحكم (مثل Asia/Riyadh).
+  final String timezone;
 
   factory AuthConfig.fromJson(Map<String, dynamic> j) {
     final reg = Map<String, dynamic>.from(j['registration'] ?? {});
@@ -39,7 +43,32 @@ class AuthConfig {
           Map<String, dynamic>.from(otp['phone'] ?? {})['enabled'] != false,
       emailOtpEnabled:
           Map<String, dynamic>.from(otp['email'] ?? {})['enabled'] != false,
+      timezone: (j['timezone'] ?? 'Asia/Riyadh').toString(),
     );
+  }
+
+  /// إزاحة المنطقة الزمنية عن UTC بالدقائق (مع دعم نصف الساعات مثل طهران).
+  int get utcOffsetMinutes {
+    if (timezone == 'UTC') return 0;
+    // خريطة صريحة للإزاحات الشائعة (ساعات كاملة ونصف ساعة)
+    const offsets = <String, int>{
+      'Africa/Cairo': 120, 'Africa/Tripoli': 120, 'Africa/Tunis': 60,
+      'Africa/Algiers': 60, 'Africa/Casablanca': 60, 'Africa/Lagos': 60,
+      'Africa/Johannesburg': 120, 'Africa/Khartoum': 120,
+      'Asia/Riyadh': 180, 'Asia/Kuwait': 180, 'Asia/Qatar': 180,
+      'Asia/Bahrain': 180, 'Asia/Muscat': 240, 'Asia/Dubai': 240,
+      'Asia/Baghdad': 180, 'Asia/Amman': 180, 'Asia/Damascus': 180,
+      'Asia/Beirut': 180, 'Asia/Jerusalem': 180, 'Asia/Aden': 180,
+      'Asia/Tehran': 210, 'Asia/Kabul': 270, 'Asia/Karachi': 300,
+      'Asia/Kolkata': 330, 'Asia/Dhaka': 360, 'Asia/Bangkok': 420,
+      'Asia/Jakarta': 420, 'Asia/Shanghai': 480, 'Asia/Tokyo': 540,
+      'Asia/Seoul': 540, 'Europe/Istanbul': 180, 'Europe/London': 0,
+      'Europe/Paris': 120, 'Europe/Berlin': 120, 'Europe/Moscow': 180,
+      'Australia/Sydney': 600, 'Pacific/Auckland': 720,
+      'America/New_York': -240, 'America/Los_Angeles': -420,
+      'America/Chicago': -300, 'America/Sao_Paulo': -180,
+    };
+    return offsets[timezone] ?? 180;
   }
 
   /// هل أي طريقة تسجيل متاحة؟
@@ -102,6 +131,18 @@ class AuthProvider extends ChangeNotifier {
 
   /// إعدادات المصادقة الديناميكية (طرق التسجيل/الدخول من لوحة الإدارة)
   AuthConfig? get authConfig => _authConfig;
+
+  /// المنطقة الزمنية المعتمدة حاليًا (من إعدادات لوحة التحكم أو الافتراضية).
+  String get timezone => _authConfig?.timezone ?? 'Asia/Riyadh';
+
+  /// إزاحة المنطقة الزمنية المعتمدة عن UTC بالدقائق.
+  int get timezoneOffsetMinutes => _authConfig?.utcOffsetMinutes ?? 180;
+
+  /// عرض رسالة خطأ في الواجهة (مثال: رمز غير مكتمل) بدون اتصال بالخادم
+  void showError(String message) {
+    _error = message;
+    notifyListeners();
+  }
 
   /// GET /auth/config
   Future<void> fetchAuthConfig() async {
@@ -359,6 +400,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    _otpExpiresAt = _parseOtpExpiry(res['data'] as Map?);
     notifyListeners();
     return true;
   }
@@ -393,6 +435,7 @@ class AuthProvider extends ChangeNotifier {
         await fetchAppSettings();
       }
     }
+    _otpExpiresAt = _parseOtpExpiry(res['data'] as Map?);
     notifyListeners();
     return true;
   }
@@ -400,6 +443,21 @@ class AuthProvider extends ChangeNotifier {
   /// هل عاد الدخول بدون OTP (التحقق معطّل من لوحة التحكم)
   bool _lastLoginBypass = false;
   bool get lastLoginBypass => _lastLoginBypass;
+
+  /// صلاحية الرمز النشط (للعرض في شاشة التحقق مع عدّاد تنازلي)
+  DateTime? _otpExpiresAt;
+  DateTime? get otpExpiresAt => _otpExpiresAt;
+
+  DateTime? _parseOtpExpiry(Map? data) {
+    final raw = data?['expires_at'];
+    if (raw == null) return null;
+    try {
+      // expires_at مخزّنة GMT — نحفظها UTC دائمًا (المقارنة بالفروقات فقط)
+      return DateTime.parse('$raw').toUtc();
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// POST /auth/verify-otp
   Future<bool> verifyOtp(String phone, String otp) async {
@@ -424,9 +482,11 @@ class AuthProvider extends ChangeNotifier {
     if (token != null) {
       _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
       await saveToken(token, userId: _user?.id);
-      // تسجيل تفاصيل الجهاز عند كل دخول ناجح
-      registerCurrentDevice();
-      await fetchAppSettings();
+      // تسجيل الجهاز وجلب إعدادات التطبيق لا يجب أن يؤخّر الدخول:
+      // الطلبان بطيئان (حتى ~25 ثانية) وكانت بطأتهما تدفع المستخدم
+      // للضغط المزدوج على «تحقق» (فيظهر خطأ 400 رمز منتهٍ)
+      registerCurrentDevice().catchError((_) {});
+      fetchAppSettings().catchError((_) {});
     }
     notifyListeners();
     return true;

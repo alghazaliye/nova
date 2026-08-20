@@ -94,12 +94,33 @@ class EmailAuthController
             Response::error($res['message'] ?? 'فشل إرسال رمز التحقق', 'EMAIL_OTP_SEND_FAILED', 503);
         }
 
-        $out = ['delivery_mode' => $res['delivery_mode'], 'cooldown' => $res['cooldown'] ?? 0];
+        $out = [
+            'delivery_mode' => $res['delivery_mode'],
+            'cooldown' => $res['cooldown'] ?? 0,
+            'expires_at' => $this->activeEmailOtpExpiry($email),
+        ];
         if ($devCode !== null) {
             $out['otp_dev'] = $devCode; // Remove in production
         }
 
         Response::success($out, 'تم إرسال رمز التحقق إلى بريدك الإلكتروني');
+    }
+
+    /** صلاحية آخر رمز OTP نشط لنفس البريد (للعرض في شاشة التحقق) */
+    private function activeEmailOtpExpiry(string $email): ?string
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT expires_at FROM email_verification_codes
+                 WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > NOW())
+                 ORDER BY id DESC LIMIT 1"
+            );
+            $stmt->execute([$email]);
+            $row = $stmt->fetch();
+            return $row ? ($row['expires_at'] ?: null) : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     // ---------------------------------------------------------------

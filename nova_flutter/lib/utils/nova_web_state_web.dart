@@ -1,5 +1,6 @@
 import 'dart:js_interop';
-import 'dart:js_interop_unsafe' as unsafe;
+import 'dart:js_interop_unsafe';
+import 'dart:js_util' as js_util;
 
 // ═══ JS interop موثوق في WASM/skwasm mode ═══
 // نمط: external @JS getter لـ window (مفيد globalThis) ثم extensions من
@@ -20,12 +21,59 @@ void setNovaChatsImpl(String value) {
 }
 
 String novaHrefImpl() {
-  try {
-    final loc = _window.getProperty<JSAny>('location'.toJS) as JSObject;
-    return (loc.getProperty<JSAny>('href'.toJS) as JSString).toDart;
-  } catch (_) {
-    return '';
+  // قراءة متساهلة عبر js_util.getProperty — يقرأ getters بشكل موثوق
+  // في dart2js وwasm على عكس getProperty<JSAny> الذي يفشل مع location getters
+  Object? propOf(Object? obj, String name) {
+    if (obj == null) return null;
+    try {
+      return js_util.getProperty<Object?>(obj, name);
+    } catch (_) {
+      return null;
+    }
   }
+  String asStr(Object? v) {
+    if (v == null) return '';
+    if (v is String) return v;
+    try {
+      return js_util.getProperty<String>(v, 'toString') as String;
+    } catch (_) {
+      return v.toString();
+    }
+  }
+
+  // 1) window.locationHref (مستحيل عمليًا لكن للأمان)
+  String h = asStr(propOf(_window, 'locationHref'));
+  if (h.isNotEmpty) return h;
+  // 2) window.location.href — المسار الأساسي
+  final loc = propOf(_window, 'location');
+  if (loc != null) {
+    h = asStr(propOf(loc, 'href'));
+    if (h.isNotEmpty) return h;
+  }
+  // 3) globalThis.window.location.href
+  final w = propOf(_globalThis, 'window');
+  if (w != null) {
+    final loc2 = propOf(w, 'location');
+    if (loc2 != null) {
+      h = asStr(propOf(loc2, 'href'));
+      if (h.isNotEmpty) return h;
+    }
+  }
+  return '';
+}
+
+/// طبقة أخيرة: قراءة window.location.origin مباشرة عبر js_util.getProperty
+/// (موثوق في dart2js وwasm بعكس getProperty<JSAny>)
+String? webOriginFallbackImpl() {
+  try {
+    final loc = js_util.getProperty<Object?>(_window, 'location');
+    if (loc != null) {
+      final o = js_util.getProperty<Object?>(loc, 'origin');
+      final s = o is String ? o : o?.toString();
+      if (s != null && s.isNotEmpty && s.startsWith('http')) return s;
+    }
+  } catch (_) {}
+  return null;
 }
 
 // ═══ إشعارات المتصفح ═══

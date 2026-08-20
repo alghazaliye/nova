@@ -232,12 +232,17 @@ class NovaMessage {
 }
 
 /// تنسيق "آخر ظهور" بالعربية
-String formatLastSeen(String? lastSeen, {bool isOnline = false}) {
+String formatLastSeen(String? lastSeen, {bool isOnline = false, int? utcOffsetMinutes}) {
   if (isOnline) return 'متصل الآن';
   if (lastSeen == null || lastSeen.isEmpty) return 'آخر ظهور: مؤخراً';
   try {
-    final dt = DateTime.parse(lastSeen);
-    final diff = DateTime.now().difference(dt);
+    // التواريخ تُخزن UTC نصية — نحسب الفرق بالتوقيت المعتمد إذا توفرت الإزاحة
+    DateTime dt;
+    final normalized = lastSeen.contains('T') ? lastSeen : lastSeen.replaceFirst(' ', 'T');
+    final parsed = DateTime.tryParse(normalized);
+    if (parsed == null) return 'آخر ظهور: مؤخراً';
+    dt = (utcOffsetMinutes != null) ? parsed.toUtc().add(Duration(minutes: utcOffsetMinutes)) : parsed;
+    final diff = DateTime.now().difference(dt.toUtc());
     String label;
     if (diff.inSeconds < 60) {
       label = 'منذ لحظات';

@@ -44,6 +44,13 @@ class OtpService
         } catch (Throwable $e) {
             // column already exists — ignore
         }
+        try {
+            $this->pdo->exec(
+                'ALTER TABLE otp_verifications ADD COLUMN manual_code VARCHAR(16) NULL'
+            );
+        } catch (Throwable $e) {
+            // column already exists — ignore
+        }
     }
 
     // ------------------------------------------------------------------
@@ -275,14 +282,17 @@ class OtpService
             $manualCodeHash = password_hash($otpCode, PASSWORD_BCRYPT);
         }
         // expiryMinutes <= 0 means no expiration (expires_at stays NULL)
-        $expiresAt = $expiryMinutes > 0 ? date('Y-m-d H:i:s', time() + $expiryMinutes * 60) : null;
+        $expiresAt = $expiryMinutes > 0 ? gmdate('Y-m-d H:i:s', time() + $expiryMinutes * 60) : null;
 
         $stmt = $this->pdo->prepare(
             'INSERT INTO otp_verifications
-                (phone_number, name, otp_hash, manual_code_hash, status, attempts, max_attempts, delivery_mode, delivery_status, expires_at, ip_address, user_agent, created_at)
-             VALUES (?, ?, ?, ?, \'pending\', 0, ?, ?, NULL, ?, ?, ?, NOW())'
+                (phone_number, name, otp_hash, manual_code_hash, manual_code, status, attempts, max_attempts, delivery_mode, delivery_status, expires_at, ip_address, user_agent, created_at)
+             VALUES (?, ?, ?, ?, ?, \'pending\', 0, ?, ?, NULL, ?, ?, ?, NOW())'
         );
-        $stmt->execute([$phone, $name, $otpHash, $manualCodeHash, $maxAttempts, $mode, $expiresAt, $ip, $ua]);
+        // في وضع تطوير (dev code) أو وضع التسليم اليدوي: تخزين الرمز نصيًا حتى يطابق
+        // ما يراه المستخدم في الرد (otp_dev) وما يعرضه المدير في لوحة التحكم
+        $plainManualCode = $devCode !== null || $mode === 'manual' ? $otpCode : null;
+        $stmt->execute([$phone, $name, $otpHash, $manualCodeHash, $plainManualCode, $maxAttempts, $mode, $expiresAt, $ip, $ua]);
         $otpId = (int)$this->pdo->lastInsertId();
 
         // 4. Send
@@ -303,10 +313,10 @@ class OtpService
             $fallbackEnabled = $this->getSetting('otp_enable_manual_fallback', '1') === '1';
             if ($fallbackEnabled) {
                 $this->pdo->prepare(
-                    'UPDATE otp_verifications SET manual_code_hash = ?, status = \'manual\',
+                    'UPDATE otp_verifications SET manual_code_hash = ?, manual_code = ?, status = \'manual\',
                            delivery_status = \'manual\', updated_at = NOW()
                      WHERE id = ?'
-                )->execute([password_hash($otpCode, PASSWORD_BCRYPT), $otpId]);
+                )->execute([password_hash($otpCode, PASSWORD_BCRYPT), $otpCode, $otpId]);
                 $manual = true;
             }
         }
@@ -454,14 +464,21 @@ class OtpService
         $stmt = $this->pdo->prepare(
             'SELECT * FROM otp_verifications
              WHERE phone_number = ?
-               AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')
+               AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\',\'verified\',\'expired\',\'blocked\')
              ORDER BY id DESC LIMIT 1'
         );
         $stmt->execute([$phone]);
         $otp = $stmt->fetch();
-
         if (!$otp) {
             return ['verified' => false, 'error_code' => 'OTP_EXPIRED', 'message' => 'لا يوجد رمز تحقق نشط. اطلب رمزًا جديدًا'];
+        }
+        if (in_array($otp['status'], ['verified', 'expired', 'blocked'], true)) {
+            $msg = $otp['status'] === 'verified'
+                ? 'اكتمل التحقق بهذا الرمز. اطلب رمزًا جديدًا إذا أردت محاولة أخرى'
+                : ($otp['status'] === 'blocked'
+                    ? 'تجاوزت الحد الأقصى للمحاولات. اطلب رمزًا جديدًا'
+                    : 'انتهت صلاحية الرمز. اطلب رمزًا جديدًا');
+            return ['verified' => false, 'error_code' => $otp['status'] === 'blocked' ? 'OTP_BLOCKED' : 'OTP_EXPIRED', 'message' => $msg];
         }
 
         if ($otp['expires_at'] !== null && $this->toUnixTs($otp['expires_at']) < time()) {
@@ -479,7 +496,12 @@ class OtpService
         $this->pdo->prepare('UPDATE otp_verifications SET attempts = attempts + 1, updated_at = NOW() WHERE id = ?')
                  ->execute([(int)$otp['id']]);
 
-        if (!password_verify(trim($code), $otp['otp_hash'])) {
+        $valid = password_verify(trim($code), $otp['otp_hash']);
+        // قبول الكود اليدوي الذي عرضه المدير للمستخدم (وضع التسليم اليدوي)
+        if (!$valid && $otp['manual_code_hash'] !== null) {
+            $valid = password_verify(trim($code), $otp['manual_code_hash']);
+        }
+        if (!$valid) {
             $left = (int)$otp['max_attempts'] - (int)$otp['attempts'] - 1;
             $msg = $left <= 0 ? 'تجاوزت الحد الأقصى للمحاولات' : "رمز التحقق غير صحيح. متبقٍ {$left} محاولة";
             return ['verified' => false, 'error_code' => 'OTP_INVALID', 'message' => $msg, 'attempts_left' => max(0, $left)];
@@ -511,8 +533,8 @@ class OtpService
                     p.name AS provider_name
              FROM otp_verifications o
              LEFT JOIN otp_providers p ON p.id = o.provider_id
-             WHERE o.status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')
-             ORDER BY o.id DESC
+             WHERE o.status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\',\'verified\')
+             ORDER BY CASE WHEN o.status = \'verified\' THEN 1 ELSE 0 END ASC, o.id DESC
              LIMIT ? OFFSET ?'
         );
         $stmt->bindValue(1, $perPage, PDO::PARAM_INT);
@@ -549,19 +571,40 @@ class OtpService
             return null; // auto mode — no manual code available
         }
 
-        // Generate a NEW code (admins must tell the user the new one)
-        $code = $this->generateCode();
-        $hash = password_hash($code, PASSWORD_BCRYPT);
-        $expiryMinutes = (int)$this->getSetting('otp_expiry_minutes', '5');
+        // رمز ثابت لا يتغيّر عند إعادة العرض — يظل صالحًا طوال مدّته (يتغيّر فقط عند انتهاء الوقت أو طلب جديد)
+        $code = $otp['manual_code'] ?? null;
+        $nowPlus = (int)$this->getSetting('otp_expiry_minutes', '5');
+        $nowPlusTs = time() + max($nowPlus, 0) * 60;
+        // أقصى صلاحية: بين الصلاحية الأصلية و(الآن + مدة الصلاحية)
+        // حتى لا تُنقص مدّة الرمز إذا عُرض بعد فترات طويلة
+        $originalExpiryTs = ($otp['expires_at'] !== null) ? $this->toUnixTs($otp['expires_at']) : 0;
+        $freshExpiryTs = ($originalExpiryTs > $nowPlusTs) ? $originalExpiryTs : $nowPlusTs;
 
-        // extend validity window from now
+                if ($code === null || $code === '') {
+            // أول عرض بدون نص الرمز (سجل قديم أو وضع auto_fallback):
+            // يُولَّد رمز جديد ويُحدَّث otp_hash أيضًا حتى يطابق ما يعرضه المدير
+            // للمستخدم، وإلا سيظهر رقم مختلف عمّا يقبله التطبيق.
+            $code = $this->generateCode();
+            $this->pdo->prepare(
+                'UPDATE otp_verifications SET otp_hash = ? WHERE id = ?'
+            )->execute([password_hash($code, PASSWORD_BCRYPT), $otpId]);
+        } elseif ($originalExpiryTs > 0 && $originalExpiryTs < time()) {
+            // انتهت الصلاحية: توليد كود جديد وتحديث الهاش وتمديد الصلاحية
+            $code = $this->generateCode();
+            $freshExpiryTs = $nowPlusTs;
+            $this->pdo->prepare(
+                'UPDATE otp_verifications SET otp_hash = ? WHERE id = ?'
+            )->execute([password_hash($code, PASSWORD_BCRYPT), $otpId]);
+        }
+        $hash = password_hash($code, PASSWORD_BCRYPT);
+        // DB (SQLite NOW()) يخزن الوقت بصيغة UTC — نحفظ بنفس الصيغة لقراءة صحيحة لاحقًا
+        $freshExpiry = gmdate('Y-m-d H:i:s', $freshExpiryTs);
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET manual_code_hash = ?, status = \'manual\',
+            'UPDATE otp_verifications SET manual_code_hash = ?, manual_code = ?, status = \'manual\',
                    expires_at = ?, updated_at = NOW()
              WHERE id = ?'
-        )->execute([$hash, date('Y-m-d H:i:s', time() + $expiryMinutes * 60), $otpId]);
-
-        return ['code' => $code, 'expires_at' => date('Y-m-d H:i:s', time() + $expiryMinutes * 60)];
+        )->execute([$hash, $code, $freshExpiry, $otpId]);
+        return ['code' => $code, 'expires_at' => $freshExpiry];
     }
 
     /**

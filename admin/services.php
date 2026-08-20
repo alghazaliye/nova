@@ -188,7 +188,7 @@ include __DIR__ . '/includes/sidebar.php';
 
         <div>
             <label for="otp_test_code">رمز الاختبار (للتطوير):</label>
-            <input type="text" id="otp_test_code" name="otp_test_code" placeholder="مثال: 123456" value="<?= htmlspecialchars($settings['otp_test_code'] ?? '123456') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="text" id="otp_test_code" name="otp_test_code" placeholder="مثال: 654321" value="<?= htmlspecialchars($settings['otp_test_code'] ?? '654321') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             <small style="color: #666;">هذا الرمز سيُستخدم في بيئة الاختبار</small>
         </div>
 
@@ -469,7 +469,7 @@ function op_renderProviders(){
       <td>${op_statusBadge(p.status)}</td>
       <td>${p.is_default ? '<span style="color:var(--primary); font-weight:800;">نعم</span>' : '—'}</td>
       <td><span style="color:var(--good)">${p.success_count || 0}</span> / <span style="color:var(--bad)">${p.failure_count || 0}</span></td>
-      <td>${p.last_used_at ? new Date(p.last_used_at).toLocaleString('ar-SA') : '—'}</td>
+      <td>${p.last_used_at ? (function(){ try { const raw = String(p.last_used_at).trim(); const iso = (raw.length >= 19 && raw[10] === ' ' && !raw.includes('T') && !raw.endsWith('Z')) ? raw + 'Z' : raw; return new Date(iso).toLocaleString('ar-SA', {timeZone: window.NovaTZ || 'Asia/Riyadh'}); } catch(e){ return new Date(p.last_used_at).toLocaleString('ar-SA'); } })() : '—'}</td>
       <td>
         <div style="display:flex; gap:5px; flex-wrap:wrap;">
           <button class="btn sm" onclick="op_openModal('edit', ${p.id})">✎ تعديل</button>
@@ -563,7 +563,7 @@ function op_renderTypeFields(){
   } else if (type === 'whatsapp_mock') {
     html = '<p class="svc-op-field-note" style="color:var(--good);"><b>قناة تجربة داخلية عبر واتساب:</b> رمز حقيقي (6 أرقام) يُولَّد ويُشفّر كالمزودات الحقيقية، لكن لا يُرسل واتساب فعليًا. يمكنك قراءة الرمز من صفحة «طلبات التسجيل» (سجل التسليم) أو من الإشعار في لوحة التحكم. مثالي لتجربة مسار تحقق واتساب لأي شخص يسجل دون اشتراك في خدمة خارجية. للإنتاج: استخدم نوع HTTP REST مع WhatsApp Cloud API (Meta) أو Twilio WhatsApp.</p>';
   } else if (type === 'test') {
-    html = '<p class="svc-op-field-note" style="color:var(--warn);"><b>تنبيه:</b> مزود الاختبار يعمل فقط في بيئة التطوير ويعيد رمز OTP_TEST_CODE المحدد في الإعدادات (حاليًا: 123456).</p>';
+    html = '<p class="svc-op-field-note" style="color:var(--warn);"><b>تنبيه:</b> مزود الاختبار يعمل فقط في بيئة التطوير ويعيد رمز OTP_TEST_CODE المحدد في الإعدادات (حاليًا: 654321).</p>';
   }
   host.innerHTML = html;
   op_toggleAuthFields();

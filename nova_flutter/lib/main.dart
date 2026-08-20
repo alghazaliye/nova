@@ -101,7 +101,10 @@ class _AppRouterState extends State<AppRouter> {
     // إعادة توجيه فورية عند تسجيل خروج/دخول (بدون إعادة تحميل)
     final token = AuthProvider.currentToken;
     if (_checked) {
-      if (token == null && _target is! PhoneScreen) {
+      // لا نُرجع إلى شاشة الدخول إذا كان المستخدم داخل شاشة OTP (رمز خاطئ أو انتهاء صلاحية):
+      // أي تغيير في حالة المصادقة (مثل حفظ رسالة خطأ) كان يُعيد التطبيق فورًا إلى صفحة الدخول
+      // ويُسقط شاشة التحقق — وهو سبب "الرمز لا يعمل ولا يدخل التطبيق"
+      if (token == null && _target is! PhoneScreen && _target is! OtpScreen) {
         if (mounted) setState(() { _target = const PhoneScreen(); });
       } else if (token != null && _target is PhoneScreen) {
         if (mounted) setState(() { _target = const ChatsScreen(); });
@@ -152,21 +155,54 @@ class _AppRouterState extends State<AppRouter> {
         }
         return;
       }
-      final p = params['phone'];
+      // دعم التحقق عبر البريد: ?email=<email>&otp=<code>&otp_expires=<iso>
+      final e = params['email'];
       final otp = params['otp'];
+      if (e != null && otp != null && otp.length >= 4 && e.contains('@')) {
+        DateTime? otpExp;
+        final otpExpRaw = uri.queryParameters['otp_expires'];
+        if (otpExpRaw != null) {
+          try {
+            otpExp = DateTime.parse(otpExpRaw).toUtc();
+          } catch (_) {}
+        }
+        // إن كان رمزًا ممتلئًا (6 أرقام) نجرّب التحقق تلقائيًا
+        if (otp.length == 6) {
+          final ok = await context.read<AuthProvider>().verifyEmailOtp(e, otp);
+          if (!ok || !mounted) {
+            target = OtpScreen(phone: '', email: e, autoOtp: otp, otpExpiresAt: otpExp);
+          } else {
+            target = const ChatsScreen();
+          }
+        } else {
+          target = OtpScreen(phone: '', email: e, autoOtp: otp, otpExpiresAt: otpExp);
+        }
+        if (mounted) setState(() { _target = target; _checked = true; });
+        return;
+      }
+      final p = params['phone'];
       if (p != null && p.length >= 7 && otp != null && otp.length >= 4) {
         final chatId = uri.queryParameters['chat'];
         final cid = chatId != null ? int.tryParse(chatId) : null;
+        // صلاحية الرمز (اختياري) — للازم عدّاد تنازلي في شاشة التحقق
+        DateTime? otpExp;
+        final otpExpRaw = uri.queryParameters['otp_expires'];
+        if (otpExpRaw != null) {
+          try {
+            // نحفظ التاريخ كـ UTC دائمًا (يُعتمد على مقارنة الفروق لا التوقيت المحلي)
+            otpExp = DateTime.parse(otpExpRaw).toUtc();
+          } catch (_) {}
+        }
         if (cid != null && cid > 0) {
           // تسجيل دخول تلقائي ثم فتح المحادثة مباشرة عبر ?chat=<id>
           final ok = await context.read<AuthProvider>().verifyOtp(p, otp);
           if (!ok || !mounted) {
-            target = OtpScreen(phone: p, isRegister: false, autoOtp: otp);
+            target = OtpScreen(phone: p, isRegister: false, autoOtp: otp, otpExpiresAt: otpExp);
           } else {
             target = _ChatByIdLoader(id: cid);
           }
         } else {
-          target = OtpScreen(phone: p, isRegister: false, autoOtp: otp);
+          target = OtpScreen(phone: p, isRegister: false, autoOtp: otp, otpExpiresAt: otpExp);
         }
         if (mounted) {
           setState(() { _target = target; _checked = true; });

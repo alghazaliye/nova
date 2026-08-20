@@ -110,7 +110,37 @@ $API = '/api/v1/admin/auth';
 
   /* شبكة الحقول */
   .auth-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 760px) { .auth-grid-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) {
+    .auth-grid-2 { grid-template-columns: 1fr; }
+    /* البطاقات في عمود واحد على الجوال حتى لا تتكدس فوق بعضها */
+    .content > div[style] { grid-template-columns: 1fr !important; }
+    /* مناطق النقر أكبر (48px) لمعايير اللمس */
+    .auth-toggle { min-height: 48px; -webkit-tap-highlight-color: rgba(91,92,226,.15); touch-action: manipulation; }
+    .auth-toggle input[type="checkbox"] { width: 26px; height: 26px; flex: 0 0 26px; }
+    /* شريط الأزرار مثبت أسفل الشاشة دائمًا ظاهر وقابل للنقر */
+    .auth-actions {
+      position: sticky;
+      bottom: 10px;
+      z-index: 8;
+      background: var(--surface);
+      border: 1.5px solid var(--line);
+      border-radius: 16px;
+      padding: 10px 14px;
+      box-shadow: 0 10px 28px rgba(16, 24, 40, .25);
+      margin-bottom: 12px;
+      justify-content: center;
+    }
+    .btn-auth-primary, .btn-auth-secondary {
+      flex: 1 1 auto;
+      justify-content: center;
+      min-height: 48px;
+      -webkit-tap-highlight-color: rgba(91,92,226,.2);
+      touch-action: manipulation;
+    }
+    .btn-auth-primary:active, .btn-auth-secondary:active { transform: scale(.97); }
+  }
+  /* منع تغطية الأزرار ومناطق النقر بعناصر أخرى */
+  .btn-auth-primary, .btn-auth-secondary { position: relative; }
 
   /* الأزرار */
   .auth-actions {
@@ -160,14 +190,14 @@ $API = '/api/v1/admin/auth';
           <small>الطرق المتاحة لإنشاء حساب جديد</small>
         </div>
       </div>
-      <label class="auth-toggle" onclick="document.getElementById('regPhone').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="regPhone">
         <div>
           <div class="toggle-label">التسجيل برقم الهاتف</div>
           <div class="toggle-hint">إنشاء حساب جديد عبر رمز تحقق OTP يصل إلى رقم الهاتف.</div>
         </div>
       </label>
-      <label class="auth-toggle" onclick="document.getElementById('regEmail').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="regEmail">
         <div>
           <div class="toggle-label">التسجيل بالبريد الإلكتروني</div>
@@ -186,15 +216,15 @@ $API = '/api/v1/admin/auth';
           <small>طرق دخول المستخدم بعد إنشاء الحساب</small>
         </div>
       </div>
-      <label class="auth-toggle" onclick="document.getElementById('loginPhone').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="loginPhone">
         <div class="toggle-label">رقم الهاتف (OTP)</div>
       </label>
-      <label class="auth-toggle" onclick="document.getElementById('loginEmail').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="loginEmail">
         <div class="toggle-label">البريد الإلكتروني (كلمة مرور)</div>
       </label>
-      <label class="auth-toggle" onclick="document.getElementById('loginUsername').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="loginUsername">
         <div class="toggle-label">اسم المستخدم (كلمة مرور)</div>
       </label>
@@ -211,7 +241,7 @@ $API = '/api/v1/admin/auth';
           <small>خصائص رمز التحقق المرسل إلى الهاتف</small>
         </div>
       </div>
-      <label class="auth-toggle" onclick="document.getElementById('otpPhoneEnabled').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="otpPhoneEnabled">
         <div class="toggle-label">تفعيل OTP الهاتف</div>
       </label>
@@ -253,7 +283,7 @@ $API = '/api/v1/admin/auth';
           <small>خصائص رمز التحقق المرسل إلى البريد</small>
         </div>
       </div>
-      <label class="auth-toggle" onclick="document.getElementById('otpEmailEnabled').click(); return false;">
+      <label class="auth-toggle">
         <input type="checkbox" id="otpEmailEnabled">
         <div class="toggle-label">تفعيل OTP البريد الإلكتروني</div>
       </label>

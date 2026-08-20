@@ -941,7 +941,8 @@ class _ChatsTabState extends State<ChatsTab> {
                               style: const TextStyle(fontSize: 14)),
                           subtitle: Text(
                               formatLastSeen(u['last_seen']?.toString(),
-                                  isOnline: online),
+                                  isOnline: online,
+                                  utcOffsetMinutes: context.read<AuthProvider>().timezoneOffsetMinutes),
                               style: TextStyle(
                                   fontSize: 11.5,
                                   color: online ? c.accent : c.muted)),
@@ -1282,7 +1283,9 @@ class _ChatsTabState extends State<ChatsTab> {
                                                     : formatLastSeen(
                                                         conv.lastSeen,
                                                         isOnline:
-                                                            conv.isOnline),
+                                                            conv.isOnline,
+                                                        utcOffsetMinutes:
+                                                            context.read<AuthProvider>().timezoneOffsetMinutes),
                                                 style: TextStyle(
                                                     fontSize: 11,
                                                     color: conv.isOnline
@@ -1702,7 +1705,8 @@ class _ContactsTabState extends State<ContactsTab> {
                     const SizedBox(height: 3),
                     Text(
                       formatLastSeen(user['last_seen']?.toString(),
-                          isOnline: online),
+                          isOnline: online,
+                          utcOffsetMinutes: context.read<AuthProvider>().timezoneOffsetMinutes),
                       style: TextStyle(
                           fontSize: 12.5,
                           color: online ? c.accent : c.muted),

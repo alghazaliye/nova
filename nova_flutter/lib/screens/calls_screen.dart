@@ -286,7 +286,7 @@ class _CallsScreenState extends State<CallsScreen> {
                                                   color: missed ? Colors.redAccent : c.text)),
                                           const SizedBox(height: 4),
                                           Text(
-                                              '${_statusLabel(call)} • ${timeShort(call['created_at'] ?? '')}',
+                                              '${_statusLabel(call)} • ${novaServerTime(call['created_at'] ?? '', auth.timezoneOffsetMinutes)}',
                                               style: TextStyle(fontSize: 13, color: c.muted)),
                                         ],
                                       ),

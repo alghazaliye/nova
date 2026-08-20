@@ -62,7 +62,17 @@ class AuthConfigService
             ],
             'registration_disabled' => $this->isRegistrationFullyDisabled(),
             'app_name' => $this->getSetting('app_name', 'NOVA Messenger'),
+            'timezone' => $this->getTimezoneSetting(),
         ];
+    }
+
+    private function getTimezoneSetting(): string
+    {
+        $tz = $this->getSetting('default_timezone', '');
+        if ($tz !== '' && in_array($tz, timezone_identifiers_list(), true)) {
+            return $tz;
+        }
+        return 'Asia/Riyadh';
     }
 
     public function isRegistrationFullyDisabled(): bool

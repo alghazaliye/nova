@@ -99,6 +99,7 @@ class AuthController
             'message' => $res['message'],
             'delivery_mode' => $res['delivery_mode'],
             'cooldown' => $res['cooldown'],
+            'expires_at' => $this->activeOtpExpiry($phone),
         ];
         if ($this->isDevelopmentOtp()) {
             $responseData['otp_dev'] = $devCode; // Remove in production
@@ -281,6 +282,7 @@ class AuthController
             'message' => 'تم إرسال رمز التحقق',
             'delivery_mode' => $res['delivery_mode'],
             'cooldown' => $res['cooldown'],
+            'expires_at' => $this->activeOtpExpiry($phone),
         ];
         if ($this->isDevelopmentOtp()) {
             $responseData['otp_dev'] = $devCode;
@@ -337,6 +339,23 @@ class AuthController
         }
 
         Response::success($responseData, 'تم إعادة إرسال رمز التحقق');
+    }
+
+    /** صلاحية آخر رمز OTP نشط لنفس الهاتف (للعرض في شاشة التحقق) */
+    private function activeOtpExpiry(string $phone): ?string
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT expires_at FROM otp_verifications
+                 WHERE phone_number = ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')
+                 ORDER BY id DESC LIMIT 1'
+            );
+            $stmt->execute([$phone]);
+            $row = $stmt->fetch();
+            return $row ? ($row['expires_at'] ?: null) : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /** Find the latest pending otp_verifications id for a phone (legacy-free lookup) */

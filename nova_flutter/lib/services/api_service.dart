@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:nova_flutter/utils/nova_web_state.dart' show novaHref;
+import 'package:nova_flutter/utils/nova_web_state.dart' show novaHref, webOriginFallback;
 
 /// خدمة الاتصال بخادم NOVA Messenger API
 class ApiService {
-  static const String _defaultUrl =
-      'https://8080-i0y331w4apy035oayp9qf-247b94fb.us3.manus.computer/api/v1';
+  /// لا رابط ثابت لأي بيئة سابقة — دائمًا نفس نطاق الصفحة الحالية.
+  static const String _defaultUrl = '/api/v1'; // لا يُستخدم إلا عند عدم توفر origin
 
   /// تجاوز يدوي للرابط الأساسي (يُستخدم لتغيير الخادم عند النشر)
   static String? baseUrlOverride;
@@ -30,13 +30,22 @@ class ApiService {
       } catch (_) {}
       // افتراضيًا نفس نطاق الصفحة الحالية (يعمل على Render وأي استضافة)
       try {
-        final origin = Uri.parse(novaHref()).origin;
+        String origin = Uri.parse(novaHref()).origin;
+        if (origin.isEmpty || !origin.startsWith('http')) {
+          // novaHref فشل في قراءة window.location — قراءة origin مباشرة
+          origin = webOriginFallback() ?? '';
+        }
         if (origin.isNotEmpty && origin.startsWith('http')) {
           return '$origin/api/v1';
         }
       } catch (_) {}
     }
     return _defaultUrl;
+  }
+
+  /// رابط الخدمة الحالي بدون /api/v1 — مفيد لإعادة بناء أي مسار
+  static String get serviceOrigin {
+    return baseUrl.replaceAll(RegExp(r'/api/v1/?$'), '');
   }
 
   static String? token;

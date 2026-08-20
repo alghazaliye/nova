@@ -90,11 +90,12 @@ include __DIR__ . '/includes/sidebar.php';
 </style>
 
 <script>
-const OTP_API = '/api/v1/admin/otp/registrations';
-const EMAIL_API = '/api/v1/admin/email-registrations';
+const OTP_API = '/admin/otp/registrations';
+const EMAIL_API = '/admin/email-registrations';
 function token() { return localStorage.getItem('adminToken') || ''; }
 let tab = '<?= in_array($_GET['tab'] ?? '', ['phone', 'email'], true) ? $_GET['tab'] : 'phone' ?>';
 let currentCode = '';
+let pinnedId = null;
 
 const PHONE_HEAD = `<tr><th>#</th><th>الرقم</th><th>الاسم</th><th>وضع التسليم</th><th>الحالة</th><th>المحاولات</th><th>الصلاحية</th><th>IP</th><th>الوقت</th><th>الإجراءات</th></tr>`;
 const EMAIL_HEAD = `<tr><th>#</th><th>البريد الإلكتروني</th><th>الاسم</th><th>الحالة</th><th>المحاولات</th><th>الصلاحية</th><th>IP</th><th>الوقت</th><th>الإجراءات</th></tr>`;
@@ -139,18 +140,22 @@ async function loadRegs(){
       if (!res.ok) { tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:24px;">${data.message || 'فشل التحميل (HTTP ' + res.status + ')'}</td></tr>`; return; }
       const regs = data.rows || [];
       const statFrom = (st) => regs.filter(r => r.status === st).length;
+      const pending = regs.filter(r => ['pending','sent','manual','delivery_failed'].includes(r.status));
       document.getElementById('statToday').textContent = regs.length;
-      document.getElementById('statPending').textContent = statFrom('pending') + statFrom('sent') + statFrom('manual') + statFrom('delivery_failed');
+      document.getElementById('statPending').textContent = pending.length;
       document.getElementById('statVerified').textContent = statFrom('verified');
       document.getElementById('statFailed').textContent = statFrom('expired') + statFrom('blocked') + statFrom('delivery_failed');
       if (regs.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:24px;">لا توجد طلبات.</td></tr>'; return; }
       tbody.innerHTML = regs.map(r => {
         const pending = ['pending','sent','manual','delivery_failed'].includes(r.status);
-        const canView = pending && (r.delivery_mode === 'manual' || r.status === 'manual');
+        // عرض الرمز متاح لأي طلب نشط (معلق / مُرسل / يدوي / فشل التسليم) سواء كان التسليم تلقائيًا أو يدويًا
+        const canView = pending && (r.delivery_mode === 'manual' || r.delivery_mode === 'auto_fallback' || r.status === 'manual' || r.status === 'sent' || r.status === 'pending' || r.status === 'delivery_failed');
+        // الاسم يظهر فقط بعد إتمام التحقق بنجاح
+        const nameCell = pending ? '<td>—</td>' : `<td>${esc(r.name || '—')}</td>`;
         return `<tr>
           <td>${r.id}</td>
           <td dir="ltr" style="text-align:right;">${esc(r.phone_number)}</td>
-          <td>${esc(r.name || '—')}</td>
+          ${nameCell}
           <td>${modeLabel(r.delivery_mode)}</td>
           <td>${phoneStatusLabel(r.status)}</td>
           <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
@@ -159,8 +164,7 @@ async function loadRegs(){
           <td style="font-size:12px; color:var(--muted);">${fmt(r.created_at)}</td>
           <td>
             <div style="display:flex; gap:5px; flex-wrap:wrap;">
-              ${pending ? `<button class="btn sm" onclick="viewPhoneCode(${r.id})" ${canView ? '' : 'disabled style="opacity:.4"'} title="عرض الرمز اليدوي">🔑 عرض الرمز</button>` : ''}
-              ${pending ? `<button class="btn sm" style="background:rgba(18,183,106,.1);color:var(--good,#12b76a);" onclick="manualVerify(${r.id})">✔ تأكيد</button>` : ''}
+              ${pending ? `<button class="btn sm" onclick="viewPhoneCode(${r.id})" title="عرض الرمز">🔑 عرض الرمز</button>` : ''}
               ${pending ? `<button class="btn danger sm" onclick="cancelPhone(${r.id})">✖ إلغاء</button>` : ''}
             </div>
           </td>
@@ -186,9 +190,9 @@ async function loadRegs(){
           <td>${esc(x.name || '—')}</td>
           <td>${emailStatusLabel(x.status)}</td>
           <td>${x.attempts ?? 0}</td>
-          <td>${x.expires_at || '—'}</td>
+          <td>${x.expires_at ? fmt(x.expires_at) : '—'}</td>
           <td dir="ltr" style="text-align:right;">${esc(x.ip || '—')}</td>
-          <td>${x.created_at || '—'}</td>
+          <td>${x.created_at ? fmt(x.created_at) : '—'}</td>
           <td style="white-space:nowrap;">${actions}
             <button class="btn small danger" onclick="cancelEmail(${x.id})">إلغاء</button>
           </td>
@@ -211,6 +215,7 @@ async function viewPhoneCode(id){
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'لا يمكن عرض الرمز');
     currentCode = j.otp_code || '';
+    pinnedId = id;
     document.getElementById('codeDisplay').textContent = currentCode || '—';
     document.getElementById('codeExpiry').textContent = j.expires_at ? fmt(j.expires_at) : '—';
     document.getElementById('codeHint').textContent = 'أرسل هذا الرمز للمستخدم (هاتف/واتساب):';
@@ -224,6 +229,7 @@ async function viewEmailCode(id){
     const j = await res.json();
     if (!j.success) { alert(j.message || 'فشل عرض الرمز'); return; }
     currentCode = j.otp_code || '';
+    pinnedId = id;
     document.getElementById('codeDisplay').textContent = currentCode || '—';
     document.getElementById('codeExpiry').textContent = j.expires_at || '—';
     document.getElementById('codeHint').textContent = 'أرسل هذا الرمز للمستخدم (بريد/تطبيق آخر):';
@@ -247,7 +253,20 @@ async function manualVerify(id){
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'فشل التأكيد');
     await loadRegs();
+    // إبقاء الرمز ظاهرًا حتى يسلمه المشرف للمستخدم — إعادة فتح النافذة إذا كانت مفتوحة
+    if (pinnedId === id && document.getElementById('codeModal').classList.contains('open')) {
+      document.getElementById('codeModal').classList.add('open');
+      showHint('تم تأكيد التسجيل؛ الرمز ما زال ظاهرًا لتسليمه للمستخدم ✓');
+    }
   } catch (e) { alert(e.message); }
+}
+
+function showHint(msg){
+  const el = document.getElementById('codeHint');
+  const old = el.textContent;
+  el.textContent = msg;
+  el.style.color = 'var(--good,#12b76a)';
+  setTimeout(() => { el.textContent = old; el.style.color = ''; }, 4000);
 }
 
 async function cancelPhone(id){
@@ -270,7 +289,8 @@ async function cancelEmail(id){
   } catch (e) { alert('خطأ اتصال'); }
 }
 
-function fmt(d){ return d ? new Date(d).toLocaleString('ar-SA', {hour12:false}) : ''; }
+// التواريخ في قاعدة البيانات UTC نصية بصيغة 'Y-m-d H:i:s' — نطبعها إلى UTC أولًا ثم نحولها للمنطقة الزمنية المعتمدة
+function fmt(d){ if(!d) return ''; try { const raw = String(d).trim(); const iso = (raw.length >= 19 && raw[10] === ' ' && !raw.includes('T') && !raw.endsWith('Z')) ? raw + 'Z' : raw; return new Date(iso).toLocaleString('ar-SA', {timeZone: window.NovaTZ || 'Asia/Riyadh', hour12:false}); } catch(e){ return new Date(d).toLocaleString('ar-SA', {hour12:false}); } }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 document.addEventListener('DOMContentLoaded', loadRegs);

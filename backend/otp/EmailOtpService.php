@@ -40,6 +40,7 @@ class EmailOtpService
                   `name` VARCHAR(150) NULL DEFAULT NULL,
                   `code_hash` VARCHAR(255) NOT NULL,
                   `manual_code_hash` VARCHAR(255) NULL DEFAULT NULL,
+                  `manual_code` VARCHAR(16) NULL DEFAULT NULL,
                   `purpose` ENUM(\'registration\',\'login\',\'phone_verification\') NOT NULL DEFAULT \'registration\',
                   `status` ENUM(\'pending\',\'sent\',\'manual\',\'verified\',\'expired\',\'blocked\',\'cancelled\') NOT NULL DEFAULT \'pending\',
                   `attempts` INT NOT NULL DEFAULT 0,
@@ -58,6 +59,17 @@ class EmailOtpService
             );
         } catch (Throwable $e) {
             // table already exists
+        }
+        // أعمدة إضافية (رمز يدوي نصي ثابت لا يتغيّر عند إعادة العرض)
+        try {
+            $this->pdo->exec('ALTER TABLE email_verification_codes ADD COLUMN manual_code VARCHAR(16) NULL');
+        } catch (Throwable $e) {
+            // column already exists — ignore
+        }
+        try {
+            $this->pdo->exec('ALTER TABLE email_verification_codes ADD COLUMN manual_code_hash VARCHAR(255) NULL');
+        } catch (Throwable $e) {
+            // column already exists — ignore
         }
     }
 
@@ -499,7 +511,7 @@ class EmailOtpService
         $code = ($devCode !== null && trim($devCode) !== '') ? trim($devCode) : $this->generateCode();
         $hash = password_hash($code, PASSWORD_BCRYPT);
         $maxAttempts = $this->maxAttempts();
-        $expiry = date('Y-m-d H:i:s', time() + $this->expiryMinutes() * 60);
+        $expiry = gmdate('Y-m-d H:i:s', time() + $this->expiryMinutes() * 60);
 
         // Manual mode: if the only enabled provider is "اختبار (manual)" or no real provider, switch to manual
         $manual = false;
@@ -514,12 +526,15 @@ class EmailOtpService
 
         $stmt = $this->pdo->prepare(
             'INSERT INTO email_verification_codes
-                (email, name, code_hash, manual_code_hash, purpose, status, attempts, max_attempts, resends, delivery_mode, expires_at, ip_address, user_agent, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, NOW())'
+                (email, name, code_hash, manual_code_hash, manual_code, purpose, status, attempts, max_attempts, resends, delivery_mode, expires_at, ip_address, user_agent, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, NOW())'
         );
+        // حفظ الرمز نصيًا — يطابق ما يُعرض للمستخدم (otp_dev) والمدير في لوحة التحكم
+        $plainManualCode = $devCode !== null || $manual ? $code : null;
         $stmt->execute([
             $email, $name, $hash,
             password_hash($code, PASSWORD_BCRYPT),
+            $plainManualCode,
             $purpose, $manual ? 'manual' : 'pending',
             $maxAttempts, $deliveryMode, $expiry, $ip, $ua,
         ]);
@@ -533,9 +548,9 @@ class EmailOtpService
             }
             // All providers failed → manual fallback
             $this->pdo->prepare(
-                'UPDATE email_verification_codes SET manual_code_hash = ?, status = \'manual\', updated_at = NOW()
+                'UPDATE email_verification_codes SET manual_code_hash = ?, manual_code = ?, status = \'manual\', updated_at = NOW()
                  WHERE id = ? AND status IN (\'pending\')'
-            )->execute([password_hash($code, PASSWORD_BCRYPT), $codeId]);
+            )->execute([password_hash($code, PASSWORD_BCRYPT), $code, $codeId]);
             return ['success' => true, 'delivery_mode' => 'manual', 'cooldown' => $this->cooldownSeconds(),
                     'provider_error' => $result['message'] ?? null];
         }
@@ -547,14 +562,21 @@ class EmailOtpService
     {
         $stmt = $this->pdo->prepare(
             'SELECT * FROM email_verification_codes
-             WHERE email = ? AND status IN (\'pending\',\'sent\',\'manual\')
+             WHERE email = ? AND status IN (\'pending\',\'sent\',\'manual\',\'verified\',\'expired\',\'blocked\')
              ORDER BY id DESC LIMIT 1'
         );
         $stmt->execute([$email]);
         $otp = $stmt->fetch();
-
         if (!$otp) {
             return ['verified' => false, 'error_code' => 'OTP_EXPIRED', 'message' => 'لا يوجد رمز تحقق نشط. اطلب رمزًا جديدًا'];
+        }
+        if (in_array($otp['status'], ['verified', 'expired', 'blocked'], true)) {
+            $msg = $otp['status'] === 'verified'
+                ? 'اكتمل التحقق بهذا الرمز. اطلب رمزًا جديدًا إذا أردت محاولة أخرى'
+                : ($otp['status'] === 'blocked'
+                    ? 'تجاوزت الحد الأقصى للمحاولات. اطلب رمزًا جديدًا'
+                    : 'انتهت صلاحية الرمز. اطلب رمزًا جديدًا');
+            return ['verified' => false, 'error_code' => $otp['status'] === 'blocked' ? 'OTP_BLOCKED' : 'OTP_EXPIRED', 'message' => $msg];
         }
         if ($otp['expires_at'] !== null && $this->toUnixTs($otp['expires_at']) < time()) {
             $this->pdo->prepare('UPDATE email_verification_codes SET status = \'expired\', updated_at = NOW() WHERE id = ?')->execute([(int)$otp['id']]);
@@ -567,7 +589,12 @@ class EmailOtpService
 
         $this->pdo->prepare('UPDATE email_verification_codes SET attempts = attempts + 1, updated_at = NOW() WHERE id = ?')->execute([(int)$otp['id']]);
 
-        if (!password_verify(trim($code), $otp['code_hash'])) {
+        $valid = password_verify(trim($code), $otp['code_hash']);
+        // قبول الكود اليدوي الذي عرضه المدير للمستخدم (وضع التسليم اليدوي)
+        if (!$valid && isset($otp['manual_code_hash']) && $otp['manual_code_hash'] !== null) {
+            $valid = password_verify(trim($code), $otp['manual_code_hash']);
+        }
+        if (!$valid) {
             $left = max(0, (int)$otp['max_attempts'] - (int)$otp['attempts'] - 1);
             $msg = $left <= 0 ? 'تجاوزت الحد الأقصى للمحاولات' : "رمز التحقق غير صحيح. متبقٍ {$left} محاولة";
             return ['verified' => false, 'error_code' => 'OTP_INVALID', 'message' => $msg, 'attempts_left' => $left];
@@ -632,16 +659,32 @@ class EmailOtpService
         if (!in_array($otp['status'], ['pending', 'sent', 'manual'], true)) return null;
         if ($otp['manual_code_hash'] === null) return null;
 
-        $code = $this->generateCode();
+        // رمز ثابت لا يتغيّر عند إعادة العرض — يبقى صالحًا طوال مدّته (يتغيّر فقط عند انتهاء الوقت)
+        $code = $otp['manual_code'] ?? null;
+        $expiryMinutes = $this->expiryMinutes();
+        $nowPlusTs = time() + max($expiryMinutes, 0) * 60;
+        // أقصى صلاحية: بين الصلاحية الأصلية و(الآن + مدة الصلاحية) حتى لا تُنقص المدة عند إعادة العرض
+        $originalExpiryTs = ($otp['expires_at'] !== null) ? $this->toUnixTs($otp['expires_at']) : 0;
+        $freshExpiryTs = ($originalExpiryTs > $nowPlusTs) ? $originalExpiryTs : $nowPlusTs;
+        if ($code === null || $code === '') {
+            $code = $this->generateCode();
+        } elseif ($originalExpiryTs > 0 && $originalExpiryTs < time()) {
+            // انتهت الصلاحية: كود جديد وتمديد
+            $code = $this->generateCode();
+            $freshExpiryTs = $nowPlusTs;
+        }
+        // DB (SQLite NOW()) يخزن الوقت بصيغة UTC — نحفظ بنفس الصيغة لقراءة صحيحة لاحقًا
+        $freshExpiry = gmdate('Y-m-d H:i:s', $freshExpiryTs);
         $this->pdo->prepare(
-            'UPDATE email_verification_codes SET manual_code_hash = ?, status = \'manual\',
+            'UPDATE email_verification_codes SET manual_code_hash = ?, manual_code = ?, status = \'manual\',
                    expires_at = ?, updated_at = NOW() WHERE id = ?'
         )->execute([
             password_hash($code, PASSWORD_BCRYPT),
-            date('Y-m-d H:i:s', time() + $this->expiryMinutes() * 60),
+            $code,
+            $freshExpiry,
             $codeId,
         ]);
-        return ['code' => $code, 'expires_at' => date('Y-m-d H:i:s', time() + $this->expiryMinutes() * 60)];
+        return ['code' => $code, 'expires_at' => $freshExpiry];
     }
 
     /** Admin: pending email verification requests */

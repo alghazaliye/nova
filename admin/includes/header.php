@@ -4,6 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title><?= htmlspecialchars($pageTitle ?? 'لوحة التحكم') ?> — <?= APP_NAME ?> Admin</title>
+  <?php
+  // المنطقة الزمنية المعتمدة في الإعدادات — تعرض بها التواريخ في لوحة التحكم
+  $novaTz = 'Asia/Riyadh';
+  try {
+      if (function_exists('getAdminDB')) {
+          $admStmt = getAdminDB()->query("SELECT setting_value FROM app_settings WHERE setting_key = 'default_timezone' LIMIT 1");
+          $admRow  = $admStmt ? $admStmt->fetch() : false;
+      } else {
+          $admRow = false;
+      }
+      $readTz = is_array($admRow) && !empty($admRow['setting_value']) ? (string)$admRow['setting_value'] : '';
+      if ($readTz !== '' && in_array($readTz, timezone_identifiers_list(), true)) {
+          $novaTz = $readTz;
+      }
+  } catch (\Throwable $e) {
+      // استخدام الافتراضي
+  }
+  ?>
+  <script>window.NovaTZ = <?= json_encode($novaTz) ?>;</script>
   <style>
     :root {
       --bg: #f4f6fa;
@@ -255,6 +274,9 @@
       .content { padding: 15px }
       .stats { grid-template-columns: 1fr 1fr }
       .pagehead { align-items: flex-start; flex-wrap: wrap }
+      /* حماية العناصر التفاعلية من التغطية على شاشات اللمس */
+      .btn-auth-primary, .btn-auth-secondary, .btn, button, .page-btn { touch-action: manipulation; }
+      .btn-auth-primary:active, .btn-auth-secondary:active, .btn:active, .page-btn:active { transform: scale(.97); }
     }
     @media (max-width: 400px) {
       .stats { grid-template-columns: 1fr }

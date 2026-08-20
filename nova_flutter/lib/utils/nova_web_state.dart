@@ -6,6 +6,13 @@ void setNovaState(String value) => setNovaStateImpl(value);
 void setNovaChats(String value) => setNovaChatsImpl(value);
 String novaHref() => novaHrefImpl();
 
+/// طبقة أخيرة: قراءة window.location.origin مباشرة عبر js_util
+/// (تعمل في dart2js وwasm) بدل الارتداد لرابط بيئة قديم
+String? webOriginFallback() => webOriginFallbackImpl();
+
+// نسخة موبايل/سطح المكتب: لا نطاق
+String? webOriginFallbackStub() => null;
+
 // إشعارات المتصفح (ويب فقط)
 Future<bool> NovaWebStateIsNotificationGranted() => isNotificationGrantedImpl();
 Future<void> NovaWebStateRequestNotificationPermission() => requestNotificationPermissionImpl();

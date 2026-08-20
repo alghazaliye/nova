@@ -80,6 +80,29 @@ String timeShort(String? iso) {
   return iso;
 }
 
+/* ═══════════════════════ وقت الخادم بالتوقيت المعتمد ═══════════════════════ */
+// تواريخ الخادم تُخزن بصيغة UTC نصية (مثل "2026-08-20 05:29:48")، وهذه الدالة
+// تحوّلها إلى المنطقة الزمنية المعتمدة في إعدادات لوحة التحكم قبل العرض.
+String novaServerTime(String? utcIso, int offsetMinutes) {
+  if (utcIso == null || utcIso.isEmpty) return '';
+  final normalized = utcIso.contains('T') ? utcIso : utcIso.replaceFirst(' ', 'T');
+  final dt = DateTime.tryParse(normalized);
+  if (dt == null) return utcIso.length >= 16 ? utcIso.substring(11, 16) : utcIso;
+  final local = dt.toUtc().add(Duration(minutes: offsetMinutes));
+  return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+}
+
+/// تاريخ ووقت الخادم كاملان بالتوقيت المعتمد (مثل "٢٠‏/٨‏/٢٠٢٦، ٠٨:٢٩:٤٨").
+String novaServerDateTime(String? utcIso, int offsetMinutes) {
+  if (utcIso == null || utcIso.isEmpty) return '';
+  final normalized = utcIso.contains('T') ? utcIso : utcIso.replaceFirst(' ', 'T');
+  final dt = DateTime.tryParse(normalized);
+  if (dt == null) return utcIso;
+  final local = dt.toUtc().add(Duration(minutes: offsetMinutes));
+  return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}، '
+      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}:${local.second.toString().padLeft(2, '0')}';
+}
+
 /* ═══════════════════════ التوست (Overlay) ═══════════════════════ */
 void showToast(BuildContext context, String message) {
   final overlay = Overlay.maybeOf(context);

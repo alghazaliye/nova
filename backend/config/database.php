@@ -51,6 +51,8 @@ class Database
                 ];
 
                 self::connectCompat($dsn, $options);
+                self::migrateMissingColumns();
+                self::applyConfiguredTimezone();
 
                 // Pragmas for SQLite performance and reliability
                 try {
@@ -103,6 +105,74 @@ class Database
             ]);
             exit;
         }
+    }
+
+    /**
+     * Safe, idempotent schema migrations: adds columns that newer code expects
+     * but may be missing in older database files (e.g. after deployment).
+     */
+    private static function migrateMissingColumns(): void
+    {
+        $migrations = [
+            'conversation_members' => ['disappear_after' => 'INTEGER DEFAULT NULL'],
+            'messages'             => ['disappear_after' => 'INTEGER DEFAULT NULL'],
+        ];
+        foreach ($migrations as $table => $columns) {
+            foreach ($columns as $column => $definition) {
+                try {
+                    self::$instance->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+                } catch (PDOException $e) {
+                    // Column already exists or table missing — migration already applied or not needed
+                    error_log('Migration skipped: ' . $e->getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Apply the timezone configured in app_settings (default_timezone) so that
+     * all date/time formatting across the API and admin panel follows the
+     * selected region, instead of a hardcoded timezone.
+     */
+    private static function applyConfiguredTimezone(): void
+    {
+        static $applied = false;
+        if ($applied) {
+            return;
+        }
+        $applied = true;
+        try {
+            $stmt = self::$instance->query("SELECT setting_value FROM app_settings WHERE setting_key = 'default_timezone' LIMIT 1");
+            $row  = $stmt ? $stmt->fetch() : false;
+            $tz   = is_array($row) && !empty($row['setting_value']) ? (string)$row['setting_value'] : '';
+            if ($tz !== '' && in_array($tz, timezone_identifiers_list(), true)) {
+                date_default_timezone_set($tz);
+            }
+        } catch (\Throwable $e) {
+            // Settings table may not exist yet (fresh install) — keep the default timezone
+            error_log('Timezone setting not applied: ' . $e->getMessage());
+        }
+    }
+
+    /** Return the configured timezone identifier (used for UI offset display). */
+    public static function getTimezone(): string
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            $pdo  = self::getInstance();
+            $stmt = $pdo->query("SELECT setting_value FROM app_settings WHERE setting_key = 'default_timezone' LIMIT 1");
+            $row  = $stmt ? $stmt->fetch() : false;
+            $tz   = is_array($row) && !empty($row['setting_value']) ? (string)$row['setting_value'] : '';
+            if ($tz !== '' && in_array($tz, timezone_identifiers_list(), true)) {
+                return $cached = $tz;
+            }
+        } catch (\Throwable $e) {
+            error_log('Timezone read failed: ' . $e->getMessage());
+        }
+        return $cached = 'Asia/Riyadh';
     }
 
     /** Return the active adapter type: sqlite | mysql */

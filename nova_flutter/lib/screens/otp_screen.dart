@@ -1,4 +1,4 @@
-
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -17,11 +17,15 @@ import '../services/api_service.dart';
 /// شاشة إدخال رمز التحقق OTP
 class OtpScreen extends StatefulWidget {
   final String phone;
+  /// بريد إلكتروني بدل الهاتف (عند التحقق عبر البريد) — لا يُستخدم مع phone معًا
+  final String? email;
   final bool isRegister;
   /// رمز OTP من رابط الويب (تجنّب JS interop غير الموثوق في WASM)
   final String? autoOtp;
+  /// صلاحية الرمز النشط (للعرض مع عدّاد تنازلي)
+  final DateTime? otpExpiresAt;
 
-  const OtpScreen({super.key, required this.phone, this.isRegister = false, this.autoOtp});
+  const OtpScreen({super.key, required this.phone, this.email, this.isRegister = false, this.autoOtp, this.otpExpiresAt});
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -30,11 +34,22 @@ class OtpScreen extends StatefulWidget {
 class _OtpScreenState extends State<OtpScreen> {
   String _otp = '';
   final TextEditingController _ctrl = TextEditingController();
+  /// تحديث العدّاد التنازلي كل ثانية
+  late final Timer _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    if (mounted) setState(() {});
+  });
 
   @override
   void initState() {
     super.initState();
     _fillAutoOtp();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer.cancel();
+    _ctrl.dispose();
+    super.dispose();
   }
 
   void _fillAutoOtp() {
@@ -47,10 +62,14 @@ class _OtpScreenState extends State<OtpScreen> {
       } catch (_) {}
     }
     if (otp.length == 6) {
+      // رمز كامل من الرابط — تحقق تلقائي بعد بناء الإطار الأول
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _ctrl.text = otp;
         _verify(otp);
       });
+    } else if (otp.isNotEmpty) {
+      // رمز جزئي (<6) لا يصلح للملء التلقائي: ملؤه كان يُعرض في خانات خاطئة
+      // ويعرقل الإدخال اليدوي، فلا نلوث حالة الخانات به
     }
   }
 
@@ -74,7 +93,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 15, color: c.muted)),
               const SizedBox(height: 4),
-              Text(widget.phone,
+              Text(widget.email ?? widget.phone,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 18,
@@ -82,9 +101,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       fontFamily: 'Cairo',
                       color: c.text)),
               const SizedBox(height: 8),
-              Text('رمز تجريبي: 123456',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: c.muted)),
+              _OtpCountdown(otpExpiresAt: widget.otpExpiresAt, muted: c.muted, accent: c.accent),
               const SizedBox(height: 28),
               PinCodeTextField(
                 appContext: context,
@@ -105,7 +122,12 @@ class _OtpScreenState extends State<OtpScreen> {
                   inactiveColor: c.line,
                 ),
                 onCompleted: (v) => _verify(v),
-                onChanged: (v) => setState(() => _otp = v),
+                onChanged: (v) {
+                  setState(() => _otp = v);
+                  // التزامن الفوري مع الـ controller في Flutter Web:
+                  // إذا انفصل عرض الخانات عن الحالة (إدخال سريع / لصق) نعيد ضبط العرض
+                  if (_ctrl.text != v) _ctrl.text = v;
+                },
               ),
               const SizedBox(height: 24),
               if (auth.loading)
@@ -140,8 +162,25 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   Future<void> _verify(String otp) async {
-    if (otp.length < 6) return;
-    final ok = await context.read<AuthProvider>().verifyOtp(widget.phone, otp);
+    // منع الضغط المزدوج على «تحقق» أثناء التحقق الجاري:
+    // بدون ذلك يصل طلبان متتاليان بالرمز نفسه، وأولهما يتحقق بنجاح
+    // والثاني يعيد 400 (OTP_EXPIRED) فيبدو أن التحقق «لا يعمل»
+    if (context.read<AuthProvider>().loading) return;
+    // المصدر الصحيح للرمز هو الـ controller — حتى لو انفصل العرض عن الحالة
+    // عند الإدخال السريع أو اللصق في Flutter Web
+    otp = _ctrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    setState(() => _otp = otp);
+    if (otp.length < 6) {
+      // رسالة واضحة بدل الصمت (كان الزر لا يفعل شيئًا عند الرمز غير المكتمل)
+      context.read<AuthProvider>().showError('أدخل رمز التحقق كاملًا (6 أرقام)');
+      return;
+    }
+    final bool ok;
+    if (widget.email != null) {
+      ok = await context.read<AuthProvider>().verifyEmailOtp(widget.email!, otp);
+    } else {
+      ok = await context.read<AuthProvider>().verifyOtp(widget.phone, otp);
+    }
     if (!mounted) return;
     if (ok) {
       // فتح محادثة مباشرة عند وجود ?chat=<id> في الرابط (للاختبار السريع)
@@ -177,5 +216,97 @@ class _OtpScreenState extends State<OtpScreen> {
         } catch (_) {}
       }
     }
+  }
+}
+
+/// عدّاد تنازلي للوقت المتبقي لانتهاء صلاحية الرمز (يتحدث كل ثانية)
+class _OtpCountdown extends StatefulWidget {
+  final DateTime? otpExpiresAt;
+  final Color muted;
+  final Color accent;
+
+  const _OtpCountdown({required this.otpExpiresAt, required this.muted, required this.accent});
+
+  @override
+  State<_OtpCountdown> createState() => _OtpCountdownState();
+}
+
+class _OtpCountdownState extends State<_OtpCountdown> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.otpExpiresAt != null) {
+      // تحديث العدّاد كل ثانية حتى الوصول إلى الصفر
+      _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+        final diff = widget.otpExpiresAt!.difference(DateTime.now());
+        if (!mounted) return;
+        if (diff.isNegative || diff == Duration.zero) {
+          t.cancel();
+        }
+        setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  /// الوقت المتبقي (0 إذا انتهى)
+  Duration _remaining() {
+    if (widget.otpExpiresAt == null) return Duration.zero;
+    final diff = widget.otpExpiresAt!.difference(DateTime.now());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
+  String _format(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = _remaining();
+    if (widget.otpExpiresAt == null) {
+      // صلاحية غير متاحة من الخادم — نص صامت
+      return const SizedBox.shrink();
+    }
+    if (remaining == Duration.zero) {
+      return Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.timer_off, size: 14, color: Colors.redAccent),
+              const SizedBox(width: 4),
+              Text('انتهت صلاحية الرمز — اطلب رمزًا جديدًا',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.redAccent)),
+            ],
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.timer, size: 14, color: widget.accent),
+            const SizedBox(width: 4),
+            Text('الوقت المتبقي لانتهاء الرمز: ',
+                style: TextStyle(fontSize: 13, color: widget.muted)),
+            Text(_format(remaining),
+                style: TextStyle(fontSize: 14, color: widget.muted, fontFeatures: const [FontFeature.tabularFigures()])),
+
+          ],
+        ),
+      ],
+    );
   }
 }

@@ -107,7 +107,33 @@ $API = '/api/v1/admin/otp';
   .auth-hint { display: block; color: var(--muted); font-size: 11.5px; margin-top: 5px; line-height: 1.6; }
   /* شبكة الحقول */
   .auth-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 760px) { .auth-grid-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) {
+    .auth-grid-2 { grid-template-columns: 1fr; }
+    .content > div[style] { grid-template-columns: 1fr !important; }
+    .auth-toggle { min-height: 48px; -webkit-tap-highlight-color: rgba(91,92,226,.15); touch-action: manipulation; }
+    .auth-toggle input[type="checkbox"] { width: 26px; height: 26px; flex: 0 0 26px; }
+    .auth-actions {
+      position: sticky;
+      bottom: 10px;
+      z-index: 8;
+      background: var(--surface);
+      border: 1.5px solid var(--line);
+      border-radius: 16px;
+      padding: 10px 14px;
+      box-shadow: 0 10px 28px rgba(16, 24, 40, .25);
+      margin-bottom: 12px;
+      justify-content: center;
+    }
+    .btn-auth-primary, .btn-auth-secondary {
+      flex: 1 1 auto;
+      justify-content: center;
+      min-height: 48px;
+      -webkit-tap-highlight-color: rgba(91,92,226,.2);
+      touch-action: manipulation;
+    }
+    .btn-auth-primary:active, .btn-auth-secondary:active { transform: scale(.97); }
+  }
+  .btn-auth-primary, .btn-auth-secondary { position: relative; }
   /* الأزرار */
   .auth-actions {
     display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
@@ -323,7 +349,7 @@ function updateModeHint(){
 function previewTemplate(){
   const t = document.getElementById('messageTemplate').value;
   if (!t) { document.getElementById('templatePreview').textContent = 'معاينة: —'; return; }
-  const sample = t.replace('{OTP}', '123456').replace('{PHONE}', '+966501234567').replace('{MINUTES}', '5').replace('{APP_NAME}', 'NOVA Messenger');
+  const sample = t.replace('{OTP}', '654321').replace('{PHONE}', '+966501234567').replace('{MINUTES}', '5').replace('{APP_NAME}', 'NOVA Messenger');
   document.getElementById('templatePreview').textContent = 'معاينة: ' + sample;
 }
 

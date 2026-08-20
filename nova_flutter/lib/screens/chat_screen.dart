@@ -1449,7 +1449,7 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: c.surface,
           title: Text(widget.conv.name, style: TextStyle(color: c.text)),
           content: Text(
-              'جهة اتصال Nova Messenger\\n${widget.conv.isOnline ? 'متصل الآن' : formatLastSeen(widget.conv.lastSeen)}',
+              'جهة اتصال Nova Messenger\\n${widget.conv.isOnline ? 'متصل الآن' : formatLastSeen(widget.conv.lastSeen, utcOffsetMinutes: Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes)}',
               style: TextStyle(color: c.text, height: 1.7)),
           actions: [
             TextButton(
@@ -1698,7 +1698,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                         widget.conv.isOnline
                                             ? 'متصل الآن'
                                             : formatLastSeen(
-                                                widget.conv.lastSeen),
+                                                widget.conv.lastSeen,
+                                                utcOffsetMinutes: Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
@@ -2694,8 +2695,10 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = colors;
-    final time =
-        msg.createdAt.length >= 16 ? msg.createdAt.substring(11, 16) : '';
+    final time = novaServerTime(
+      msg.createdAt,
+      Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes,
+    );
     return Align(
       alignment: isMine
           ? AlignmentDirectional.centerEnd

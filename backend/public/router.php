@@ -139,6 +139,28 @@ if ($uri === '/web_app') {
     return true;
 }
 
+// ---------- 2.5b) Flutter web build files requested at the root (old cached page)
+// Old builds referenced flutter_bootstrap.js, main.dart.js, flutter_service_worker.js etc. at the root.
+// Redirect them to /web_app/ so legacy cached pages never produce a 404.
+$rootFlutterFiles = [
+    '/flutter_bootstrap.js',
+    '/flutter_service_worker.js',
+    '/main.dart.js',
+    '/main.dart.mjs',
+    '/main.dart.wasm',
+    '/main.dart.js.map',
+    '/main.dart.mjs.map',
+    '/manifest.json',
+    '/favicon.png',
+    '/icons/',
+];
+foreach ($rootFlutterFiles as $rf) {
+    if ($uri === $rf || strpos($uri, $rf) === 0) {
+        header('Location: /web_app' . $uri, true, 301);
+        return true;
+    }
+}
+
 // ---------- 3) Physical files: public dir, project root, web app ----------
 $webAppDir = PROJECT_ROOT . '/web_app';
 $candidates = [

@@ -9,12 +9,11 @@ import '../utils/nova_web_state.dart';
 import 'otp_screen.dart';
 import 'chats_screen.dart';
 
-/// أنواع تبويبات شاشة الدخول
-enum _LoginTab { phone, email, username }
-
-/// شاشة تسجيل الدخول الديناميكية — تعرض طرق الدخول المتاحة حسب
-/// GET /auth/config من لوحة الإدارة (هاتف / بريد / اسم مستخدم).
-/// يظهر التبويب فقط إذا كانت الطريقة مفعّلة في لوحة التحكم.
+/// شاشة الدخول — تعرض أولاً خيارين: **تسجيل الدخول** أو **إنشاء حساب**،
+/// ثم تعرض الطرق المتاحة لكل خيار حسب إعدادات auth-settings.php في لوحة الإدارة:
+/// - طرق التسجيل: الهاتف (OTP)، البريد (رمز OTP)
+/// - طرق الدخول: الهاتف (OTP)، البريد (كلمة مرور)، اسم المستخدم (كلمة مرور)
+/// أي طريقة غير مفعّلة لا تظهر إطلاقًا.
 class PhoneScreen extends StatefulWidget {
   const PhoneScreen({super.key});
 
@@ -22,18 +21,26 @@ class PhoneScreen extends StatefulWidget {
   State<PhoneScreen> createState() => _PhoneScreenState();
 }
 
-class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStateMixin {
+/// مرحلة الشاشة: اختيار الوضع (دخول/تسجيل) ثم اختيار الطريقة ثم النموذج
+enum _Mode { pickFlow, phone, email, username }
+
+enum _RegisterMethod { phone, email }
+
+enum _LoginMethod { phone, email, username }
+
+class _PhoneScreenState extends State<PhoneScreen> {
   String _phone = '';
   String? _autoPhone;
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  /// true: الحساب الجديد يُدخل بالبريد + رمز OTP فقط (بدون كلمة مرور).
-  /// يُفعَّل تلقائيًا عندما يكون الحساب غير مسجل مسبقًا (login-email فشل بـ401).
-  bool? _emailNeedsOtp;
-  TabController? _tabController;
-  AuthConfig? _config;
+  _Mode _mode = _Mode.pickFlow;
+  /// طريقة الدخول المختارة عند الدخول (ليست نفس طرق التسجيل)
+  _LoginMethod? _loginMethod;
+  /// طريقة التسجيل المختارة
+  _RegisterMethod? _registerMethod;
+  bool _emailSending = false;
 
   @override
   void initState() {
@@ -83,7 +90,7 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
           setNovaState('login_done=$ok');
           if (ok && mounted) {
             Navigator.push(context,
-                MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false)));
+                MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false, otpExpiresAt: context.read<AuthProvider>().otpExpiresAt)));
           }
         } catch (e) {
           setNovaState('login_error=$e');
@@ -98,13 +105,104 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
     _emailController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _tabController?.dispose();
     super.dispose();
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
+
+  // ---------------------------------------------------------------------------
+  // انتقال بين الوضعيات
+  // ---------------------------------------------------------------------------
+
+  /// `isLogin`: true = اختار المستخدم «تسجيل الدخول»، false = «إنشاء حساب».
+  /// النتيجة: ننتقل تلقائيًا إلى أول طريقة متاحة ونعرض نموذجها مباشرةً
+  /// (بدلًا من تثبيت الوضع على اختيار الطرق الذي يجعل البطاقة لا تستجيب).
+  void _pickFlow(bool isLogin) {
+    if (isLogin) {
+      final methods = _loginMethods;
+      if (methods.isEmpty) {
+        _showError('لا تتوفر حاليًا أي طريقة للدخول');
+        return;
+      }
+      final method = methods.first;
+      _LoginMethod? prev = _loginMethod;
+      _loginMethod = method;
+      _registerMethod = null;
+      _Mode next = _methodToMode(method);
+      if (_mode == next && prev == method) {
+        // نفس الطريقة السابقة — فقط نحدث الحالة
+        setState(() {});
+      } else {
+        setState(() => _mode = next);
+      }
+    } else {
+      final methods = _registerMethods;
+      if (methods.isEmpty) {
+        _showError('التسجيل غير متاح حاليًا');
+        return;
+      }
+      final method = methods.first;
+      _registerMethod = method;
+      _loginMethod = null;
+      setState(() => _mode = _methodToModeReg(method));
+    }
+  }
+
+  /// ربط الطريقة المختارة بوضع الشاشة (الهاتف أو البريد أو اسم المستخدم)
+  _Mode _methodToMode(_LoginMethod method) {
+    switch (method) {
+      case _LoginMethod.phone:
+        return _Mode.phone;
+      case _LoginMethod.email:
+        return _Mode.email;
+      case _LoginMethod.username:
+        return _Mode.username;
+    }
+  }
+
+  _Mode _methodToModeReg(_RegisterMethod method) {
+    switch (method) {
+      case _RegisterMethod.phone:
+        return _Mode.phone;
+      case _RegisterMethod.email:
+        return _Mode.email;
+    }
+  }
+
+  void _setMethod(_Mode mode) {
+    setState(() => _mode = mode);
+  }
+
+  // ---------------------------------------------------------------------------
+  // طرق التسجيل المتاحة حسب الإعدادات
+  // ---------------------------------------------------------------------------
+
+  /// طرق **التسجيل** المتاحة: تسجيل الهاتف (requires OTP)، تسجيل البريد (رمز OTP)
+  List<_RegisterMethod> get _registerMethods {
+    final cfg = context.read<AuthProvider>().authConfig;
+    if (cfg == null) return const [_RegisterMethod.phone, _RegisterMethod.email];
+    final methods = <_RegisterMethod>[];
+    if (cfg.phoneRegistration) methods.add(_RegisterMethod.phone);
+    if (cfg.emailRegistration) methods.add(_RegisterMethod.email);
+    return methods;
+  }
+
+  /// طرق **الدخول** المتاحة: هاتف OTP، بريد + كلمة مرور، اسم مستخدم + كلمة مرور
+  List<_LoginMethod> get _loginMethods {
+    final cfg = context.read<AuthProvider>().authConfig;
+    if (cfg == null) return const [_LoginMethod.phone, _LoginMethod.email, _LoginMethod.username];
+    final methods = <_LoginMethod>[];
+    if (cfg.phoneLogin) methods.add(_LoginMethod.phone);
+    if (cfg.emailLogin) methods.add(_LoginMethod.email);
+    if (cfg.usernameLogin) methods.add(_LoginMethod.username);
+    return methods;
+  }
+
+  // ---------------------------------------------------------------------------
+  // إجراءات الدخول والتسجيل
+  // ---------------------------------------------------------------------------
 
   Future<void> _doPhoneLogin() async {
     if (_phone.length < 6) {
@@ -113,7 +211,42 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
     }
     final auth = context.read<AuthProvider>();
     final ok = await auth.login(_phone);
-    if (ok && context.mounted) _handleLoginResult(auth);
+    if (ok && mounted) _handleLoginResult(auth);
+  }
+
+  Future<void> _doPhoneRegister() async {
+    if (_phone.length < 6) {
+      _showError('أدخل رقمًا صحيحًا');
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.login(_phone); // مسار الهاتف: تسجيل + OTP واحد
+    if (ok && mounted) _handleLoginResult(auth);
+  }
+
+  Future<void> _doEmailVerify() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      _showError('أدخل بريدك الإلكتروني أولًا');
+      return;
+    }
+    if (_emailSending) return;
+    setState(() => _emailSending = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final ok = await auth.registerEmail(email);
+      if (!mounted) return;
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تم إرسال رمز التحقق إلى بريدك')));
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => OtpScreen(phone: email, isRegister: true, otpExpiresAt: context.read<AuthProvider>().otpExpiresAt)));
+      } else {
+        _showError(auth.error ?? 'فشل إرسال رمز التحقق');
+      }
+    } finally {
+      if (mounted) setState(() => _emailSending = false);
+    }
   }
 
   Future<void> _doEmailLogin() async {
@@ -123,41 +256,18 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
       _showError('أدخل بريدًا إلكترونيًا صحيحًا');
       return;
     }
-    final auth = context.read<AuthProvider>();
-    // إذا لم يُدخل كلمة مرور أو كان الحساب جديدًا: مسار رمز OTP بالبريد
-    if (password.isEmpty || _emailNeedsOtp == true) {
-      final ok = await auth.registerEmail(email);
-      if (!mounted) return;
-      if (ok) {
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => OtpScreen(phone: email, isRegister: true)));
-      } else {
-        _showError(auth.error ?? 'فشل إرسال رمز التحقق');
-      }
+    if (password.isEmpty) {
+      _showError('أدخل كلمة المرور');
       return;
     }
-    // دخول بالبريد + كلمة المرور (لحساب حالي)
+    final auth = context.read<AuthProvider>();
     final ok = await auth.loginEmail(email, password);
     if (!mounted) return;
-    if (!ok) {
-      // حساب غير مسجل أو كلمة مرور خاطئة: التحويل إلى مسار رمز OTP دون تعليق
-      setState(() => _emailNeedsOtp = true);
-      // إعادة المحاولة مباشرة برمز OTP (تسجيل/تفعيل)
-      final sent = await auth.registerEmail(email);
-      if (!mounted) return;
-      if (sent) {
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => OtpScreen(phone: email, isRegister: true)));
-      } else {
-        _showError(auth.error ?? 'فشل إرسال رمز التحقق');
-      }
-      return;
+    if (ok) {
+      _handleLoginResult(auth);
+    } else {
+      _showError(auth.error ?? 'البريد أو كلمة المرور غير صحيحة');
     }
-    _handleLoginResult(auth);
   }
 
   Future<void> _doUsernameLogin() async {
@@ -169,7 +279,7 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
     }
     final auth = context.read<AuthProvider>();
     final ok = await auth.loginUsername(username, password);
-    if (ok && context.mounted) _handleLoginResult(auth);
+    if (ok && mounted) _handleLoginResult(auth);
   }
 
   void _handleLoginResult(AuthProvider auth) {
@@ -178,153 +288,223 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
           MaterialPageRoute(builder: (_) => const ChatsScreen()),
           (route) => false);
     } else {
-      // OTP فقط لطريقة الهاتف
-      final currentTab = _currentTabs.isNotEmpty ? _currentTabs[_tabController?.index ?? 0] : _LoginTab.phone;
-      if (currentTab == _LoginTab.phone) {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false)));
-      }
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false, otpExpiresAt: auth.otpExpiresAt)));
     }
   }
 
-  /// التبويبات المفعّلة حاليًا حسب إعدادات لوحة التحكم (ترتيب: هاتف، بريد، اسم مستخدم)
-  List<_LoginTab> get _currentTabs {
-    final tabs = <_LoginTab>[];
-    if (_config?.phoneLogin ?? true) tabs.add(_LoginTab.phone);
-    if (_config?.emailLogin ?? true) tabs.add(_LoginTab.email);
-    if (_config?.usernameLogin ?? true) tabs.add(_LoginTab.username);
-    // ضمان عدم بقاء الشاشة فارغة: إذا لم تُحمَّل الإعدادات بعد، عرض الهاتف
-    if (tabs.isEmpty && _config == null) tabs.add(_LoginTab.phone);
-    return tabs;
-  }
-
-  /// إعادة إنشاء TabController عند تغيّر عدد التبويبات المفعّلة
-  void _rebuildTabController(int tabCount) {
-    final old = _tabController;
-    final keepIndex = (old != null && old.index < tabCount) ? old.index : 0;
-    _tabController = TabController(length: tabCount, vsync: this, initialIndex: keepIndex);
-    old?.dispose();
-  }
+  // ---------------------------------------------------------------------------
+  // البناء
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
     final cfg = auth.authConfig;
-    if (cfg != null && cfg != _config) _config = cfg;
-
-    final tabs = _currentTabs;
-    // إعادة بناء المتحكم عند تغيّر عدد التبويبات (بسبب تغيير إعدادات الإدارة)
-    if (_tabController == null || _tabController!.length != tabs.length) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _rebuildTabController(tabs.length));
-      });
-    }
-
-    Widget content;
-    if (!(_config?.loginEnabled ?? true)) {
-      content = const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(child: Text('خدمة تسجيل الدخول متوقفة مؤقتًا من لوحة الإدارة',
-            textAlign: TextAlign.center, style: TextStyle(fontSize: 15))),
-      );
-    } else if (tabs.length == 1) {
-      // طريقة واحدة فقط: نموذج مباشر بدون تبويبات
-      content = _buildFormFor(tabs.first, c);
-    } else {
-      content = Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: c.surface2,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TabBar(
-              controller: _tabController ?? TabController(length: tabs.length, vsync: this),
-              onTap: (_) => setState(() {}),
-              dividerColor: Colors.transparent,
-              indicator: BoxDecoration(
-                color: c.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              labelColor: Colors.white,
-              unselectedLabelColor: c.muted,
-              tabs: tabs.map((t) {
-                switch (t) {
-                  case _LoginTab.phone:
-                    return const Tab(text: 'هاتف');
-                  case _LoginTab.email:
-                    return const Tab(text: 'بريد');
-                  case _LoginTab.username:
-                    return const Tab(text: 'اسم مستخدم');
-                }
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Expanded(child: _buildFormFor(tabs[_tabController?.index ?? 0], c)),
-        ],
-      );
-    }
+    final regMethods = _registerMethods;
+    final loginMethods = _loginMethods;
+    final regAvailable = regMethods.isNotEmpty && (cfg?.registrationEnabled ?? true);
+    final loginAvailable = loginMethods.isNotEmpty && (cfg?.loginEnabled ?? true);
+    final stopped = cfg != null && !cfg.loginEnabled && !cfg.registrationEnabled;
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 32),
-              Center(
+        child: Container(
+          decoration: BoxDecoration(gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [c.bg, c.surface2],
+          )),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: c.accent,
-                        borderRadius: BorderRadius.circular(28),
+                    const SizedBox(height: 16),
+                    // الشعار
+                    Center(
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 92,
+                            height: 92,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                                colors: [c.accent, c.accent.withOpacity(0.75)],
+                              ),
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(color: c.accent.withOpacity(0.35),
+                                    blurRadius: 24, offset: const Offset(0, 10)),
+                              ],
+                            ),
+                            child: const Icon(Icons.chat_bubble,
+                                color: Colors.white, size: 50),
+                          ),
+                          const SizedBox(height: 14),
+                          Text('NOVA Messenger',
+                              style: TextStyle(
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.w800,
+                                  fontFamily: 'Cairo',
+                                  color: c.text)),
+                          const SizedBox(height: 4),
+                          Text('مرحباً بك', style: TextStyle(fontSize: 14, color: c.muted)),
+                        ],
                       ),
-                      child: const Icon(Icons.chat_bubble,
-                          color: Colors.white, size: 52),
                     ),
-                    const SizedBox(height: 20),
-                    Text('NOVA Messenger',
-                        style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            fontFamily: 'Cairo',
-                            color: c.text)),
-                    const SizedBox(height: 8),
-                    Text('سجّل دخولك للمتابعة', style: TextStyle(fontSize: 15, color: c.muted)),
+                    const SizedBox(height: 18),
+                    // البطاقة
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: c.surface,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.05),
+                              blurRadius: 18, offset: const Offset(0, 6)),
+                        ],
+                      ),
+                      child: _buildCardContent(c, regAvailable, loginAvailable, stopped),
+                    ),
+                    const SizedBox(height: 12),
+                    // أخطاء عامة
+                    if (!auth.loading && auth.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(auth.error!,
+                            style: TextStyle(color: Colors.redAccent, fontSize: 13),
+                            textAlign: TextAlign.center),
+                      ),
+                    const SizedBox(height: 6),
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
-              if (tabs.length > 1) content else Expanded(child: content),
-              const SizedBox(height: 16),
-              if (auth.loading)
-                const Center(child: CircularProgressIndicator())
-              else ...[
-                if (auth.error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(auth.error!,
-                        style: TextStyle(color: Colors.redAccent, fontSize: 13),
-                        textAlign: TextAlign.center),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardContent(NovaColors c, bool regAvailable, bool loginAvailable, bool stopped) {
+    if (stopped) return _stoppedWidget(c);
+
+    switch (_mode) {
+      case _Mode.pickFlow:
+        return _pickFlowCard(c, regAvailable, loginAvailable);
+      case _Mode.phone:
+        return _phoneForm(c);
+      case _Mode.email:
+        return _emailForm(c);
+      case _Mode.username:
+        return _usernameForm(c);
+    }
+  }
+
+  /// هل الوضع الحالي يُستخدم للدخول (وليس التسجيل)؟
+  bool get _currentModeIsLogin {
+    if (_mode == _Mode.pickFlow) return false;
+    if (_mode == _Mode.username) return true; // اسم المستخدم للدخول فقط
+    if (_loginMethod != null) {
+      return (_mode == _Mode.phone && _loginMethod == _LoginMethod.phone) ||
+          (_mode == _Mode.email && _loginMethod == _LoginMethod.email);
+    }
+    return false;
+  }
+
+  Widget _stoppedWidget(NovaColors c) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 24),
+      child: Center(child: Text('خدمة الدخول والتسجيل متوقفة مؤقتًا من لوحة الإدارة',
+          textAlign: TextAlign.center, style: TextStyle(fontSize: 14))),
+    );
+  }
+
+  // بطاقة اختيار الوضع: دخول أو إنشاء حساب
+  Widget _pickFlowCard(NovaColors c, bool regAvailable, bool loginAvailable) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (loginAvailable) ...[
+          _flowButton(
+            c,
+            label: 'تسجيل الدخول',
+            subtitle: 'دخول بحسابك الحالي',
+            icon: Icons.login_rounded,
+            onPressed: () => _pickFlow(true),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (regAvailable) ...[
+          _flowButton(
+            c,
+            label: 'إنشاء حساب',
+            subtitle: 'حساب جديد في ثوانٍ',
+            icon: Icons.person_add_rounded,
+            onPressed: () => _pickFlow(false),
+          ),
+        ],
+        if (!loginAvailable && !regAvailable)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: Text('لا تتوفر حاليًا أي طريقة للدخول أو التسجيل',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 14))),
+          ),
+      ],
+    );
+  }
+
+  Widget _flowButton(NovaColors c, {
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: c.surface2,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: c.line),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    colors: [c.accent, c.accent.withOpacity(0.8)],
                   ),
-              ],
-              const SizedBox(height: 12),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
               Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Text(
-                    'الحسابات التجريبية: +966599995001، +966599995002، +966599991001\nرمز التحقق التجريبي: 123456',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: c.muted),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800,
+                        fontFamily: 'Cairo', color: c.text)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(fontSize: 12.5, color: c.muted)),
+                  ],
                 ),
               ),
+              Icon(Icons.chevron_left, color: c.muted, size: 20),
             ],
           ),
         ),
@@ -332,17 +512,17 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
     );
   }
 
-  /// بناء نموذج الدخول حسب نوع التبويب المفعّل
-  Widget _buildFormFor(_LoginTab tab, NovaColors c) {
+  // ---------------------------------------------------------------------------
+  // نماذج الطرق
+  // ---------------------------------------------------------------------------
+
+  Widget _phoneForm(NovaColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: _buildFormChildren(tab, c),
-    );
-  }
-
-  List<Widget> _buildFormChildren(_LoginTab tab, NovaColors c) {
-    if (tab == _LoginTab.phone) {
-      return [
+      children: [
+        _methodHeader(c, label: 'رقم الهاتف',
+            subtitle: 'سنتحقق من ملكيتك للرقم عبر رمز OTP'),
+        const SizedBox(height: 14),
         IntlPhoneField(
           controller: _phoneController,
           decoration: InputDecoration(
@@ -364,17 +544,110 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
           autovalidateMode: AutovalidateMode.disabled,
           onChanged: (p) => _phone = p.completeNumber,
         ),
-        const SizedBox(height: 20),
-        _primaryButton('التالي', c, _doPhoneLogin),
-      ];
-    }
-    if (tab == _LoginTab.email) {
-      return [
+        const SizedBox(height: 18),
+        _primaryButton('إرسال رمز التحقق', c, _doPhoneLogin),
+        const SizedBox(height: 10),
+        _backButton(c),
+      ],
+    );
+  }
+
+  Widget _emailForm(NovaColors c) {
+    final isLogin = _currentModeIsLogin;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _methodHeader(c, label: 'البريد الإلكتروني',
+            subtitle: isLogin
+                ? 'الدخول بريدك وكلمة المرور'
+                : 'سنتحقق من ملكيتك للبريد برمز OTP'),
+        const SizedBox(height: 14),
         TextField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.go,
           decoration: InputDecoration(
             labelText: 'البريد الإلكتروني',
+            hintText: 'example@mail.com',
+            filled: true,
+            fillColor: c.surface2,
+            suffixIcon: (!isLogin && _emailSending)
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2)))
+                : (isLogin ? null : TextButton(
+                    onPressed: _doEmailVerify,
+                    style: TextButton.styleFrom(
+                      backgroundColor: c.accent.withOpacity(0.10),
+                      foregroundColor: c.accent,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(99)),
+                    ),
+                    child: const Text('تحقق',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  )),
+            suffixIconConstraints: const BoxConstraints(maxHeight: 36, minWidth: 0),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.line)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.accent)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+          onSubmitted: (_) => _doEmailVerify(),
+        ),
+        const SizedBox(height: 10),
+        if (isLogin)
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            textInputAction: TextInputAction.go,
+            decoration: InputDecoration(
+              labelText: 'كلمة المرور',
+              filled: true,
+              fillColor: c.surface2,
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: c.line)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: c.accent)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            ),
+            onSubmitted: (_) => _doEmailLogin(),
+          )
+        else
+          Text('اضغط «تحقق» داخل الحقل لإرسال رمز التحقق إلى بريدك',
+              style: TextStyle(fontSize: 12, color: c.muted),
+              textAlign: TextAlign.end),
+        const SizedBox(height: 16),
+        _primaryButton(
+            isLogin ? 'دخول' : 'إرسال رمز التحقق',
+            c,
+            isLogin ? _doEmailLogin : _doEmailVerify),
+        const SizedBox(height: 10),
+        _backButton(c),
+      ],
+    );
+  }
+
+  Widget _usernameForm(NovaColors c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _methodHeader(c, label: 'اسم المستخدم',
+            subtitle: 'الدخول باسم المستخدم وكلمة المرور'),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _usernameController,
+          keyboardType: TextInputType.text,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            labelText: 'اسم المستخدم',
             filled: true,
             fillColor: c.surface2,
             enabledBorder: OutlineInputBorder(
@@ -387,97 +660,102 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           ),
         ),
-        const SizedBox(height: 14),
-        if (_emailNeedsOtp != true)
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: InputDecoration(
-              labelText: 'كلمة المرور (لحساب حالي)',
-              helperText: 'اتركه فارغًا للتسجيل بحساب جديد والوصول برمز OTP',
-              filled: true,
-              fillColor: c.surface2,
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.line)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: c.accent)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _passwordController,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'كلمة المرور',
+            filled: true,
+            fillColor: c.surface2,
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.line)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: c.accent)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           ),
-        if (_emailNeedsOtp != true)
-          TextButton(
-            onPressed: () async {
-              final e = _emailController.text.trim();
-              if (!e.contains('@')) {
-                _showError('أدخل بريدك الإلكتروني أولًا');
-                return;
-              }
-              final auth = context.read<AuthProvider>();
-              final ok = await auth.registerEmail(e);
-              if (!mounted) return;
-              if (ok) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم إرسال رمز التحقق إلى بريدك')));
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => OtpScreen(phone: e, isRegister: true)));
-              } else {
-                _showError(auth.error ?? 'فشل إرسال الرمز');
-              }
-            },
-            child: const Text('ليس لديك كلمة مرور؟ ادخل برمز التحقق بالبريد',
-                style: TextStyle(fontSize: 12.5)),
+        ),
+        const SizedBox(height: 18),
+        _primaryButton('دخول', c, _doUsernameLogin),
+        const SizedBox(height: 10),
+        _backButton(c),
+      ],
+    );
+  }
+
+  Widget _methodHeader(NovaColors c, {required String label, required String subtitle}) {
+    return Row(
+      children: [
+        Icon(Icons.tune, size: 17, color: c.accent),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w800,
+                  fontFamily: 'Cairo', color: c.text)),
+              const SizedBox(height: 1),
+              Text(subtitle, style: TextStyle(fontSize: 11.5, color: c.muted)),
+            ],
           ),
-        const SizedBox(height: 14),
-        _primaryButton(
-            _emailNeedsOtp == true ? 'إرسال رمز التحقق' : 'دخول', c, _doEmailLogin),
-      ];
+        ),
+        // إذا كانت هناك أكثر من طريقة متاحة نعرض أيقونة تبديل بينها
+        if (_switchableMethods.length > 1)
+          PopupMenuButton<_Mode>(
+            icon: Icon(Icons.swap_horiz_rounded, size: 18, color: c.accent),
+            tooltip: 'تبديل الطريقة',
+            itemBuilder: (_) => _switchableMethods
+                .map((m) => PopupMenuItem(value: m,
+                    child: Row(children: [
+                      Icon(_modeIcon(m), size: 17, color: c.accent),
+                      const SizedBox(width: 8),
+                      Text(_modeLabel(m)),
+                    ])))
+                .toList(),
+            onSelected: (m) => setState(() => _mode = m),
+          ),
+        InkWell(
+          onTap: () => setState(() => _mode = _Mode.pickFlow),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: c.muted),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// الطرق المتاحة في الوضع الحالي (دخول أو تسجيل) لتبديلها
+  List<_Mode> get _switchableMethods {
+    if (_mode == _Mode.pickFlow) return [];
+    final isLogin = _currentModeIsLogin;
+    if (isLogin) {
+      return _loginMethods.map((m) => _methodToMode(m)).toList();
+    } else {
+      return _registerMethods.map((m) => _methodToModeReg(m)).toList();
     }
-    // اسم مستخدم
-    return [
-      TextField(
-        controller: _usernameController,
-        keyboardType: TextInputType.text,
-        textInputAction: TextInputAction.next,
-        decoration: InputDecoration(
-          labelText: 'اسم المستخدم',
-          filled: true,
-          fillColor: c.surface2,
-          enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: c.line)),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: c.accent)),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        ),
-      ),
-      const SizedBox(height: 14),
-      TextField(
-        controller: _passwordController,
-        obscureText: true,
-        decoration: InputDecoration(
-          labelText: 'كلمة المرور',
-          filled: true,
-          fillColor: c.surface2,
-          enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: c.line)),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: c.accent)),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        ),
-      ),
-      const SizedBox(height: 20),
-      _primaryButton('دخول', c, _doUsernameLogin),
-    ];
+  }
+
+  IconData _modeIcon(_Mode m) {
+    switch (m) {
+      case _Mode.phone: return Icons.phone_android_rounded;
+      case _Mode.email: return Icons.email_rounded;
+      case _Mode.username: return Icons.person_rounded;
+      case _Mode.pickFlow: return Icons.tune;
+    }
+  }
+
+  String _modeLabel(_Mode m) {
+    switch (m) {
+      case _Mode.phone: return 'رقم الهاتف';
+      case _Mode.email: return 'البريد الإلكتروني';
+      case _Mode.username: return 'اسم المستخدم';
+      case _Mode.pickFlow: return 'اختيار';
+    }
   }
 
   Widget _primaryButton(String label, NovaColors c, VoidCallback onPressed) {
@@ -491,6 +769,14 @@ class _PhoneScreenState extends State<PhoneScreen> with SingleTickerProviderStat
       ),
       onPressed: onPressed,
       child: Text(label, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+    );
+  }
+
+  Widget _backButton(NovaColors c) {
+    return TextButton.icon(
+      onPressed: () => setState(() => _mode = _Mode.pickFlow),
+      icon: Icon(Icons.arrow_back_ios_new_rounded, size: 15, color: c.muted),
+      label: Text('العودة للخيارات', style: TextStyle(fontSize: 13, color: c.muted)),
     );
   }
 }

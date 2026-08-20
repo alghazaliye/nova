@@ -614,7 +614,7 @@ if ($uri === '/plans' && $method === 'GET') {
 
 // Health check
 if ($uri === '/health' && $method === 'GET') {
-    Response::success(['status' => 'ok', 'version' => '1.0.0', 'timestamp' => date('c')]);
+    Response::success(['status' => 'ok', 'version' => '1.0.0', 'timestamp' => date('c'), 'timezone' => Database::getTimezone()]);
 }
 
 // 404 fallback

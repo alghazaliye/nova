@@ -153,7 +153,7 @@ include __DIR__ . '/includes/sidebar.php';
     <h3>📋 مثال اتصال</h3>
     <div class="copybox">curl -X POST "https://<?= $_SERVER['HTTP_HOST'] ?>/nova/backend/public/api/v1/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"phone":"+966500000000","otp":"123456"}'
+  -d '{"phone":"+966500000000","otp":"654321"}'
 
 curl -X GET "https://<?= $_SERVER['HTTP_HOST'] ?>/nova/backend/public/api/v1/conversations" \
   -H "Authorization: Bearer YOUR_TOKEN"

@@ -78,6 +78,68 @@ include __DIR__ . '/includes/sidebar.php';
           <option value="en" <?= ($settings['default_language']??'ar')==='en'?'selected':'' ?>>English</option>
         </select>
       </div>
+      <div class="form-group">
+        <label class="form-label">المنطقة الزمنية</label>
+        <select name="default_timezone" class="form-control" id="tzSelect">
+          <?php
+          $tzList = [
+            'UTC' => 'UTC (توقيت عالمي منسق)',
+            'Africa/Cairo' => 'القاهرة (مصر)',
+            'Africa/Tripoli' => 'طرابلس (ليبيا)',
+            'Africa/Tunis' => 'تونس',
+            'Africa/Algiers' => 'الجزائر',
+            'Africa/Casablanca' => 'الدار البيضاء (المغرب)',
+            'Africa/Lagos' => 'لاغوس (نيجيريا)',
+            'Africa/Johannesburg' => 'جوهانسبرغ (جنوب أفريقيا)',
+            'Africa/Khartoum' => 'الخرطوم (السودان)',
+            'Asia/Riyadh' => 'الرياض (السعودية)',
+            'Asia/Kuwait' => 'الكويت',
+            'Asia/Qatar' => 'الدوحة (قطر)',
+            'Asia/Bahrain' => 'البحرين',
+            'Asia/Muscat' => 'مسقط (عُمان)',
+            'Asia/Dubai' => 'دبي (الإمارات)',
+            'Asia/Baghdad' => 'بغداد (العراق)',
+            'Asia/Amman' => 'عمّان (الأردن)',
+            'Asia/Damascus' => 'دمشق (سوريا)',
+            'Asia/Beirut' => 'بيروت (لبنان)',
+            'Asia/Jerusalem' => 'القدس (فلسطين)',
+            'Asia/Aden' => 'عدن (اليمن)',
+            'Asia/Tehran' => 'طهران (إيران)',
+            'Asia/Kabul' => 'كابل (أفغانستان)',
+            'Asia/Karachi' => 'كراتشي (باكستان)',
+            'Asia/Kolkata' => 'نيودلهي (الهند)',
+            'Asia/Dhaka' => 'دكا (بنغلاديش)',
+            'Asia/Bangkok' => 'بانكوك (تايلاند)',
+            'Asia/Jakarta' => 'جاكرتا (إندونيسيا)',
+            'Asia/Shanghai' => 'بكين (الصين)',
+            'Asia/Tokyo' => 'طوكيو (اليابان)',
+            'Asia/Seoul' => 'سيول (كوريا)',
+            'Europe/Istanbul' => 'إسطنبول (تركيا)',
+            'Europe/London' => 'لندن (المملكة المتحدة)',
+            'Europe/Paris' => 'باريس (فرنسا)',
+            'Europe/Berlin' => 'برلين (ألمانيا)',
+            'Europe/Moscow' => 'موسكو (روسيا)',
+            'Australia/Sydney' => 'سيدني (أستراليا)',
+            'Pacific/Auckland' => 'أوكلاند (نيوزيلندا)',
+            'America/New_York' => 'نيويورك (الولايات المتحدة)',
+            'America/Los_Angeles' => 'لوس أنجلوس (الولايات المتحدة)',
+            'America/Chicago' => 'شيكاغو (الولايات المتحدة)',
+            'America/Sao_Paulo' => 'ساو باولو (البرازيل)',
+          ];
+          foreach ($tzList as $tz => $label): ?>
+            <option value="<?= $tz ?>" <?= ($settings['default_timezone'] ?? 'Asia/Riyadh') === $tz ? 'selected' : '' ?>><?= $label ?></option>
+          <?php endforeach; ?>
+        </select>
+        <small style="color:var(--muted)">التوقيت الذي سيظهر به الوقت والتاريخ في التطبيق ولوحة التحكم</small>
+      </div>
+      <?php
+      $currentTz = $settings['default_timezone'] ?? 'Asia/Riyadh';
+      if (in_array($currentTz, DateTimeZone::listIdentifiers(), true)) {
+          $tzObj = new DateTimeZone($currentTz);
+          $now = new DateTime('now', $tzObj);
+          echo '<div style="margin-top:10px; padding:10px 14px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font-size:13px; color:var(--muted);">الوقت الحالي في المنطقة المختارة: <b dir="ltr">' . $now->format('H:i:s') . '</b> — ' . $now->format('Y-m-d') . '</div>';
+      }
+      ?>
     </div>
 
     <!-- Users & Security -->
