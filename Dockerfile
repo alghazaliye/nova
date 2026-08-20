@@ -70,6 +70,7 @@ RUN { echo '#!/bin/sh'; \
       echo '  [ -f /var/www/html/database/seed.sql ] && (sqlite3 "$DB_PATH" < /var/www/html/database/seed.sql 2>/dev/null || true)'; \
       echo '  cp -f "$DB_PATH" "$DATA_DB" 2>/dev/null || true'; \
       echo 'fi'; \
+      echo '# Sync active DB back to persistent dir (guards against loss on container restart).'; \
       echo 'cp -f "$DB_PATH" "$DATA_DB" 2>/dev/null || true'; \
       echo 'if [ -f /var/www/html/database/seed_production.sql ]; then'; \
       echo '  sqlite3 "$DB_PATH" < /var/www/html/database/seed_production.sql 2>/dev/null || true'; \
