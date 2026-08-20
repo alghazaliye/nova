@@ -166,12 +166,33 @@
     }
   </script>
 
-  <script id="nova-bootstrap" src="/web_app/flutter_bootstrap.js" async></script>
+  <script id="nova-bootstrap" src="flutter_bootstrap.js" async></script>
   <script>
-    // الدفاع ضد فشل تحميل bootstrap: نحاول فقط المسارات الصحيحة المعروفة بترتيب منطقي،
-    // وإذا نجح التحميل من مسار مختلف نعيد تحميل الصفحة بالمسار الصحيح لتثبيت الكاش.
+    // تحميل المنطقة الزمنية من الخادم (يُحدَّد من إعدادات لوحة التحكم) وتوفيرها
+    // للتطبيق كـ window.NovaTZ، وتعمل على أي استضافة دون حاجة لـ PHP في index.html.
     (function () {
-      var tries = ['/web_app/flutter_bootstrap.js'];
+      try {
+        var apiBase = window.location.origin;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', apiBase + '/api/v1/health', true);
+        xhr.timeout = 5000;
+        xhr.onload = function () {
+          try {
+            var d = JSON.parse(xhr.responseText);
+            var tz = (d && d.data && d.data.timezone) || null;
+            if (tz) window.NovaTZ = tz;
+          } catch (e) { /* ignore */ }
+        };
+        xhr.onerror = function () { /* ignore */ };
+        xhr.send();
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  <script>
+    // دفاع ضد 404 للـbootstrap: إذا فشل تحميله (كاش قديم أو مسار خاطئ)،
+    // نحاول تحميله من /web_app/ ثم من الجذر — ثم نعيّن المسار الصحيح ونعيد التحميل.
+    (function () {
+      var tries = ['flutter_bootstrap.js', '/web_app/flutter_bootstrap.js', '/flutter_bootstrap.js'];
       var el = document.getElementById('nova-bootstrap');
       el.addEventListener('error', function () {
         if (tries.length > 0) {
@@ -182,14 +203,9 @@
           s.async = true;
           s.addEventListener('error', arguments.callee);
           el.replaceWith(s);
-          sessionStorage.setItem('_nova_bootstrap_base', '/web_app/');
-        } else {
-          // فشل الكل: ننبّه المستخدم ونعرض رابطًا مباشرًا للتحميل الجديد
-          var errEl = document.getElementById('nova-error');
-          if (errEl) {
-            errEl.style.display = 'block';
-            errEl.textContent = 'فشل تحميل ملفات التطبيق. الرجاء تحديث الصفحة (Ctrl+Shift+R).';
-          }
+          // بعد نجاح التحميل من مسار مختلف: نثبّت المسار الصحيح في sessionStorage لنبهّ الكاش القديم
+          var m = next.match(/^(.*)flutter_bootstrap\.js$/);
+          if (m && m[1] !== '') sessionStorage.setItem('_nova_bootstrap_base', m[1]);
         }
       });
     })();
