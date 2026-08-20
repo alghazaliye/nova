@@ -240,7 +240,8 @@ class _OtpCountdownState extends State<_OtpCountdown> {
     if (widget.otpExpiresAt != null) {
       // تحديث العدّاد كل ثانية حتى الوصول إلى الصفر
       _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-        final diff = widget.otpExpiresAt!.difference(DateTime.now());
+        // مقارنة UTC بـ UTC — DateTime.now() محلي، لذا نحوّله إلى UTC أولًا
+        final diff = widget.otpExpiresAt!.difference(DateTime.now().toUtc());
         if (!mounted) return;
         if (diff.isNegative || diff == Duration.zero) {
           t.cancel();
@@ -256,10 +257,10 @@ class _OtpCountdownState extends State<_OtpCountdown> {
     super.dispose();
   }
 
-  /// الوقت المتبقي (0 إذا انتهى)
+  /// الوقت المتبقي (0 إذا انتهى) — مقارنة UTC بـ UTC
   Duration _remaining() {
     if (widget.otpExpiresAt == null) return Duration.zero;
-    final diff = widget.otpExpiresAt!.difference(DateTime.now());
+    final diff = widget.otpExpiresAt!.difference(DateTime.now().toUtc());
     return diff.isNegative ? Duration.zero : diff;
   }
 

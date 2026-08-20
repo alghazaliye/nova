@@ -464,8 +464,16 @@ class AuthProvider extends ChangeNotifier {
     final raw = data?['expires_at'];
     if (raw == null) return null;
     try {
-      // expires_at مخزّنة GMT — نحفظها UTC دائمًا (المقارنة بالفروقات فقط)
-      return DateTime.parse('$raw').toUtc();
+      final str = '$raw';
+      // الخادم يخزن expires_at UTC صريحًا (gmdate) ويُرجعها بدون timezone
+      // (مثل: 2026-08-20 22:54:53). لذلك: إذا احتوت Z نعتمدها مباشرة،
+      // وإلا نعامل السلسلة نفسها كتوقيت UTC ولا نلتبس بالتوقيت المحلي
+      // للجهاز — وإلا سيظهر الرمز «منتهيًا» فور فتح الشاشة على الأجهزة
+      // التي تسبق UTC (مثل GMT+3: الساعة المحلية 01:50 > 22:54)
+      final dt = str.endsWith('Z')
+          ? DateTime.parse(str).toUtc()
+          : DateTime.parse(str).add(DateTime.now().timeZoneOffset).toUtc();
+      return dt;
     } catch (_) {
       return null;
     }
