@@ -11,7 +11,145 @@ include __DIR__ . '/includes/sidebar.php';
 
 $API = '/api/v1/admin/otp';
 ?>
-
+<style>
+  /* ===== تحسينات صفحة إعدادات OTP ===== */
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .auth-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .auth-card-header .icon {
+    width: 42px; height: 42px; flex: 0 0 42px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, #5b5ce2, #7c3aed);
+    color: #fff;
+    display: grid; place-items: center;
+    font-size: 20px;
+    box-shadow: 0 8px 18px rgba(91, 92, 226, .25);
+  }
+  .auth-card-header h3 { margin: 0; font-size: 16px; font-weight: 800; }
+  .auth-card-header small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group:last-child { margin-bottom: 0; }
+  .form-group > label {
+    display: block;
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  /* مبدّل تفعيل أنيق */
+  .auth-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface2);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    transition: 0.2s;
+    cursor: pointer;
+  }
+  .auth-toggle:hover { border-color: #5b5ce2; }
+  .auth-toggle input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none;
+    width: 22px; height: 22px; flex: 0 0 22px;
+    border: 2px solid #c7cbd6; border-radius: 7px;
+    background: var(--surface);
+    position: relative;
+    cursor: pointer;
+    transition: 0.2s;
+    margin: 0;
+  }
+  .auth-toggle input[type="checkbox"]:checked {
+    background: linear-gradient(135deg, #5b5ce2, #7c3aed);
+    border-color: #5b5ce2;
+  }
+  .auth-toggle input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    right: 5px; top: 1px;
+    width: 7px; height: 12px;
+    border: solid #fff; border-width: 0 2.5px 2.5px 0;
+    transform: rotate(40deg);
+  }
+  .auth-toggle .toggle-label { font-weight: 700; font-size: 13.5px; line-height: 1.5; }
+  .auth-toggle .toggle-hint { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  /* حقول الإدخال */
+  .auth-input, .auth-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--line);
+    border-radius: 11px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13.5px;
+    transition: 0.2s;
+    font-family: inherit;
+  }
+  .auth-input:focus, .auth-select:focus {
+    outline: none;
+    border-color: #5b5ce2;
+    box-shadow: 0 0 0 4px rgba(91, 92, 226, .15);
+  }
+  .auth-hint { display: block; color: var(--muted); font-size: 11.5px; margin-top: 5px; line-height: 1.6; }
+  /* شبكة الحقول */
+  .auth-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px) { .auth-grid-2 { grid-template-columns: 1fr; } }
+  /* الأزرار */
+  .auth-actions {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    margin: 6px 0 28px;
+  }
+  .btn-auth-primary {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 12px 26px;
+    border-radius: 12px; border: 0;
+    background: linear-gradient(135deg, #5b5ce2, #7c3aed);
+    color: #fff;
+    font-weight: 800; font-size: 14px;
+    box-shadow: 0 10px 24px rgba(91, 92, 226, .32);
+    transition: 0.2s;
+  }
+  .btn-auth-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(91, 92, 226, .4); }
+  .btn-auth-primary:active { transform: translateY(0); }
+  .btn-auth-secondary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 700; font-size: 14px;
+    transition: 0.2s;
+  }
+  .btn-auth-secondary:hover { border-color: #5b5ce2; color: #5b5ce2; background: var(--surface2); }
+  .btn-auth-primary:disabled, .btn-auth-secondary:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+  /* معاينة القالب */
+  .tpl-preview {
+    background: var(--surface2);
+    border: 1.5px dashed var(--line);
+    border-radius: 11px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: var(--text);
+    direction: ltr;
+    text-align: left;
+    line-height: 1.7;
+  }
+</style>
 <div class="content">
   <div class="page-header">
     <h1 class="page-title">إعدادات التحقق OTP</h1>
@@ -20,89 +158,118 @@ $API = '/api/v1/admin/otp';
 
   <div id="globalAlert"></div>
 
-  <div class="grid" style="grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
-    <!-- وضع الإرسال -->
-    <div class="card">
-      <h3 style="margin-bottom:12px;">وضع الإرسال (Delivery Mode)</h3>
-      <div class="form-group">
-        <label>الوضع الافتراضي لطلبات التسجيل</label>
-        <select id="deliveryMode" onchange="updateModeHint()">
-          <option value="auto">تلقائي بالكامل (إرسال SMS فقط)</option>
-          <option value="manual">يدوي بالكامل (المدير يعرض الرمز)</option>
-          <option value="auto_fallback">تلقائي مع تحول يدوي عند فشل التسليم</option>
-        </select>
-        <small style="color:var(--muted)" id="modeHint">سيتم إرسال الرمز تلقائيًا عبر المزود الافتراضي فقط.</small>
-      </div>
-      <div class="form-group">
-        <label style="display:flex; align-items:center; gap:10px;">
-          <input type="checkbox" id="enableFallback" style="width:18px;height:18px;">
-          تفعيل التحول التلقائي للمزود الاحتياطي عند فشل المزود الأساسي
-        </label>
-        <small style="color:var(--muted)">عند فشل المزود الافتراضي يُجرَّب المزود التالي تلقائيًا.</small>
-      </div>
-      <div class="form-group">
-        <label style="display:flex; align-items:center; gap:10px;">
-          <input type="checkbox" id="enableManualFallback" style="width:18px;height:18px;">
-          السماح بظهور الرمز للمدير (نسخة يدوية) عند فشل كل المزودين
-        </label>
-        <small style="color:var(--muted)">يظهر الرمز في صفحة «طلبات التسجيل» عندما يفشل كل المزودين.</small>
+  <!-- بطاقة وضع الإرسال -->
+  <div class="auth-card">
+    <div class="auth-card-header">
+      <div class="icon">📤</div>
+      <div>
+        <h3>وضع الإرسال</h3>
+        <small>كيف يصل رمز التحقق للمستخدم: تلقائيًا عبر المزود، أو يدويًا من المدير.</small>
       </div>
     </div>
+    <div class="form-group">
+      <label>الوضع الافتراضي لطلبات التسجيل</label>
+      <select id="deliveryMode" class="auth-select" onchange="updateModeHint()">
+        <option value="auto">تلقائي بالكامل (إرسال SMS فقط)</option>
+        <option value="manual">يدوي بالكامل (المدير يعرض الرمز)</option>
+        <option value="auto_fallback">تلقائي مع تحول يدوي عند فشل التسليم</option>
+      </select>
+      <small class="auth-hint" id="modeHint">سيتم إرسال الرمز تلقائيًا عبر المزود الافتراضي فقط.</small>
+    </div>
+    <label class="auth-toggle">
+      <input type="checkbox" id="enableFallback">
+      <div>
+        <div class="toggle-label">تفعيل المزود الاحتياطي</div>
+        <div class="toggle-hint">عند فشل المزود الافتراضي يُجرَّب المزود التالي تلقائيًا.</div>
+      </div>
+    </label>
+    <label class="auth-toggle">
+      <input type="checkbox" id="enableManualFallback">
+      <div>
+        <div class="toggle-label">السماح بالرمز اليدوي للمدير</div>
+        <div class="toggle-hint">يظهر الرمز في صفحة «طلبات التسجيل» عندما يفشل كل المزودين.</div>
+      </div>
+    </label>
+  </div>
 
-    <!-- خصائص الرمز -->
-    <div class="card">
-      <h3 style="margin-bottom:12px;">خصائص الرمز</h3>
+  <!-- بطاقة خصائص الرمز -->
+  <div class="auth-card">
+    <div class="auth-card-header">
+      <div class="icon">🔑</div>
+      <div>
+        <h3>خصائص الرمز</h3>
+        <small>طول الرمز ومدته وحد المحاولات، وفرض التحقق عند الدخول.</small>
+      </div>
+    </div>
+    <div class="auth-grid-2">
       <div class="form-group"><label>طول الرمز</label>
-        <select id="otpLength"><option value="4">4 خانات</option><option value="6">6 خانات</option></select>
+        <select id="otpLength" class="auth-select"><option value="4">4 خانات</option><option value="6">6 خانات</option></select>
       </div>
       <div class="form-group"><label>مدة الصلاحية (دقائق)</label>
-        <input type="number" id="expiryMinutes" min="1" max="60">
+        <input type="number" id="expiryMinutes" class="auth-input" min="1" max="60">
       </div>
       <div class="form-group"><label>حد المحاولات لكل طلب</label>
-        <input type="number" id="maxAttempts" min="1" max="20">
+        <input type="number" id="maxAttempts" class="auth-input" min="1" max="20">
       </div>
-      <div class="form-group">
-        <label style="display:flex; align-items:center; gap:10px;">
-          <input type="checkbox" id="otpRequired" style="width:18px;height:18px;">
-          فرض التحقق برمز OTP عند تسجيل الدخول للأرقام المسجلة
+      <div style="display:flex; align-items:flex-end;">
+        <label class="auth-toggle" style="width:100%; margin-bottom:0;">
+          <input type="checkbox" id="otpRequired">
+          <div>
+            <div class="toggle-label">فرض OTP عند الدخول</div>
+            <div class="toggle-hint">الأرقام المسجلة تحتاج الرمز حتى مع كلمة المرور.</div>
+          </div>
         </label>
-        <small style="color:var(--muted)">بدون هذا الخيار يمكن للأرقام المسجلة الدخول بكلمة المرور مباشرة.</small>
       </div>
     </div>
   </div>
 
-  <!-- قالب رسالة SMS -->
-  <div class="card" style="margin-bottom:20px;">
-    <h3 style="margin-bottom:12px;">قالب رسالة SMS</h3>
-    <p style="color:var(--muted); margin-bottom:10px;">المتغيرات المتاحة: <code>{OTP}</code> <code>{PHONE}</code> <code>{MINUTES}</code> <code>{APP_NAME}</code></p>
+  <!-- بطاقة قالب رسالة SMS -->
+  <div class="auth-card">
+    <div class="auth-card-header">
+      <div class="icon">✉️</div>
+      <div>
+        <h3>قالب رسالة SMS</h3>
+        <small>المتغيرات المتاحة: {OTP} · {PHONE} · {MINUTES} · {APP_NAME}</small>
+      </div>
+    </div>
     <div class="form-group">
-      <textarea id="messageTemplate" rows="3" style="width:100%; direction:rtl; font-size:14px;"></textarea>
+      <textarea id="messageTemplate" class="auth-input" rows="3" style="direction:rtl; resize:vertical;" oninput="previewTemplate()"></textarea>
     </div>
-    <div id="templatePreview" style="margin-top:10px; padding:12px; background:var(--bg-secondary,#f8f9fb); border-radius:8px; font-size:13px; color:var(--muted);">معاينة: —</div>
-  </div>
-
-  <!-- الحماية من الإساءة -->
-  <div class="card" style="margin-bottom:20px;">
-    <h3 style="margin-bottom:12px;">الحماية من الإساءة (Rate Limiting)</h3>
-    <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap:14px;">
-      <div class="form-group"><label>إعادة إرسال كل (ثانية)</label>
-        <input type="number" id="resendCooldown" min="10" max="600">
-      </div>
-      <div class="form-group"><label>حد إعادة الإرسال / ساعة</label>
-        <input type="number" id="maxResends" min="1" max="20">
-      </div>
-      <div class="form-group"><label>طلبات / رقم / ساعة</label>
-        <input type="number" id="ratePhone" min="1" max="50">
-      </div>
-      <div class="form-group"><label>طلبات / IP / ساعة</label>
-        <input type="number" id="rateIp" min="5" max="100">
-      </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label>معاينة حية</label>
+      <div class="tpl-preview" id="templatePreview">معاينة: —</div>
     </div>
   </div>
 
-  <div style="display:flex; gap:12px; margin-bottom:24px;">
-    <button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات</button>
-    <button class="btn btn-secondary" onclick="loadSettings()">تحديث</button>
+  <!-- بطاقة الحدود والحماية -->
+  <div class="auth-card">
+    <div class="auth-card-header">
+      <div class="icon">🛡️</div>
+      <div>
+        <h3>الحدود والحماية من الإساءة</h3>
+        <small>إعادة الإرسال والحدود الزمنية لكل رقم وعنوان IP.</small>
+      </div>
+    </div>
+    <div class="auth-grid-2">
+      <div class="form-group"><label>فترة انتظار إعادة الإرسال (ثوانٍ)</label>
+        <input type="number" id="resendCooldown" class="auth-input" min="5" max="600">
+      </div>
+      <div class="form-group"><label>حد إعادة الإرسال لكل طلب</label>
+        <input type="number" id="maxResends" class="auth-input" min="0" max="20">
+      </div>
+      <div class="form-group"><label>حد الطلبات لكل رقم (ساعة)</label>
+        <input type="number" id="ratePhone" class="auth-input" min="1" max="100">
+      </div>
+      <div class="form-group"><label>حد الطلبات لكل IP (ساعة)</label>
+        <input type="number" id="rateIp" class="auth-input" min="1" max="300">
+      </div>
+    </div>
+  </div>
+
+  <!-- الأزرار -->
+  <div class="auth-actions">
+    <button class="btn-auth-primary" id="saveBtn" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+    <button class="btn-auth-secondary" onclick="loadSettings()">🔄 تحديث</button>
   </div>
 </div>
 
@@ -140,7 +307,6 @@ async function loadSettings(){
     setCb('otpRequired', settings.otp_required);
     updateModeHint();
     previewTemplate();
-    document.getElementById('messageTemplate').addEventListener('input', previewTemplate);
   } catch (e) { showAlert('خطأ في الاتصال: ' + e.message, 'error'); }
 }
 
@@ -176,6 +342,8 @@ async function saveSettings(){
     otp_rate_limit_per_ip_per_hour: parseInt(document.getElementById('rateIp').value) || 30,
     otp_required: document.getElementById('otpRequired').checked ? '1' : '0'
   };
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
   try {
     const res = await fetch(API + '/settings', {
       method: 'POST',
@@ -188,6 +356,7 @@ async function saveSettings(){
     await new Promise((r) => setTimeout(r, 400));
     await loadSettings();
   } catch (e) { showAlert(e.message, 'error'); }
+  btn.disabled = false;
 }
 
 document.addEventListener('DOMContentLoaded', loadSettings);
