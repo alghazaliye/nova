@@ -529,6 +529,21 @@ CREATE INDEX "idx_role_permissions_fk_role_permissions_permission" ON "role_perm
 CREATE INDEX "idx_email_providers_idx_email_providers_status" ON "email_providers" (`status`);
 CREATE INDEX "idx_calls_idx_calls_caller_id" ON "calls" (`caller_id`);
 CREATE INDEX "idx_calls_idx_calls_created_at" ON "calls" (`created_at`);
+
+CREATE TABLE `call_signals` (
+  `id` integer  NOT NULL  PRIMARY KEY AUTOINCREMENT
+,  `call_id` integer  NOT NULL
+,  `sender_id` integer  NOT NULL
+,  `signal_type` text  NOT NULL
+,  `payload` text  NOT NULL
+,  `created_at` DATETIME NOT NULL DEFAULT (datetime('now','localtime'))
+,  CONSTRAINT `fk_call_signals_call` FOREIGN KEY (`call_id`) REFERENCES `calls` (`id`) ON DELETE CASCADE
+,  CONSTRAINT `fk_call_signals_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+);
+
+CREATE INDEX "idx_call_signals_idx_call_id" ON "call_signals" (`call_id`);
+CREATE INDEX "idx_call_signals_idx_created_at" ON "call_signals" (`created_at`);
+
 CREATE INDEX "idx_attachments_idx_attachments_uploader_id" ON "attachments" (`uploader_id`);
 CREATE UNIQUE INDEX idx_otp_rate_limits_unique ON otp_rate_limits (bucket_key, bucket_type);
 CREATE UNIQUE INDEX idx_message_reads_unique ON message_reads (message_id, user_id);

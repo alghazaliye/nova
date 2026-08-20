@@ -14,7 +14,18 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="$FLUTTER_BASE_HREF">
+  <base href="/" id="dynamic-base">
+  <script>
+    // Dynamic base href: works whether served from root or a sub-path (e.g. /web_app/).
+    (function () {
+      try {
+        var p = window.location.pathname;
+        var base = p.lastIndexOf('/') > 0 ? p.substring(0, p.lastIndexOf('/') + 1) : '/';
+        var b = document.getElementById('dynamic-base');
+        if (b && b.getAttribute('href') !== base) b.setAttribute('href', base);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -75,6 +86,8 @@
     }
     #flutter-view { min-height: 100vh; }
   </style>
+  <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+  <meta http-equiv="Cross-Origin-Embedder-Policy" content="credentialless">
 </head>
 <body>
   <!-- شاشة التحميل -->
@@ -122,18 +135,59 @@
       setTimeout(function () { clearInterval(t); }, 35000);
     })();
 
-    // تجاوز كاش Service Worker عند كل إصدار جديد
+        // إلغاء أي خدمة ويب قديمة عند كل تحميل (تخدم index.html قديمًا = سبب 404/CORS/قطع اتصال)
+    // ملاحظة: طلبات /api لا تدخل SW إطلاقًا (POST يتجاهل، وGET غير الموارد يُعاد للمتصفح)،
+    // لكن حذف الكاش القديم يحسم أي بقايا index.html قديمة
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (r) {
-          if (r.active && r.active.scriptURL.indexOf('serviceWorkerVersion=') !== -1) {
-            // تسجيل الخدمة موجود مسبقًا؛ تركها تعمل (لا إلغاء قسري كي لا تنكسر جلسة جارية)
-          }
-        });
-      });
+      if (!sessionStorage.getItem('_nova_sw_cleared')) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          var anyMatch = false;
+          regs.forEach(function (r) {
+            if (r.scope.indexOf('/web_app/') !== -1 || r.scope === location.origin + '/') {
+              anyMatch = true;
+              // إجبار SW الجديد على التفعيل الفوري إن وُجد
+              if (r.waiting) { r.waiting.postMessage('skipWaiting'); }
+              r.unregister().then(function (ok) {
+                if (ok) {
+                  caches.keys().then(function (keys) {
+                    keys.forEach(function (k) { if (k.indexOf('flutter') !== -1) caches.delete(k); });
+                  });
+                  sessionStorage.setItem('_nova_sw_cleared', '1');
+                  location.reload();
+                }
+              }).catch(function () { sessionStorage.setItem('_nova_sw_cleared', '1'); });
+            }
+          });
+          if (!anyMatch) sessionStorage.setItem('_nova_sw_cleared', '1');
+        }).catch(function () { sessionStorage.setItem('_nova_sw_cleared', '1'); });
+        // حزام أمان: إن لم يحدث reload خلال 8 ثوانٍ نواصل (لا نعلق التطبيق)
+        setTimeout(function () { sessionStorage.setItem('_nova_sw_cleared', '1'); }, 8000);
+      }
     }
   </script>
 
-  <script src="flutter_bootstrap.js" async></script>
+  <script id="nova-bootstrap" src="flutter_bootstrap.js" async></script>
+  <script>
+    // دفاع ضد 404 للـbootstrap: إذا فشل تحميله (كاش قديم أو مسار خاطئ)،
+    // نحاول تحميله من /web_app/ ثم من الجذر — ثم نعيّن المسار الصحيح ونعيد التحميل.
+    (function () {
+      var tries = ['flutter_bootstrap.js', '/web_app/flutter_bootstrap.js', '/flutter_bootstrap.js'];
+      var el = document.getElementById('nova-bootstrap');
+      el.addEventListener('error', function () {
+        if (tries.length > 0) {
+          var next = tries.shift();
+          var s = document.createElement('script');
+          s.id = 'nova-bootstrap';
+          s.src = next;
+          s.async = true;
+          s.addEventListener('error', arguments.callee);
+          el.replaceWith(s);
+          // بعد نجاح التحميل من مسار مختلف: نثبّت المسار الصحيح في sessionStorage لنبهّ الكاش القديم
+          var m = next.match(/^(.*)flutter_bootstrap\.js$/);
+          if (m && m[1] !== '') sessionStorage.setItem('_nova_bootstrap_base', m[1]);
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

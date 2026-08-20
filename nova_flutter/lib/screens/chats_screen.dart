@@ -884,22 +884,67 @@ class _ChatsTabState extends State<ChatsTab> {
                             showToast(dialogCtx, 'أدخل رقمًا صحيحًا');
                             return;
                           }
-                          final searchRes = await ApiService.get(
-                              '/users/search',
-                              query: {'q': phone});
+                          Map<String, dynamic> searchRes;
+                          try {
+                            searchRes = await ApiService.get(
+                                '/users/search',
+                                query: {'q': phone});
+                          } catch (e) {
+                            if (!dialogCtx.mounted) return;
+                            showToast(dialogCtx, 'فشل الاتصال بالخادم — حاول مجددًا');
+                            return;
+                          }
                           if (!dialogCtx.mounted) return;
-                          if (searchRes['success'] == true &&
-                              searchRes['data'] is List &&
+                          // حساب محظور أو جلسة غير صالحة: الخادم يرمي 403
+                          if (searchRes['success'] != true) {
+                            final msg = searchRes['message']?.toString() ?? '';
+                            final code = searchRes['error_code']?.toString() ?? '';
+                            final forbidden = code == 'FORBIDDEN' ||
+                                msg.contains('محظور') ||
+                                msg.contains('حظر') ||
+                                msg.toLowerCase().contains('forbidden') ||
+                                msg.toLowerCase().contains('blocked');
+                            if (forbidden) {
+                              showToast(dialogCtx,
+                                  'هذا الحساب محظور — تواصل مع إدارة التطبيق لفتح الحظر');
+                            } else {
+                              showToast(
+                                  dialogCtx,
+                                  msg.isNotEmpty
+                                      ? msg
+                                      : 'لم يتم العثور على مستخدم بهذا الرقم');
+                            }
+                            return;
+                          }
+                          if (searchRes['data'] is List &&
                               (searchRes['data'] as List).isNotEmpty) {
                             final user = Map<String, dynamic>.from(
                                 searchRes['data'][0]
                                     as Map<String, dynamic>);
-                            final addRes = await ApiService.post('/contacts',
-                                body: {'contact_user_id': user['id']});
+                            Map<String, dynamic> addRes;
+                            try {
+                              addRes = await ApiService.post('/contacts',
+                                  body: {'contact_user_id': user['id']});
+                            } catch (e) {
+                              if (!dialogCtx.mounted) return;
+                              showToast(dialogCtx, 'فشل الاتصال بالخادم — حاول مجددًا');
+                              return;
+                            }
                             if (!dialogCtx.mounted) return;
-                            showToast(dialogCtx,
-                                addRes['message'] ?? 'تمت إضافة جهة الاتصال');
-                            Navigator.pop(dialogCtx);
+                            if (addRes['success'] == true) {
+                              showToast(dialogCtx,
+                                  addRes['message'] ?? 'تمت إضافة جهة الاتصال');
+                              Navigator.pop(dialogCtx);
+                            } else {
+                              final msg = addRes['message']?.toString() ?? '';
+                              showToast(
+                                  dialogCtx,
+                                  (msg.contains('محظور') || msg.contains('حظر'))
+                                      ? 'هذا الحساب محظور — تواصل مع إدارة التطبيق لفتح الحظر'
+                                      : (msg.isNotEmpty
+                                          ? msg
+                                          : 'لم تتم إضافة جهة الاتصال — حاول مجددًا'));
+                            }
                           } else {
                             showToast(dialogCtx, 'لم يتم العثور على مستخدم بهذا الرقم');
                           }
