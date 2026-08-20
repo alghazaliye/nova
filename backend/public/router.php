@@ -184,6 +184,11 @@ foreach ($candidates as $candidate) {
                 header('Content-Type: ' . ($mimeTypes[$origExt] ?? 'application/octet-stream'));
                 header('Vary: Accept-Encoding');
                 header('Content-Length: ' . filesize($compressed));
+                if (in_array($origExt, ['wasm', 'js', 'mjs'], true)) {
+                    // skwasm (Flutter wasm renderer) requires cross-origin isolation
+                    header('Cross-Origin-Opener-Policy: same-origin');
+                    header('Cross-Origin-Embedder-Policy: require-corp');
+                }
                 readfile($compressed);
                 return true;
             }
@@ -195,6 +200,7 @@ foreach ($candidates as $candidate) {
             $mimeTypes = [
                 'html' => 'text/html; charset=utf-8',
                 'js'   => 'application/javascript; charset=utf-8',
+                'mjs'  => 'text/javascript; charset=utf-8',
                 'css'  => 'text/css; charset=utf-8',
                 'json' => 'application/json; charset=utf-8',
                 'png'  => 'image/png',
@@ -222,6 +228,10 @@ foreach ($candidates as $candidate) {
             header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
             header('Access-Control-Allow-Origin: *');
             header('Access-Control-Allow-Headers: Range');
+            if (in_array($ext, ['wasm', 'js', 'mjs'], true)) {
+                header('Cross-Origin-Opener-Policy: same-origin');
+                header('Cross-Origin-Embedder-Policy: require-corp');
+            }
             header('Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges');
             header('Accept-Ranges: bytes');
             $size = filesize($resolved);
