@@ -92,13 +92,10 @@ function navActive(string $page, string $current): string {
     <a href="email-providers.php" class="<?= navActive('email-providers', $currentPage) ?>">
       <span>✉</span> مزودو البريد
     </a>
-    <a href="email-registrations.php" class="<?= navActive('email-registrations', $currentPage) ?>">
-      <span>📧</span> طلبات تسجيل البريد
-    </a>
     <a href="otp-providers.php" class="<?= navActive('otp-providers', $currentPage) ?>">
       <span>🔑</span> مزودو OTP
     </a>
-    <a href="otp-registrations.php" class="<?= navActive('otp-registrations', $currentPage) ?>">
+    <a href="registrations.php" class="<?= in_array($currentPage ?? '', ['registrations', 'email-registrations', 'otp-registrations'], true) ? 'active' : '' ?>">
       <span>📝</span> طلبات التسجيل
     </a>
     <a href="otp-settings.php" class="<?= navActive('otp-settings', $currentPage) ?>">

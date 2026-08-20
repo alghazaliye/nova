@@ -111,7 +111,7 @@ function showAlert(msg, kind) {
 }
 function setCb(id, val) { const el = document.getElementById(id); if (el) el.checked = !!Number(val || 0); }
 function setSel(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
-function setNum(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+function setNum(id, val) { const el = document.getElementById(id); if (el) el.value = (val === undefined || val === null || val === '') ? '' : val; }
 async function loadSettings() {
   try {
     const r = await fetch(API + '/settings', { headers: { Authorization: 'Bearer ' + token() } });
@@ -123,16 +123,16 @@ async function loadSettings() {
     setCb('loginPhone', s.auth_phone_login); setCb('loginEmail', s.auth_email_login); setCb('loginUsername', s.auth_username_login);
     setCb('otpPhoneEnabled', s.otp_phone_enabled);
     setSel('otpPhoneDelivery', s.otp_phone_delivery_mode || 'auto');
-    setNum('otpPhoneExpiry', s.otp_phone_expiry_minutes);
-    setNum('otpPhoneAttempts', s.otp_phone_max_attempts);
-    setNum('otpPhoneCooldown', s.otp_phone_resend_cooldown_seconds);
-    setNum('otpPhoneResends', s.otp_phone_max_resends);
+    setNum('otpPhoneExpiry', s.otp_phone_expiry_minutes ?? 5);
+    setNum('otpPhoneAttempts', s.otp_phone_max_attempts ?? 5);
+    setNum('otpPhoneCooldown', s.otp_phone_resend_cooldown_seconds ?? 30);
+    setNum('otpPhoneResends', s.otp_phone_max_resends ?? 10);
     setCb('otpEmailEnabled', s.otp_email_enabled);
     setSel('otpEmailDelivery', s.otp_email_delivery_mode || 'auto');
-    setNum('otpEmailExpiry', s.otp_email_expiry_minutes);
-    setNum('otpEmailAttempts', s.otp_email_max_attempts);
-    setNum('otpEmailCooldown', s.otp_email_resend_cooldown_seconds);
-    setNum('otpEmailResends', s.otp_email_max_resends);
+    setNum('otpEmailExpiry', s.otp_email_expiry_minutes ?? 5);
+    setNum('otpEmailAttempts', s.otp_email_max_attempts ?? 5);
+    setNum('otpEmailCooldown', s.otp_email_resend_cooldown_seconds ?? 30);
+    setNum('otpEmailResends', s.otp_email_max_resends ?? 10);
   } catch (e) { showAlert('خطأ في الاتصال: ' + e.message, 'error'); }
 }
 async function saveSettings() {
