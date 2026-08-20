@@ -802,4 +802,55 @@ class MessageController
 
         Response::success(['id' => $msgId, 'type' => 'audio', 'file_id' => $fileId], 'تم إرسال الرسالة الصوتية', 201);
     }
+
+    // POST /api/v1/conversations/{id}/typing  {typing: true}
+    public function setTyping(int $convId): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $this->requireMember($convId, $userId);
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $typing = (bool)($body['typing'] ?? true);
+
+        try {
+            if ($typing) {
+                // صالح 4 ثوانٍ؛ كل حدث كتابة يعيد تعيينه
+                $this->pdo->prepare('DELETE FROM typing_status WHERE conversation_id = ? AND user_id = ?')->execute([$convId, $userId]);
+                $this->pdo->prepare(
+                    'INSERT INTO typing_status (conversation_id, user_id, expires_at, updated_at) VALUES (?, ?, datetime("now", "localtime", "+4 seconds"), datetime("now", "localtime"))'
+                )->execute([$convId, $userId]);
+                Response::success(['typing' => true, 'expires_at' => '+4s'], 'ok');
+            } else {
+                $this->pdo->prepare('DELETE FROM typing_status WHERE conversation_id = ? AND user_id = ?')->execute([$convId, $userId]);
+                Response::success(['typing' => false], 'ok');
+            }
+        } catch (\Throwable $e) {
+            error_log('Typing status error: ' . $e->getMessage());
+            Response::success(['typing' => false], 'ok');
+        }
+    }
+
+    // GET /api/v1/conversations/{id}/typing
+    public function getTyping(int $convId): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $this->requireMember($convId, $userId);
+
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT ts.user_id, u.name, u.avatar
+                 FROM typing_status ts
+                 JOIN users u ON u.id = ts.user_id
+                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime("now", "localtime") AND ts.user_id != ?'
+            );
+            $stmt->execute([$convId, $userId]);
+            $typing = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            Response::success(['typing_users' => $typing], 'ok');
+        } catch (\Throwable $e) {
+            error_log('Get typing error: ' . $e->getMessage());
+            Response::success(['typing_users' => []], 'ok');
+        }
+    }
 }

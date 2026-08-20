@@ -54,6 +54,22 @@ class ConversationController
             );
             $mc->execute([(int)$conv['id']]);
             $conv['member_count'] = (int)$mc->fetchColumn();
+            // Enrich: typing_users — المستخدمون الذين يكتبون حاليًا في هذه المحادثة
+            try {
+                $tp = $this->pdo->prepare(
+                    'SELECT t.user_id, u.name, u.avatar
+                     FROM typing_status t
+                     JOIN users u ON u.id = t.user_id
+                     WHERE t.conversation_id = ? AND t.expires_at > NOW()'
+                );
+                $tp->execute([(int)$conv['id']]);
+                $conv['typing_users'] = array_map(function ($r) {
+                    $r['user_id'] = (int)$r['user_id'];
+                    return $r;
+                }, $tp->fetchAll());
+            } catch (\Throwable $e) {
+                $conv['typing_users'] = [];
+            }
             if ($conv['type'] === 'private') {
                 $other = $this->getOtherParticipant((int)$conv['id'], $userId);
                 if ($other) {

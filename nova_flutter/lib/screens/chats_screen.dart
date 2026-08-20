@@ -1311,34 +1311,49 @@ class _ChatsTabState extends State<ChatsTab> {
                                           const SizedBox(height: 3),
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                conv.isOnline
-                                                    ? Icons.circle
-                                                    : Icons.circle_outlined,
-                                                size: 8,
-                                                color: conv.isOnline
-                                                    ? const Color(0xFF25D366)
-                                                    : c.muted,
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Text(
-                                                conv.isOnline
-                                                    ? 'متصل الآن'
-                                                    : formatLastSeen(
-                                                        conv.lastSeen,
-                                                        isOnline:
-                                                            conv.isOnline,
-                                                        utcOffsetMinutes:
-                                                            context.read<AuthProvider>().timezoneOffsetMinutes),
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: conv.isOnline
-                                                        ? const Color(
-                                                            0xFF25D366)
-                                                        : c.muted),
-                                              ),
-                                            ],
+                                            children: conv.typingUsers.isNotEmpty
+                                                ? [
+                                                    Icon(Icons.circle,
+                                                        size: 8,
+                                                        color: c.accent),
+                                                    const SizedBox(width: 5),
+                                                    Text(
+                                                      conv.typingUsers.length > 1
+                                                          ? 'يكتبون الآن...'
+                                                          : 'يكتب الآن...',
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: c.accent,
+                                                          fontWeight:
+                                                              FontWeight.w600),
+                                                    ),
+                                                  ]
+                                                : [
+                                                    Icon(
+                                                      conv.isOnline
+                                                          ? Icons.circle
+                                                          : Icons.circle_outlined,
+                                                      size: 8,
+                                                      color: conv.isOnline
+                                                          ? const Color(0xFF25D366)
+                                                          : c.muted,
+                                                    ),
+                                                    const SizedBox(width: 5),
+                                                    Text(
+                                                      conv.isOnline
+                                                          ? 'متصل الآن'
+                                                          : formatLastSeen(
+                                                              conv.lastSeen,
+                                                              isOnline: conv.isOnline,
+                                                              utcOffsetMinutes:
+                                                                  context.read<AuthProvider>().timezoneOffsetMinutes),
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: conv.isOnline
+                                                              ? const Color(0xFF25D366)
+                                                              : c.muted),
+                                                    ),
+                                                  ],
                                           ),
                                         ],
                                       ),

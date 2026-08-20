@@ -346,6 +346,13 @@ if (preg_match('#^/messages/(\d+)/reaction$#', $uri, $m) && $method === 'POST') 
 if (preg_match('#^/conversations/(\d+)/media$#', $uri, $m) && $method === 'POST') {
     (new MessageController())->uploadMedia((int)$m[1]);
 }
+// Typing Indicator Routes
+if (preg_match('#^/conversations/(\d+)/typing$#', $uri, $m) && $method === 'POST') {
+    (new MessageController())->setTyping((int)$m[1]);
+}
+if (preg_match('#^/conversations/(\d+)/typing$#', $uri, $m) && $method === 'GET') {
+    (new MessageController())->getTyping((int)$m[1]);
+}
 if ($uri === '/messages/voice' && $method === 'POST') {
     (new MessageController())->uploadVoice();
 }

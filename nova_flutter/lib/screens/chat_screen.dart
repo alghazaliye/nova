@@ -64,7 +64,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _hasText = false;
   Timer? _pollTimer;
   Timer? _incomingCallTimer;
+  Timer? _typingTimer;
+  bool _lastTypingSent = false;
   Map<String, dynamic>? _incomingCall;
+  List<Map<String, dynamic>> _localTypingUsers = const [];
   bool _incomingCallPolling = false;
   // يمنع إعادة إظهار نفس المكالمة إذا تأخر تحديث الحالة في الخادم.
   final Set<String> _handledIncomingCallIds = <String>{};
@@ -77,6 +80,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _ctrl.addListener(() {
       final has = _ctrl.text.trim().isNotEmpty;
       if (has != _hasText) setState(() => _hasText = has);
+      // مؤشر الكتابة: إرسال حالة writing عند الكتابة، وcancel بعد توقف 2.5 ثانية
+      _notifyTyping(has);
     });
     _load();
     _loadChatTheme();
@@ -106,6 +111,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _incomingCallTimer?.cancel();
+    _typingTimer?.cancel();
+    _sendTypingCancel();
     _recordTicker?.cancel();
     _recSub?.cancel();
     _recorder.dispose();
@@ -258,6 +265,73 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// مؤشر الكتابة (مُحسَّن للأداء):
+  /// - يرسل typing=true **مرة واحدة فقط** عند بداية الكتابة،
+  ///   ثم يُعتمد على الخادم لإبقاء الحالة نشطة 4 ثوانٍ وانتهائها تلقائيًا.
+  /// - لا يُرسل أي طلب إضافي أثناء الاستمرار (صفر طلبات أثناء الكتابة).
+  /// - يُلغي الحالة فقط عند: إفراغ الحقل (توقف الكتابة) أو إرسال الرسالة أو مغادرة الشاشة.
+  void _notifyTyping(bool isTyping) {
+    if (isTyping) {
+      // يُرسل مرة واحدة فقط عند بداية الكتابة
+      if (!_lastTypingSent) {
+        _lastTypingSent = true;
+        ApiService.post('/conversations/${widget.conv.id}/typing',
+            body: {'typing': true}).catchError((_) {});
+      }
+      // لا إعادة إرسال أثناء الاستمرار — الخادم يُنهي الحالة بعد 4 ثوانٍ تلقائيًا.
+      // إذا فُرّغ الحقل (توقف عن الكتابة) نُلغي الحالة فورًا بعد ثانية واحدة.
+      _typingTimer?.cancel();
+      if (_ctrl.text.trim().isEmpty) {
+        _typingTimer = Timer(const Duration(seconds: 1), () {
+          if (!mounted) return;
+          _typingTimer = null;
+          if (_ctrl.text.trim().isEmpty) _sendTypingCancel();
+          _lastTypingSent = false;
+        });
+      }
+    } else {
+      // الحقل فُرّغ: إلغاء فوري بدل انتظار انتهاء صلاحية الخادم
+      _typingTimer?.cancel();
+      _typingTimer = null;
+      if (_lastTypingSent) _sendTypingCancel();
+      _lastTypingSent = false;
+    }
+  }
+
+  void _sendTypingCancel() {
+    ApiService.post('/conversations/${widget.conv.id}/typing',
+        body: {'typing': false}).catchError((_) {});
+  }
+
+  bool _listsEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i]['user_id'] != b[i]['user_id']) return false;
+    }
+    return true;
+  }
+
+  /// يجلب حالة الكتابة الحالية من الخادم ويحدّث العرض (throttle: مرة كل 15 ثانية كحد أقصى)
+  DateTime? _lastTypingRefresh;
+  Future<void> _refreshTyping() async {
+    final now = DateTime.now();
+    final lt = _lastTypingRefresh;
+    if (lt != null && now.difference(lt).inSeconds < 15) return;
+    _lastTypingRefresh = now;
+    try {
+      final res = await ApiService.get('/conversations/${widget.conv.id}/typing');
+      if (!mounted || res['success'] != true) return;
+      final data = res['data'];
+      final list = data is Map ? data['typing_users'] : null;
+      final typingUsers = (list is List)
+          ? list.map((e) => Map<String, dynamic>.from(e)).toList()
+          : <Map<String, dynamic>>[];
+      if (mounted && !_listsEqual(_localTypingUsers, typingUsers)) {
+        setState(() => _localTypingUsers = typingUsers);
+      }
+    } catch (_) {}
+  }
+
   /// تحديث صامت: يجلب أحدث الرسائل الجديدة فقط ويحدّث حالة الرسائل الحالية
   Future<void> _refreshSilent() async {
     final wasNearBottom = !_scroll.hasClients ||
@@ -273,6 +347,8 @@ class _ChatScreenState extends State<ChatScreen> {
           .map((e) => NovaMessage.fromJson(Map<String, dynamic>.from(e)))
           .toList();
       if (msgs.isEmpty) return;
+      // تحديث مؤشر الكتابة عند وصول رسائل جديدة فقط (وليس كل دورة polling)
+      await _refreshTyping();
       setState(() {
         // تحديث حالة الرسائل الموجودة (تسليم/قراءة)
         for (final m in msgs) {
@@ -1681,36 +1757,60 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                                 const SizedBox(height: 3),
                                 Row(
-                                  children: [
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: widget.conv.isOnline
-                                            ? c.green
-                                            : c.muted,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Flexible(
-                                      child: Text(
-                                        widget.conv.isOnline
-                                            ? 'متصل الآن'
-                                            : formatLastSeen(
-                                                widget.conv.lastSeen,
-                                                utcOffsetMinutes: Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: widget.conv.isOnline
-                                              ? c.green
-                                              : c.muted,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  children: _localTypingUsers.isNotEmpty
+                                      ? [
+                                          Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              color: c.accent,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Flexible(
+                                            child: Text(
+                                              'يكتب الآن...',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: c.accent,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ]
+                                      : [
+                                          Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              color: widget.conv.isOnline
+                                                  ? c.green
+                                                  : c.muted,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Flexible(
+                                            child: Text(
+                                              widget.conv.isOnline
+                                                  ? 'متصل الآن'
+                                                  : formatLastSeen(
+                                                      widget.conv.lastSeen,
+                                                      utcOffsetMinutes: Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: widget.conv.isOnline
+                                                    ? c.green
+                                                    : c.muted,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                 ),
                               ],
                             ),
