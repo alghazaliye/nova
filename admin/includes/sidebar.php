@@ -83,17 +83,11 @@ function navActive(string $page, string $current): string {
     <a href="admins.php" class="<?= navActive('admins', $currentPage) ?>">
       <span>♙</span> المشرفون والصلاحيات
     </a>
-    <a href="services.php" class="<?= navActive('services', $currentPage) ?>">
-      <span>🔧</span> إعدادات الخدمات
+    <a href="services.php" class="<?= in_array($currentPage ?? '', ['services', 'email-providers', 'otp-providers'], true) ? 'active' : '' ?>">
+      <span>🔧</span> إعدادات الخدمات والمزودات
     </a>
     <a href="auth-settings.php" class="<?= navActive('auth-settings', $currentPage) ?>">
       <span>🔐</span> المصادقة والتسجيل
-    </a>
-    <a href="email-providers.php" class="<?= navActive('email-providers', $currentPage) ?>">
-      <span>✉</span> مزودو البريد
-    </a>
-    <a href="otp-providers.php" class="<?= navActive('otp-providers', $currentPage) ?>">
-      <span>🔑</span> مزودو OTP
     </a>
     <a href="registrations.php" class="<?= in_array($currentPage ?? '', ['registrations', 'email-registrations', 'otp-registrations'], true) ? 'active' : '' ?>">
       <span>📝</span> طلبات التسجيل

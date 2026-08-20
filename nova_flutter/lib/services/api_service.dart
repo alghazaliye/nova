@@ -11,7 +11,8 @@ class ApiService {
   /// تجاوز يدوي للرابط الأساسي (يُستخدم لتغيير الخادم عند النشر)
   static String? baseUrlOverride;
 
-  /// الرابط الأساسي — قابل للتغيير عبر baseUrlOverride أو ?api=HOST في الويب
+  /// الرابط الأساسي — ديناميكي حسب نطاق الاستضافة الحالية (نفس النطاق + /api/v1)،
+  /// وقابل للتغيير عبر baseUrlOverride أو ?api=HOST في الويب
   static String get baseUrl {
     final ov = baseUrlOverride;
     if (ov != null && ov.trim().isNotEmpty) {
@@ -25,6 +26,13 @@ class ApiService {
         if (api != null && api.trim().isNotEmpty) {
           final u = api.trim().replaceAll(RegExp(r'/+$'), '');
           return u.endsWith('/api/v1') ? u : '$u/api/v1';
+        }
+      } catch (_) {}
+      // افتراضيًا نفس نطاق الصفحة الحالية (يعمل على Render وأي استضافة)
+      try {
+        final origin = Uri.parse(novaHref()).origin;
+        if (origin.isNotEmpty && origin.startsWith('http')) {
+          return '$origin/api/v1';
         }
       } catch (_) {}
     }
