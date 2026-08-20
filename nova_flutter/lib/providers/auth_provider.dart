@@ -424,6 +424,14 @@ class AuthProvider extends ChangeNotifier {
     }
     // Admin disabled OTP: the response returns token directly
     final data = res['data'] as Map<String, dynamic>? ?? {};
+    // Security-masked response for unregistered numbers: the server
+    // returns success=true with an empty data block (no cooldown /
+    // expires_at / otp_bypass) so the caller can show a clear
+    // message instead of opening the OTP screen silently.
+    _lastLoginUnregistered = data['cooldown'] == null &&
+        data['expires_at'] == null &&
+        data['otp_bypass'] != true &&
+        data['delivery_mode'] == null;
     final bypass = data['otp_bypass'] == true;
     _lastLoginBypass = bypass;
     if (bypass) {
@@ -443,6 +451,10 @@ class AuthProvider extends ChangeNotifier {
   /// هل عاد الدخول بدون OTP (التحقق معطّل من لوحة التحكم)
   bool _lastLoginBypass = false;
   bool get lastLoginBypass => _lastLoginBypass;
+
+  /// هل الرقم غير مسجل (خادم أرسل success بدون بيانات OTP)؟
+  bool _lastLoginUnregistered = false;
+  bool get lastLoginUnregistered => _lastLoginUnregistered;
 
   /// صلاحية الرمز النشط (للعرض في شاشة التحقق مع عدّاد تنازلي)
   DateTime? _otpExpiresAt;

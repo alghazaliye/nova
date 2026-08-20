@@ -220,8 +220,26 @@ class _PhoneScreenState extends State<PhoneScreen> {
       return;
     }
     final auth = context.read<AuthProvider>();
-    final ok = await auth.login(_phone); // مسار الهاتف: تسجيل + OTP واحد
-    if (ok && mounted) _handleLoginResult(auth);
+    // مسار «إنشاء حساب»: نستخدم register صريحًا حتى يُحفظ الرقم في
+    // قاعدة البيانات دومًا (لو استخدمنا login لصامت الخادم الأرقام
+    // غير المسجلة لأسباب أمنية ولا يُنشأ رمز OTP فيظهر في لوحة التحكم).
+    final ok = await auth.register(_phone);
+    if (ok && mounted) {
+      // register يرسل OTP جديدًا — نتعامل معه كمسار تسجيل (isRegister)
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: true, otpExpiresAt: auth.otpExpiresAt)));
+    }
+  }
+
+  /// اختيار الإجراء حسب اختيار المستخدم الأول (دخول/إنشاء حساب).
+  /// «إنشاء حساب» يرسل register صريحًا حتى يُحفظ الرقم في قاعدة البيانات
+  /// دومًا ولا تفتح شاشة OTP بصمت لرقم غير مسجل.
+  void _phoneSubmitAction() {
+    if (_loginMethod == _LoginMethod.phone) {
+      _doPhoneLogin();
+    } else {
+      _doPhoneRegister();
+    }
   }
 
   Future<void> _doEmailVerify() async {
@@ -287,6 +305,24 @@ class _PhoneScreenState extends State<PhoneScreen> {
       Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const ChatsScreen()),
           (route) => false);
+    } else if (auth.lastLoginUnregistered) {
+      // الرقم غير مسجل: الخادم ردّ بنجاح «مُموّه» (لأسباب أمنية) ولم
+      // يُنشأ رمز OTP — لا نفتح شاشة التحقق بصمت، بل ننبّه المستخدم
+      // ونعرض له خيار إنشاء حساب جديد بالرقم نفسه.
+      if (!mounted) return;
+      final regPhone = _registerMethods.contains(_RegisterMethod.phone);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        content: Text(regPhone
+            ? 'هذا الرقم غير مسجل في نوفا'
+            : 'هذا الرقم غير مسجل — التسجيل غير متاح حاليًا'),
+        action: regPhone
+            ? SnackBarAction(label: 'إنشاء حساب', onPressed: () {
+                _pickFlow(false);
+              })
+            : null,
+      ));
     } else {
       Navigator.push(context,
           MaterialPageRoute(builder: (_) => OtpScreen(phone: _phone, isRegister: false, otpExpiresAt: auth.otpExpiresAt)));
@@ -545,7 +581,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
           onChanged: (p) => _phone = p.completeNumber,
         ),
         const SizedBox(height: 18),
-        _primaryButton('إرسال رمز التحقق', c, _doPhoneLogin),
+        _primaryButton('إرسال رمز التحقق', c, _phoneSubmitAction),
         const SizedBox(height: 10),
         _backButton(c),
       ],
