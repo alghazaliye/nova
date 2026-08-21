@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $password_hash = password_hash($password, PASSWORD_BCRYPT);
                     $stmt = $pdo->prepare(
                         'INSERT INTO admins (name, email, password_hash, role_id, is_active, created_at)
-                         VALUES (?, ?, ?, ?, 1, NOW())'
+                         VALUES (?, ?, ?, ?, 1, datetime("now"))'
                     );
                     $stmt->execute([$name, $email, $password_hash, $role_id]);
                     $message = 'تم إضافة المشرف بنجاح';

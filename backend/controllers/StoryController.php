@@ -44,7 +44,7 @@ class StoryController
                     (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id AND sv.viewer_id = ?) AS viewed_by_me
              FROM stories s
              JOIN users u ON u.id = s.user_id
-             WHERE s.expires_at > datetime('now') AND s.deleted_at IS NULL AND s.deleted_by IS NULL
+             WHERE s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL
                AND s.user_id NOT IN (' . $blockedIn . ')
              ORDER BY s.created_at DESC'
         );
@@ -283,7 +283,7 @@ class StoryController
         }
 
         $ins = $this->pdo->prepare(
-            'INSERT INTO story_views (story_id, viewer_id, viewed_at) VALUES (?, ?, datetime('now'))'
+            'INSERT INTO story_views (story_id, viewer_id, viewed_at) VALUES (?, ?, datetime("now"))'
         );
         $ins->execute([$id, $userId]);
         // atomic counter
@@ -371,8 +371,8 @@ class StoryController
         try {
             $this->pdo->prepare(
                 'INSERT INTO story_reactions (story_id, user_id, reaction, created_at)
-                 VALUES (?, ?, ?, datetime('now'))
-ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, created_at = datetime('now')'
+                 VALUES (?, ?, ?, datetime("now"))
+ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, created_at = datetime("now")'
 	            )->execute([$id, $userId, $reaction]);
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -441,11 +441,11 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
         } else {
             $uuid = UuidHelper::generate();
             $this->pdo->prepare(
-                'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime('now'), datetime('now'))'
+                'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime("now"), datetime("now"))'
             )->execute([$uuid, $userId]);
             $convId = (int)$this->pdo->lastInsertId();
-            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "owner", datetime('now'))')->execute([$convId, $userId]);
-            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", datetime('now'))')->execute([$convId, $authorId]);
+            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "owner", datetime("now"))')->execute([$convId, $userId]);
+            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", datetime("now"))')->execute([$convId, $authorId]);
         }
 
         $msgUuid = UuidHelper::generate();
@@ -453,17 +453,17 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
         try {
             $this->pdo->prepare(
                 'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, reply_to_status_id, type, body, client_message_id, status, created_at, updated_at)
-                 VALUES (?, ?, ?, NULL, ?, "text", ?, ?, "sent", datetime('now'), datetime('now'))'
+                 VALUES (?, ?, ?, NULL, ?, "text", ?, ?, "sent", datetime("now"), datetime("now"))'
             )->execute([$msgUuid, $convId, $userId, $id, $messageBody, 'reply_' . $msgUuid]);
             $msgId = (int)$this->pdo->lastInsertId();
 
             $this->pdo->prepare(
                 'INSERT INTO story_replies (story_id, sender_id, message_id, created_at)
-                 VALUES (?, ?, ?, datetime('now'))'
+                 VALUES (?, ?, ?, datetime("now"))'
             )->execute([$id, $userId, $msgId]);
 
             $this->pdo->prepare(
-                'UPDATE conversations SET last_message_id = ?, updated_at = datetime('now') WHERE id = ?'
+                'UPDATE conversations SET last_message_id = ?, updated_at = datetime("now") WHERE id = ?'
             )->execute([$msgId, $convId]);
 
             $this->pdo->commit();
@@ -540,7 +540,7 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
             Response::forbidden('لا يمكنك حذف حالة شخص آخر');
         }
 
-        $this->pdo->prepare('UPDATE stories SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?')->execute([$userId, $id]);
+        $this->pdo->prepare('UPDATE stories SET deleted_at = datetime("now"), deleted_by = ? WHERE id = ?')->execute([$userId, $id]);
         Response::success(null, 'تم حذف الحالة');
     }
 
@@ -661,12 +661,12 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
         $this->pdo->beginTransaction();
         try {
             $this->pdo->prepare(
-                'UPDATE stories SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?'
+                'UPDATE stories SET deleted_at = datetime("now"), deleted_by = ? WHERE id = ?'
             )->execute([0 - (int)$admin['id'], $id]); // deleted_by سالب = حذف إداري (ids موجبة للمستخدمين)
 
             $this->pdo->prepare(
                 'INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"))'
             )->execute([
                 (int)$admin['id'], 'statuses.admin_deleted', 'story', $id,
                 'حذف إداري للحالة #' . $id . ' - صاحبها: ' . (int)$story['user_id'] . ' - السبب: ' . $reason,
@@ -692,14 +692,14 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
 
         $stats = [
             'total'           => $sql(''),
-            'active'          => $sql('WHERE s.deleted_at IS NULL AND s.deleted_by IS NULL AND s.expires_at > NOW()'),
+            'active'          => $sql('WHERE s.deleted_at IS NULL AND s.deleted_by IS NULL AND s.expires_at > datetime("now")'),
             'today'           => $sql("WHERE DATE(s.created_at) = DATE('now','localtime')"),
-            'expired'         => $sql('WHERE s.expires_at <= NOW()'),
+            'expired'         => $sql('WHERE s.expires_at <= datetime("now")'),
             'deleted'         => $sql('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NULL'),
             'admin_deleted'   => $sql('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NOT NULL'),
-            'type_image'      => $sql("WHERE s.type = 'image' AND s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
-            'type_video'      => $sql("WHERE s.type = 'video' AND s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
-            'type_text'       => $sql("WHERE s.type = 'text' AND s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
+            'type_image'      => $sql("WHERE s.type = 'image' AND s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
+            'type_video'      => $sql("WHERE s.type = 'video' AND s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
+            'type_text'       => $sql("WHERE s.type = 'text' AND s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
             'total_views'     => (int)($this->pdo->query('SELECT COUNT(*) FROM story_views')->fetchColumn() ?: 0),
             'total_reactions' => (int)($this->pdo->query('SELECT COUNT(*) FROM story_reactions')->fetchColumn() ?: 0),
             'total_replies'   => (int)($this->pdo->query('SELECT COUNT(*) FROM story_replies')->fetchColumn() ?: 0),
@@ -709,7 +709,7 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
         $top = $this->pdo->query(
             'SELECT s.id, s.user_id, u.name AS owner_name, (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS vc
              FROM stories s JOIN users u ON u.id = s.user_id
-             WHERE s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL
+             WHERE s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL
              ORDER BY vc DESC LIMIT 5'
         )->fetchAll();
 
@@ -846,7 +846,7 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
 
         $this->pdo->prepare(
             'INSERT INTO stories (uuid, user_id, type, text, file_id, privacy, created_at, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)'
+             VALUES (?, ?, ?, ?, ?, ?, datetime("now"), ?)'
         )->execute([$uuid, $userId, $type, $text, $fileId, $privacy, $expiresAt]);
 
         return (int)$this->pdo->lastInsertId() ?: null;
@@ -857,7 +857,7 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
     {
         $this->pdo->prepare(
             'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, duration, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime('now'))'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime("now"))'
         )->execute([$uuid, $userId, $type, $file['name'], $fileName, $mime, (int)$file['size'], 'attachments/' . $fileName]);
         return (int)$this->pdo->lastInsertId();
     }

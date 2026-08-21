@@ -91,7 +91,7 @@ class EmailProviderManager
             'INSERT INTO email_providers
                 (name, type, status, priority, is_default, is_fallback, host, port, encryption,
                  username, password, from_email, from_name, api_base_url, api_key, extra_config, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime("now"))'
         );
         $stmt->execute([
             trim((string)$data['name']),
@@ -135,7 +135,7 @@ class EmailProviderManager
             'UPDATE email_providers SET name = ?, type = ?, status = ?, priority = ?,
                     is_default = ?, is_fallback = ?, host = ?, port = ?, encryption = ?,
                     username = ?, password = ?, from_email = ?, from_name = ?,
-                    api_base_url = ?, api_key = ?, extra_config = ?, updated_at = NOW()
+                    api_base_url = ?, api_key = ?, extra_config = ?, updated_at = datetime("now")
              WHERE id = ?'
         );
         return (bool)$stmt->execute([
@@ -169,7 +169,7 @@ class EmailProviderManager
     public function toggle(int $id, string $status): bool
     {
         if (!in_array($status, ['enabled', 'disabled'], true)) return false;
-        $stmt = $this->pdo->prepare('UPDATE email_providers SET status = ?, updated_at = NOW() WHERE id = ?');
+        $stmt = $this->pdo->prepare('UPDATE email_providers SET status = ?, updated_at = datetime("now") WHERE id = ?');
         return (bool)$stmt->execute([$status, $id]);
     }
 
@@ -189,9 +189,9 @@ class EmailProviderManager
             $result = $svc->sendSmtp($this->decryptSmtpRow($row), $email, 'رسالة اختبار — NOVA Messenger',
                 'هذه رسالة اختبار من مزود البريد "' . $row['name'] . '" ضمن تطبيق NOVA Messenger. الرمز التجريبي: 000000');
             if ($result['success']) {
-                $this->pdo->prepare('UPDATE email_providers SET success_count = success_count + 1, last_used_at = NOW(), updated_at = NOW() WHERE id = ?')->execute([$id]);
+                $this->pdo->prepare('UPDATE email_providers SET success_count = success_count + 1, last_used_at = datetime("now"), updated_at = datetime("now") WHERE id = ?')->execute([$id]);
             } else {
-                $this->pdo->prepare('UPDATE email_providers SET failure_count = failure_count + 1, updated_at = NOW() WHERE id = ?')->execute([$id]);
+                $this->pdo->prepare('UPDATE email_providers SET failure_count = failure_count + 1, updated_at = datetime("now") WHERE id = ?')->execute([$id]);
             }
             $this->logDelivery($email, $id, $result);
             return $result;
@@ -207,9 +207,9 @@ class EmailProviderManager
 
         $result = $svc->sendRest($restConfig, $email, '000000', 'رسالة اختبار من مزود البريد "' . $row['name'] . '" — الرمز التجريبي: 000000');
         if ($result['success']) {
-            $this->pdo->prepare('UPDATE email_providers SET success_count = success_count + 1, last_used_at = NOW(), updated_at = NOW() WHERE id = ?')->execute([$id]);
+            $this->pdo->prepare('UPDATE email_providers SET success_count = success_count + 1, last_used_at = datetime("now"), updated_at = datetime("now") WHERE id = ?')->execute([$id]);
         } else {
-            $this->pdo->prepare('UPDATE email_providers SET failure_count = failure_count + 1, updated_at = NOW() WHERE id = ?')->execute([$id]);
+            $this->pdo->prepare('UPDATE email_providers SET failure_count = failure_count + 1, updated_at = datetime("now") WHERE id = ?')->execute([$id]);
         }
         $this->logDelivery($email, $id, $result);
         return $result;
@@ -233,7 +233,7 @@ class EmailProviderManager
         try {
             $this->pdo->prepare(
                 'INSERT INTO email_delivery_logs (email_type, to_email, provider_id, subject, status, http_code, response_time_ms, error_message, created_at)
-                 VALUES (\'registration\', ?, ?, \'رسالة اختبار\', ?, ?, ?, ?, NOW())'
+                 VALUES (\'registration\', ?, ?, \'رسالة اختبار\', ?, ?, ?, ?, datetime("now"))'
             )->execute([
                 $email, $providerId,
                 $result['success'] ? 'sent' : 'failed',

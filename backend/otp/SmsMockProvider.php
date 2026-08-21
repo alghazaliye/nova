@@ -31,7 +31,7 @@ class SmsMockProvider implements OtpProviderInterface
         try {
             $this->pdo()->prepare(
                 'UPDATE otp_verifications SET manual_code_hash = ?, status = \'sent\',
-                       delivery_status = \'sent\', updated_at = NOW()
+                       delivery_status = \'sent\', updated_at = datetime("now")
                  WHERE phone_number = ? AND status = \'pending\''
             )->execute([password_hash($otp, PASSWORD_BCRYPT), $phone]);
         } catch (Throwable $e) {

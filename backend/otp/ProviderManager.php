@@ -43,7 +43,7 @@ class ProviderManager
             'INSERT INTO otp_providers
                 (name, type, status, priority, is_default, is_fallback, api_base_url, api_key, api_secret,
                  account_sid, message_template, sender_id, extra_config, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime("now"))'
         );
         $stmt->execute([
             trim($data['name']),
@@ -82,7 +82,7 @@ class ProviderManager
             'UPDATE otp_providers SET name = ?, type = ?, status = ?, priority = ?,
                     is_default = ?, is_fallback = ?, api_base_url = ?, api_key = ?, api_secret = ?,
                     account_sid = ?, message_template = ?, sender_id = ?,
-                    extra_config = ?, updated_at = NOW()
+                    extra_config = ?, updated_at = datetime("now")
              WHERE id = ?'
         );
         return (bool)$stmt->execute([
@@ -114,7 +114,7 @@ class ProviderManager
     public function toggle(int $id, string $status): bool
     {
         if (!in_array($status, ['enabled', 'disabled'], true)) return false;
-        $stmt = $this->pdo->prepare('UPDATE otp_providers SET status = ?, updated_at = NOW() WHERE id = ?');
+        $stmt = $this->pdo->prepare('UPDATE otp_providers SET status = ?, updated_at = datetime("now") WHERE id = ?');
         return (bool)$stmt->execute([$status, $id]);
     }
 
@@ -180,7 +180,7 @@ class ProviderManager
 
         if ($result->success) {
             $this->pdo->prepare(
-                'UPDATE otp_providers SET success_count = success_count + 1, last_used_at = NOW(), updated_at = NOW()
+                'UPDATE otp_providers SET success_count = success_count + 1, last_used_at = datetime("now"), updated_at = datetime("now")
                  WHERE id = ?'
             )->execute([$id]);
             return [
@@ -193,7 +193,7 @@ class ProviderManager
         }
 
         $this->pdo->prepare(
-            'UPDATE otp_providers SET failure_count = failure_count + 1, updated_at = NOW() WHERE id = ?'
+            'UPDATE otp_providers SET failure_count = failure_count + 1, updated_at = datetime("now") WHERE id = ?'
         )->execute([$id]);
         return [
             'success' => false,

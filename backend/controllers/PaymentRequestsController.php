@@ -236,7 +236,7 @@ class PaymentRequestsController
              ->execute([$verifiedUntil, (int)$row['user_id']]);
 
         $this->pdo->prepare(
-            'UPDATE payment_requests SET status = "approved", reviewed_by = ?, reviewed_at = NOW() WHERE id = ?'
+            'UPDATE payment_requests SET status = "approved", reviewed_by = ?, reviewed_at = datetime("now") WHERE id = ?'
         )->execute([$this->adminId(), $id]);
 
         // Notify the user
@@ -264,7 +264,7 @@ class PaymentRequestsController
 
         $adminNote = isset($body['admin_note']) ? trim((string)$body['admin_note']) : '';
         $this->pdo->prepare(
-            'UPDATE payment_requests SET status = "rejected", admin_note = ?, reviewed_by = ?, reviewed_at = NOW()
+            'UPDATE payment_requests SET status = "rejected", admin_note = ?, reviewed_by = ?, reviewed_at = datetime("now")
              WHERE id = ?'
         )->execute([$adminNote ?: null, $this->adminId(), $id]);
 
