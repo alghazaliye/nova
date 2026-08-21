@@ -22,7 +22,7 @@ if (PHP_SAPI !== 'cli') {
     });
 }
 
-echo json_encode(["debug_env" => $_ENV]); exit;
+try { require_once __DIR__ . "/../config/app.php"; } catch (Throwable $e) { echo json_encode(["bootstrap_error" => $e->getMessage()]); exit; }
 // Bootstrap
 require_once __DIR__ . '/../config/app.php';
 
