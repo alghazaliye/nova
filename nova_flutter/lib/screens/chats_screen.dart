@@ -687,6 +687,11 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
 
   // إنشاء مجموعة جديدة مع اختيار الأعضاء
   Future<void> _showCreateGroupDialog() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.effectiveAppSettings.allowGroups) {
+      showToast(context, 'إنشاء المجموعات موقوف من الإدارة');
+      return;
+    }
     final c = NovaColors.of(context);
     final titleCtrl = TextEditingController();
     final searchCtrl = TextEditingController();
@@ -1133,14 +1138,16 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
-                      IconBtn(icon: Icons.groups_2, onTap: () {
-                        pushScreen(context, const GroupsScreen());
-                      }),
-                      IconBtn(
-                        icon: Icons.group_add,
-                        onTap: _showCreateGroupDialog,
-                        color: c.accent,
-                      ),
+                      if (auth.effectiveAppSettings.allowGroups) ...[
+                        IconBtn(icon: Icons.groups_2, onTap: () {
+                          pushScreen(context, const GroupsScreen());
+                        }),
+                        IconBtn(
+                          icon: Icons.group_add,
+                          onTap: _showCreateGroupDialog,
+                          color: c.accent,
+                        ),
+                      ],
                       IconBtn(
                         icon: Icons.person_add_outlined,
                         onTap: _showAddNewContactDialog,

@@ -72,7 +72,7 @@ try {
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM audit_logs WHERE action IN ("ERROR", "FAILED")');
     $stats['errors_total'] = $stmt->fetch()['count'] ?? 0;
     
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM audit_logs WHERE action IN ("ERROR", "FAILED") AND DATE(created_at) = CURDATE()');
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM audit_logs WHERE action IN ('ERROR', 'FAILED') AND DATE(created_at) = DATE('now','localtime')");
     $stats['errors_today'] = $stmt->fetch()['count'] ?? 0;
     
 } catch (Exception $e) {

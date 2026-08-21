@@ -60,7 +60,7 @@ class ConversationController
                     'SELECT t.user_id, u.name, u.avatar
                      FROM typing_status t
                      JOIN users u ON u.id = t.user_id
-                     WHERE t.conversation_id = ? AND t.expires_at > NOW()'
+                     WHERE t.conversation_id = ? AND t.expires_at > datetime('now')'
                 );
                 $tp->execute([(int)$conv['id']]);
                 $conv['typing_users'] = array_map(function ($r) {
@@ -141,7 +141,7 @@ class ConversationController
             try {
                 $uuid = UuidHelper::generate();
                 $this->pdo->prepare(
-                    'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, NOW(), NOW())'
+                    'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime("now"), datetime("now"))'
                 )->execute([$uuid, $userId]);
                 $convId = (int)$this->pdo->lastInsertId();
 
@@ -168,20 +168,20 @@ class ConversationController
             try {
                 $uuid = UuidHelper::generate();
                 $this->pdo->prepare(
-                    'INSERT INTO conversations (uuid, type, title, created_by, created_at, updated_at) VALUES (?, "group", ?, ?, NOW(), NOW())'
+                    'INSERT INTO conversations (uuid, type, title, created_by, created_at, updated_at) VALUES (?, "group", ?, ?, datetime("now"), datetime("now"))'
                 )->execute([$uuid, $title, $userId]);
                 $convId = (int)$this->pdo->lastInsertId();
 
                 // Create group record
                 $groupUuid = UuidHelper::generate();
                 $this->pdo->prepare(
-                    'INSERT INTO groups (conversation_id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())'
+                    'INSERT INTO groups (conversation_id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, datetime("now"), datetime("now"))'
                 )->execute([$convId, $title, $userId]);
                 $groupId = (int)$this->pdo->lastInsertId();
 
                 // Default group settings
                 $this->pdo->prepare(
-                    'INSERT INTO group_settings (group_id, created_at, updated_at) VALUES (?, NOW(), NOW())'
+                    'INSERT INTO group_settings (group_id, created_at, updated_at) VALUES (?, datetime("now"), datetime("now"))'
                 )->execute([$groupId]);
 
                 // Add creator as owner
@@ -226,7 +226,7 @@ class ConversationController
 
         // Mark as left (soft delete for the user)
         $this->pdo->prepare(
-            'UPDATE conversation_members SET left_at = NOW() WHERE conversation_id = ? AND user_id = ?'
+            "UPDATE conversation_members SET left_at = datetime('now') WHERE conversation_id = ? AND user_id = ?"
         )->execute([$id, $userId]);
 
         Response::success(null, 'تم حذف المحادثة');
@@ -238,12 +238,23 @@ class ConversationController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
         $this->requireMember($id, $userId);
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $isMuted = $body['muted'] ?? true;
+        $duration = (int)($body['duration'] ?? 0); // minutes, 0 = forever
+
+        $until = null;
+        if ($isMuted && $duration > 0) {
+            $until = date('Y-m-d H:i:s', time() + ($duration * 60));
+        } elseif ($isMuted) {
+            $until = '2099-12-31 23:59:59'; // effectively forever
+        }
 
         $this->pdo->prepare(
-            'UPDATE conversation_members SET is_muted = NOT is_muted WHERE conversation_id = ? AND user_id = ?'
-        )->execute([$id, $userId]);
+            'UPDATE conversation_members SET is_muted = ?, muted_until = ? WHERE conversation_id = ? AND user_id = ?'
+        )->execute([$isMuted ? 1 : 0, $until, $id, $userId]);
 
-        Response::success(null, 'تم تغيير حالة الإشعارات');
+        Response::success(['muted' => $isMuted, 'until' => $until], 'تم تحديث حالة الإشعارات');
     }
 
     // POST /api/v1/conversations/{id}/pin
@@ -266,9 +277,10 @@ class ConversationController
 
     private function addMember(int $convId, int $userId, string $role = 'member'): void
     {
+        // SQLite doesn't support INSERT IGNORE, use INSERT OR IGNORE
         $this->pdo->prepare(
-            'INSERT IGNORE INTO conversation_members (conversation_id, user_id, role, joined_at, created_at, updated_at)
-             VALUES (?, ?, ?, NOW(), NOW(), NOW())'
+            "INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, role, joined_at, created_at, updated_at)
+             VALUES (?, ?, ?, datetime('now'), datetime('now'), datetime('now'))"
         )->execute([$convId, $userId, $role]);
     }
 
@@ -330,8 +342,8 @@ class ConversationController
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 
         $value = $body['disappear_after'] ?? null;
-        if (!in_array($value, [0, 86400, -1], true)) {
-            Response::error('القيمة غير صالحة: 0 (دائم)، 86400 (بعد 24 ساعة)، -1 (بعد القراءة)', 'INVALID_VALUE', 400);
+        if (!in_array($value, [0, 3600, 86400, 604800, 2592000, -1], true)) {
+            Response::error('القيمة غير صالحة', 'INVALID_VALUE', 400);
         }
 
         $stmt = $this->pdo->prepare(

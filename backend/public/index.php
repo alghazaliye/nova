@@ -222,6 +222,9 @@ if ($uri === '/auth/refresh' && $method === 'POST') {
 }
 
 // User Routes
+if ($uri === '/settings' && $method === 'GET') {
+    (new UserController())->appSettings();
+}
 if ($uri === '/users/me' && $method === 'GET') {
     (new UserController())->me();
 }

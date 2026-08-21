@@ -18,7 +18,7 @@ class StoriesScreen extends StatefulWidget {
 }
 
 class _StoriesScreenState extends State<StoriesScreen> {
-  List<Map<String, dynamic>> _stories = [];
+  List<Map<String, dynamic>> _groupedStories = [];
   bool _loading = true;
   static const Uuid _uuid = Uuid();
 
@@ -33,7 +33,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
       final res = await ApiService.get('/stories');
       if (res['success'] == true && res['data'] is List) {
         setState(() {
-          _stories = List<Map<String, dynamic>>.from(res['data'] as List);
+          _groupedStories = List<Map<String, dynamic>>.from(res['data'] as List);
         });
       }
     } catch (_) {}
@@ -42,6 +42,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
   Future<void> _publishStory() async {
     if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    if (!auth.effectiveAppSettings.allowStories) {
+      showToast(context, 'نشر الحالات موقوف من الإدارة');
+      return;
+    }
     final choice = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
@@ -163,15 +168,15 @@ class _StoriesScreenState extends State<StoriesScreen> {
     }
   }
 
-  void _openStory(Map<String, dynamic> story) {
-    final initialIndex = _stories.indexWhere((s) =>
-        s['id'].toString() == story['id'].toString());
+  void _openStory(Map<String, dynamic> group) {
+    final stories = List<Map<String, dynamic>>.from(group['stories'] ?? []);
+    if (stories.isEmpty) return;
     Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => NovaStoryViewer(
-                stories: _stories,
-                initialIndex: initialIndex >= 0 ? initialIndex : 0)));
+                stories: stories,
+                initialIndex: 0)));
   }
 
   Future<void> _deleteStory(Map<String, dynamic> story) async {
@@ -215,13 +220,14 @@ class _StoriesScreenState extends State<StoriesScreen> {
           novaTopBar(context,
               title: 'الحالة',
               actions: [
-                IconBtn(icon: Icons.add_circle_outline,
-                    onTap: _publishStory, color: c.accent),
+                if (context.read<AuthProvider>().effectiveAppSettings.allowStories)
+                  IconBtn(icon: Icons.add_circle_outline,
+                      onTap: _publishStory, color: c.accent),
               ]),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _stories.isEmpty
+                : _groupedStories.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -243,51 +249,57 @@ class _StoriesScreenState extends State<StoriesScreen> {
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                           children: [
                             // قصتي
-                            NovaCard(
-                              padding: const EdgeInsets.all(12),
-                              onTap: () => _openStory(_stories
-                                      .firstWhere((s) =>
-                                          s['user_id'].toString() ==
-                                              (me?.id ?? -1).toString(),
-                                          orElse: () => _stories.first)),
-                              child: Row(
-                                children: [
-                                        NovaAvatar(
-                                            letter: me?.name != null && me!.name!.isNotEmpty
-                                                ? me.name![0]
-                                                : '?',
+                            if (auth.effectiveAppSettings.allowStories)
+                              NovaCard(
+                                padding: const EdgeInsets.all(12),
+                                onTap: () {
+                                  try {
+                                    final myGroup = _groupedStories.firstWhere(
+                                      (g) => g['user_id'].toString() == (me?.id ?? -1).toString()
+                                    );
+                                    _openStory(myGroup);
+                                  } catch (_) {
+                                    _publishStory();
+                                  }
+                                },
+                                child: Row(
+                                  children: [
+                                    NovaAvatar(
+                                      letter: me?.name != null && me!.name!.isNotEmpty
+                                          ? me.name![0]
+                                          : '?',
                                       size: 54,
                                       radius: 18,
                                       imageUrl: me?.avatar != null &&
                                               me!.avatar!.isNotEmpty
                                           ? me.avatar
                                           : null),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(children: [
-                                          Expanded(
-                                            child: Text('قصتي',
-                                                style: TextStyle(
-                                                    fontSize: 15.5,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: c.text)),
-                                          ),
-                                          TabChip(label: 'نشر', onTap: _publishStory),
-                                        ]),
-                                      ],
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(children: [
+                                            Expanded(
+                                              child: Text('قصتي',
+                                                  style: TextStyle(
+                                                      fontSize: 15.5,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: c.text)),
+                                            ),
+                                            TabChip(label: 'نشر', onTap: _publishStory),
+                                          ]),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
                             const SizedBox(height: 14),
                             SectionTitle('تحديثات حديثة'),
-                            for (final s in _stories)
+                            for (final group in _groupedStories)
                               PressScale(
-                                onTap: () => _openStory(s),
+                                onTap: () => _openStory(group),
                                 child: Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
                                   child: NovaCard(
@@ -295,14 +307,14 @@ class _StoriesScreenState extends State<StoriesScreen> {
                                     child: Row(
                                       children: [
                                         NovaAvatar(
-                                            letter: (s['user_name']?.toString() ?? '').isNotEmpty
-                                                ? s['user_name'].toString()[0]
+                                            letter: (group['user_name']?.toString() ?? '').isNotEmpty
+                                                ? group['user_name'].toString()[0]
                                                 : '?',
                                             size: 54,
                                             radius: 18,
-                                            imageUrl: s['user_avatar'] != null &&
-                                                    s['user_avatar'].toString().isNotEmpty
-                                                ? s['user_avatar'].toString()
+                                            imageUrl: group['user_avatar'] != null &&
+                                                    group['user_avatar'].toString().isNotEmpty
+                                                ? group['user_avatar'].toString()
                                                 : null),
                                         const SizedBox(width: 12),
                                         Expanded(
@@ -312,30 +324,32 @@ class _StoriesScreenState extends State<StoriesScreen> {
                                               Row(children: [
                                                 Expanded(
                                                   child: Text(
-                                                      s['user_name']?.toString() ?? '-',
+                                                      group['user_name']?.toString() ?? '-',
                                                       overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
                                                           fontSize: 15.5,
                                                           fontWeight: FontWeight.w800,
                                                           color: c.text)),
                                                 ),
-                                                if (s['user_id'].toString() == (me?.id ?? -1).toString())
+                                                if (group['user_id'].toString() == (me?.id ?? -1).toString())
                                                   TabChip(label: 'قصتي'),
                                               ]),
                                               const SizedBox(height: 4),
                                               Row(children: [
-                                                if ((s['type']?.toString() == 'image'))
-                                                  Icon(Icons.image, size: 13, color: c.accent),
-                                                if ((s['type']?.toString() == 'video'))
-                                                  Icon(Icons.videocam, size: 13, color: c.accent),
-                                                if (s['type']?.toString() == 'text')
-                                                  Icon(Icons.text_fields, size: 13, color: c.muted),
-                                                const SizedBox(width: 4),
+                                                if (group['stories'] != null && group['stories'].isNotEmpty) ...[
+                                                  if (group['stories'].last['type']?.toString() == 'image')
+                                                    Icon(Icons.image, size: 13, color: c.accent),
+                                                  if (group['stories'].last['type']?.toString() == 'video')
+                                                    Icon(Icons.videocam, size: 13, color: c.accent),
+                                                  if (group['stories'].last['type']?.toString() == 'text')
+                                                    Icon(Icons.text_fields, size: 13, color: c.muted),
+                                                  const SizedBox(width: 4),
+                                                ],
                                                 Expanded(
                                                   child: Text(
-                                                      _storyText(s).length > 50
-                                                          ? '${_storyText(s).substring(0, 50)}...'
-                                                          : _storyText(s),
+                                                      group['stories'] != null && group['stories'].isNotEmpty
+                                                          ? _storyText(group['stories'].last)
+                                                          : 'لا توجد حالات',
                                                       maxLines: 1,
                                                       overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
@@ -344,13 +358,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
                                               ]),
                                             ],
                                           ),
-                                        ),
-                                        PressScale(
-                                          onTap: s['user_id'].toString() == (me?.id ?? -1).toString()
-                                              ? () => _deleteStory(s)
-                                              : null,
-                                          child: Icon(Icons.delete_outline,
-                                              size: 20, color: c.muted),
                                         ),
                                       ],
                                     ),

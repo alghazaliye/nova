@@ -32,6 +32,11 @@ function requireAdminLogin(): array {
 }
 
 function hasPermission(array $admin, string $permission): bool {
+    // super_admin has full access to everything
+    if (($admin['role_name'] ?? '') === 'super_admin') {
+        return true;
+    }
+
     $pdo  = getAdminDB();
     $stmt = $pdo->prepare(
         'SELECT 1 FROM role_permissions rp
@@ -54,7 +59,7 @@ function logAudit(array $admin, string $action, string $entityType = '', int $en
     $pdo = getAdminDB();
     $pdo->prepare(
         'INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"))'
     )->execute([
         $admin['id'], $action, $entityType, $entityId ?: null, $description,
         $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null,

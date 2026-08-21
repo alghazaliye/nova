@@ -22,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $val = htmlspecialchars(strip_tags(trim($_POST[$key])), ENT_QUOTES, 'UTF-8');
             $pdo->prepare(
                 'INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()'
-            )->execute([$key, $val, $val]);
+                 ON CONFLICT(setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = datetime("now")'
+            )->execute([$key, $val]);
         }
     }
     logAudit($admin, 'SETTING_UPDATE', 'app_settings', 0, 'تحديث إعدادات النظام');
@@ -175,24 +175,24 @@ include __DIR__ . '/includes/sidebar.php';
       <div style="display:grid; gap:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div><b>المكالمات</b><small style="display:block; color:var(--muted); font-size:11px;">تفعيل الصوت والفيديو</small></div>
-          <select name="allow_calls" class="select">
-            <option value="1" <?= ($settings['allow_calls']??'1')==='1'?'selected':'' ?>>نعم</option>
-            <option value="0" <?= ($settings['allow_calls']??'1')==='1'?'selected':'' ?>>لا</option>
-          </select>
+	          <select name="allow_calls" class="select">
+	            <option value="1" <?= ($settings['allow_calls']??'1')==='1'?'selected':'' ?>>نعم</option>
+	            <option value="0" <?= ($settings['allow_calls']??'1')==='0'?'selected':'' ?>>لا</option>
+	          </select>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div><b>المجموعات</b><small style="display:block; color:var(--muted); font-size:11px;">تفعيل إنشاء المجموعات</small></div>
-          <select name="allow_groups" class="select">
-            <option value="1" <?= ($settings['allow_groups']??'1')==='1'?'selected':'' ?>>نعم</option>
-            <option value="0" <?= ($settings['allow_groups']??'1')==='1'?'selected':'' ?>>لا</option>
-          </select>
+	          <select name="allow_groups" class="select">
+	            <option value="1" <?= ($settings['allow_groups']??'1')==='1'?'selected':'' ?>>نعم</option>
+	            <option value="0" <?= ($settings['allow_groups']??'1')==='0'?'selected':'' ?>>لا</option>
+	          </select>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div><b>الحالات</b><small style="display:block; color:var(--muted); font-size:11px;">تفعيل ميزة القصص</small></div>
-          <select name="allow_stories" class="select">
-            <option value="1" <?= ($settings['allow_stories']??'1')==='1'?'selected':'' ?>>نعم</option>
-            <option value="0" <?= ($settings['allow_stories']??'1')==='1'?'selected':'' ?>>لا</option>
-          </select>
+	          <select name="allow_stories" class="select">
+	            <option value="1" <?= ($settings['allow_stories']??'1')==='1'?'selected':'' ?>>نعم</option>
+	            <option value="0" <?= ($settings['allow_stories']??'1')==='0'?'selected':'' ?>>لا</option>
+	          </select>
         </div>
       </div>
     </div>

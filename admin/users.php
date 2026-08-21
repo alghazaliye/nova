@@ -28,23 +28,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'block' && hasPermission($admin, 'users.block')) {
         $reason = trim((string)($_POST['ban_reason'] ?? ''));
         // Kill all live sessions so the banned user is kicked out immediately
-        $pdo->prepare('UPDATE sessions SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL')->execute([$userId]);
+        $pdo->prepare('UPDATE sessions SET revoked_at = datetime("now") WHERE user_id = ? AND revoked_at IS NULL')->execute([$userId]);
         $pdo->prepare('UPDATE device_registrations SET is_active = 0 WHERE user_id = ?')->execute([$userId]);
         try {
             $pdo->prepare('INSERT INTO user_bans (user_id, reason, banned_by) VALUES (?, ?, ?)')->execute([$userId, $reason ?: null, $admin['id']]);
         } catch (\Throwable $e) {}
-        $pdo->prepare('UPDATE users SET is_blocked = 1, blocked_at = NOW() WHERE id = ?')->execute([$userId]);
+        $pdo->prepare('UPDATE users SET is_blocked = 1, blocked_at = datetime("now") WHERE id = ?')->execute([$userId]);
         logAudit($admin, 'USER_BLOCK', 'user', $userId, "حظر المستخدم #{$userId}" . ($reason ? " : {$reason}" : ''));
         $message = 'تم حظر المستخدم ومنع الدخول للتطبيق';
     } elseif ($action === 'unblock' && hasPermission($admin, 'users.block')) {
         try {
-            $pdo->prepare('UPDATE user_bans SET unbanned_at = NOW(), unbanned_by = ? WHERE user_id = ? AND unbanned_at IS NULL')->execute([$admin['id'], $userId]);
+            $pdo->prepare('UPDATE user_bans SET unbanned_at = datetime("now"), unbanned_by = ? WHERE user_id = ? AND unbanned_at IS NULL')->execute([$admin['id'], $userId]);
         } catch (\Throwable $e) {}
         $pdo->prepare('UPDATE users SET is_blocked = 0, blocked_at = NULL WHERE id = ?')->execute([$userId]);
         logAudit($admin, 'USER_UNBLOCK', 'user', $userId, "فك حظر المستخدم #{$userId}");
         $message = 'تم فك الحظر بنجاح';
     } elseif ($action === 'verify' && hasPermission($admin, 'users.manage')) {
-        $pdo->prepare('UPDATE users SET is_verified = IF(is_verified = 1, 0, 1), updated_at = NOW() WHERE id = ?')->execute([$userId]);
+        $pdo->prepare('UPDATE users SET is_verified = CASE WHEN is_verified = 1 THEN 0 ELSE 1 END, updated_at = datetime("now") WHERE id = ?')->execute([$userId]);
         $row = $pdo->prepare('SELECT is_verified FROM users WHERE id = ? LIMIT 1');
         $row->execute([$userId]);
         $isV = (int)($row->fetch()['is_verified'] ?? 0);

@@ -60,8 +60,8 @@ class MessageController
             $ids = array_map(fn ($m) => (int)$m['id'], $messages);
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $this->pdo->prepare(
-                "INSERT IGNORE INTO message_reads (message_id, user_id, read_at)
-	                 SELECT id, ?, datetime("now") FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+                "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at)
+		                 SELECT id, ?, datetime('now') FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
             )->execute(array_merge([$userId], $ids, [$userId]));
             $this->pdo->prepare(
                 "UPDATE messages SET status = 'read', updated_at = datetime("now") WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
@@ -310,9 +310,8 @@ class MessageController
         } else {
             // Delete for self only: record per-user deletion (keeps the message visible to others)
             $this->pdo->prepare(
-                'INSERT INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
-                 VALUES (?, ?, ?, ?, ?, \'self\', datetime("now"))
-                 ON DUPLICATE KEY UPDATE deleted_at = datetime("now")'
+                "INSERT OR REPLACE INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
+                 VALUES (?, ?, ?, ?, ?, 'self', datetime('now'))"
             )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'] ?? '', $msg['type'] ?? 'text']);
         }
 
@@ -336,7 +335,7 @@ class MessageController
             if ($limit > 0) {
                 // Both timestamps come from MySQL itself, so they are always consistent
                 $stmt = $this->pdo->prepare(
-                    'SELECT UNIX_TIMESTAMP(datetime("now")) - UNIX_TIMESTAMP(created_at) AS age_seconds FROM messages WHERE id = ?'
+                    "SELECT (strftime('%s', 'now') - strftime('%s', created_at)) AS age_seconds FROM messages WHERE id = ?"
                 );
                 $stmt->execute([$messageId]);
                 $ageSeconds = (int)($stmt->fetchColumn() ?: 0);
@@ -364,7 +363,7 @@ class MessageController
         $this->requireMember((int)$message['conversation_id'], $userId);
 
         $this->pdo->prepare(
-            'INSERT IGNORE INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, datetime("now"))'
+            "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, datetime('now'))"
         )->execute([$id, $userId]);
 
         // Update message status to read if all recipients have read it
@@ -415,10 +414,9 @@ class MessageController
         }
 
         $this->pdo->prepare(
-            'INSERT INTO message_reactions (message_id, user_id, reaction, created_at)
-             VALUES (?, ?, ?, datetime("now"))
-             ON DUPLICATE KEY UPDATE reaction = ?, created_at = datetime("now")'
-        )->execute([$id, $userId, $reaction, $reaction]);
+            "INSERT OR REPLACE INTO message_reactions (message_id, user_id, reaction, created_at)
+             VALUES (?, ?, ?, datetime('now'))"
+        )->execute([$id, $userId, $reaction]);
 
         Response::success(null, 'تم إضافة التفاعل');
     }
@@ -490,9 +488,9 @@ class MessageController
     {
         try {
             $this->pdo->prepare(
-                'UPDATE messages SET status = "deleted", deleted_at = datetime("now"), body = NULL, updated_at = datetime("now")
+                "UPDATE messages SET status = 'deleted', deleted_at = datetime('now'), body = NULL, updated_at = datetime('now')
                  WHERE conversation_id = ? AND disappear_after > 0 AND deleted_at IS NULL
-                   AND TIMESTAMPDIFF(SECOND, COALESCE(updated_at, created_at), datetime("now")) > disappear_after'
+                 AND (strftime('%s', 'now') - strftime('%s', COALESCE(updated_at, created_at))) > disappear_after"
             )->execute([$convId]);
         } catch (\Throwable $e) {
             error_log('Expire disappearing messages error: ' . $e->getMessage());

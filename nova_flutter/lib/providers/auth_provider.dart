@@ -93,6 +93,9 @@ class AppSettings {
   final int maxVideoSizeMb;
   final int storyDurationHrs;
   final bool fcmEnabled;
+  final int editTimeLimitMinutes;
+  final int deleteTimeLimitMinutes;
+  final int disappearingDefaultSeconds;
 
   const AppSettings({
     required this.allowCalls,
@@ -106,6 +109,9 @@ class AppSettings {
     required this.maxVideoSizeMb,
     required this.storyDurationHrs,
     required this.fcmEnabled,
+    required this.editTimeLimitMinutes,
+    required this.deleteTimeLimitMinutes,
+    required this.disappearingDefaultSeconds,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -120,6 +126,9 @@ class AppSettings {
         maxVideoSizeMb: (j['max_video_size_mb'] ?? 100) as int,
         storyDurationHrs: (j['story_duration_hrs'] ?? 24) as int,
         fcmEnabled: j['fcm_enabled'] == true,
+        editTimeLimitMinutes: (j['edit_time_limit_minutes'] ?? 0) as int,
+        deleteTimeLimitMinutes: (j['delete_time_limit_minutes'] ?? 0) as int,
+        disappearingDefaultSeconds: (j['disappearing_default_seconds'] ?? 0) as int,
       );
 }
 
@@ -175,6 +184,9 @@ class AuthProvider extends ChangeNotifier {
         maxVideoSizeMb: 100,
         storyDurationHrs: 24,
         fcmEnabled: false,
+        editTimeLimitMinutes: 0,
+        deleteTimeLimitMinutes: 0,
+        disappearingDefaultSeconds: 0,
       );
 
   /// إعدادات فعّالة (افتراضية إذا كانت null).

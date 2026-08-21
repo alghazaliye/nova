@@ -52,20 +52,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
 // ===== الإحصائيات =====
-$stats = [];
+$stats = [
+    'total' => 0, 'active' => 0, 'today' => 0, 'expired' => 0,
+    'deleted' => 0, 'admin_deleted' => 0, 'views' => 0, 'reactions' => 0, 'replies' => 0
+];
 try {
-    $q = fn($w): int => (int)($pdo->query("SELECT COUNT(*) FROM stories {$w}")->fetchColumn() ?: 0);
+    $q = function($w) use ($pdo): int {
+        try {
+            return (int)($pdo->query("SELECT COUNT(*) FROM stories s {$w}")->fetchColumn() ?: 0);
+        } catch (\Throwable $e) { return 0; }
+    };
     $stats = [
         'total'         => $q(''),
-        'active'        => $q('WHERE s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL'),
-        'today'         => $q("WHERE DATE(s.created_at) = CURDATE()"),
-        'expired'       => $q('WHERE s.expires_at <= NOW()'),
+        'active'        => $q("WHERE s.expires_at > datetime('now','localtime') AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
+        'today'         => $q("WHERE DATE(s.created_at) = DATE('now','localtime')"),
+        'expired'       => $q("WHERE s.expires_at <= datetime('now','localtime')"),
         'deleted'       => $q('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NULL'),
         'admin_deleted' => $q('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NOT NULL'),
-        'views'         => (int)($pdo->query('SELECT COUNT(*) FROM story_views')->fetchColumn() ?: 0),
-        'reactions'     => (int)($pdo->query('SELECT COUNT(*) FROM story_reactions')->fetchColumn() ?: 0),
-        'replies'       => (int)($pdo->query('SELECT COUNT(*) FROM story_replies')->fetchColumn() ?: 0),
+        'views'         => 0,
+        'reactions'     => 0,
+        'replies'       => 0
     ];
+    try { $stats['views'] = (int)($pdo->query('SELECT COUNT(*) FROM story_views')->fetchColumn() ?: 0); } catch (\Throwable $e) {}
+    try { $stats['reactions'] = (int)($pdo->query('SELECT COUNT(*) FROM story_reactions')->fetchColumn() ?: 0); } catch (\Throwable $e) {}
+    try { $stats['replies'] = (int)($pdo->query('SELECT COUNT(*) FROM story_replies')->fetchColumn() ?: 0); } catch (\Throwable $e) {}
 } catch (\Throwable $e) {
     $flash = ['warn', 'تعذر جلب الإحصائيات: ' . h((string)$e->getMessage())];
 }
@@ -73,11 +83,11 @@ try {
 // ===== جدول الحالات =====
 $filter = $_GET['filter'] ?? 'active';
 $where = match ($filter) {
-    'expired' => 'WHERE s.expires_at <= NOW()',
+    'expired' => "WHERE s.expires_at <= datetime('now','localtime')",
     'deleted' => 'WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NULL',
     'admin_deleted' => 'WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NOT NULL',
     'all' => '',
-    default => 'WHERE s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL',
+    default => "WHERE s.expires_at > datetime('now','localtime') AND s.deleted_at IS NULL AND s.deleted_by IS NULL",
 };
 try {
     $stmt = $pdo->query(

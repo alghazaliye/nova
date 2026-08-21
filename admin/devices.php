@@ -7,8 +7,8 @@ $pageTitle = 'الأجهزة المسجلة';
 $pdo       = getAdminDB();
 
 $message = '';
-// جدول الأجهزة الفعلي في قاعدة البيانات: user_devices
-// (id, user_id, device_uuid, device_name, platform, app_version, fcm_token, last_active_at, created_at, updated_at)
+// جدول الأجهزة الفعلي في قاعدة البيانات: device_registrations
+// (id, user_id, device_uuid, device_name, os, os_version, app_version, fcm_token, last_seen, is_active, created_at, updated_at)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
@@ -16,12 +16,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $devId = (int)($_POST['device_id'] ?? 0);
 
     if ($action === 'delete' && hasPermission($admin, 'users.manage') && $devId) {
-        $pdo->prepare('DELETE FROM user_devices WHERE id = ?')->execute([$devId]);
+        $pdo->prepare('DELETE FROM device_registrations WHERE id = ?')->execute([$devId]);
         logAudit($admin, 'DEVICE_DELETE', 'device', $devId, "حذف الجهاز #{$devId}");
         $message = 'تم حذف الجهاز';
     }
     if ($action === 'clear_fcm' && hasPermission($admin, 'users.manage') && $devId) {
-        $pdo->prepare('UPDATE user_devices SET fcm_token = NULL WHERE id = ?')->execute([$devId]);
+        $pdo->prepare('UPDATE device_registrations SET fcm_token = NULL WHERE id = ?')->execute([$devId]);
         logAudit($admin, 'DEVICE_CLEAR_FCM', 'device', $devId, "مسح رمز الإشعار للجهاز #{$devId}");
         $message = 'تم مسح رمز الإشعار';
     }
@@ -31,21 +31,21 @@ $search = trim($_GET['q'] ?? '');
 $where  = '1=1';
 $params = [];
 if ($search !== '') {
-    $where .= ' AND (u.name LIKE ? OR u.phone LIKE ? OR d.device_name LIKE ? OR d.device_uuid LIKE ? OR d.platform LIKE ?)';
+    $where .= ' AND (u.name LIKE ? OR u.phone LIKE ? OR d.device_name LIKE ? OR d.device_uuid LIKE ? OR d.os LIKE ?)';
     $s      = "%{$search}%";
     $params = array_fill(0, 5, $s);
 }
 $stmt = $pdo->prepare(
-    "SELECT d.id, d.device_uuid, d.device_name, d.platform, d.app_version, d.last_active_at, d.created_at,
+    "SELECT d.id, d.device_uuid, d.device_name, d.os AS platform, d.app_version, d.last_seen AS last_active_at, d.created_at,
             d.fcm_token, d.user_id, u.name user_name, u.phone user_phone, u.is_online,
             (SELECT COALESCE(MAX(p.max_devices),1)
                FROM user_subscriptions us
                JOIN plans p ON p.id = us.plan_id
                WHERE us.user_id = d.user_id AND us.status = 'active'
                ORDER BY us.id DESC LIMIT 1) user_max_devices
-     FROM user_devices d
+     FROM device_registrations d
      JOIN users u ON u.id = d.user_id
-     WHERE {$where} ORDER BY d.last_active_at DESC LIMIT 300"
+     WHERE {$where} ORDER BY d.last_seen DESC LIMIT 300"
 );
 $stmt->execute($params);
 $devices = $stmt->fetchAll();

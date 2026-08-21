@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 
 /* ═══════════════════════ الألوان (فاتح / داكن) ═══════════════════════ */
@@ -561,17 +563,22 @@ class NovaBottomNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
 
-  static const items = [
-    ('المحادثات', Icons.chat_bubble_outline, Icons.chat_bubble),
-    ('المكالمات', Icons.phone, Icons.phone),
-    ('الحالات', Icons.radio_button_unchecked, Icons.radio_button_unchecked),
-    ('جهات الاتصال', Icons.person_outline, Icons.person),
-    ('الإعدادات', Icons.settings_outlined, Icons.settings),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final c = NovaColors.of(context);
+    final settings = context.watch<AuthProvider>().effectiveAppSettings;
+
+    final allItems = [
+      ('المحادثات', Icons.chat_bubble_outline, Icons.chat_bubble, true),
+      ('المكالمات', Icons.phone, Icons.phone, settings.allowCalls),
+      ('الحالات', Icons.radio_button_unchecked, Icons.radio_button_unchecked, settings.allowStories),
+      ('جهات الاتصال', Icons.person_outline, Icons.person, true),
+      ('الإعدادات', Icons.settings_outlined, Icons.settings, true),
+    ];
+
+    // تصفية التبويبات بناءً على إعدادات الإدارة
+    final visibleItems = allItems.where((item) => item.$4).toList();
+
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
@@ -583,28 +590,32 @@ class NovaBottomNav extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(8, 9, 8, MediaQuery.paddingOf(context).bottom + 9),
           child: Row(
             children: [
-              for (int i = 0; i < items.length; i++)
+              for (int i = 0; i < visibleItems.length; i++)
                 Expanded(
                   child: PressScale(
-                    onTap: () => onTap(i),
+                    onTap: () {
+                      // العثور على المؤشر الأصلي للتبويب
+                      final originalIndex = allItems.indexOf(visibleItems[i]);
+                      onTap(originalIndex);
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       padding: const EdgeInsets.symmetric(vertical: 7),
                       decoration: BoxDecoration(
-                        color: index == i ? c.surface2 : Colors.transparent,
+                        color: index == allItems.indexOf(visibleItems[i]) ? c.surface2 : Colors.transparent,
                         borderRadius: BorderRadius.circular(15),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(index == i ? items[i].$3 : items[i].$2,
-                              size: 21, color: index == i ? c.accent : c.muted),
+                          Icon(index == allItems.indexOf(visibleItems[i]) ? visibleItems[i].$3 : visibleItems[i].$2,
+                              size: 21, color: index == allItems.indexOf(visibleItems[i]) ? c.accent : c.muted),
                           const SizedBox(height: 3),
-                          Text(items[i].$1,
+                          Text(visibleItems[i].$1,
                               style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: index == i ? c.accent : c.muted)),
+                                  color: index == allItems.indexOf(visibleItems[i]) ? c.accent : c.muted)),
                         ],
                       ),
                     ),

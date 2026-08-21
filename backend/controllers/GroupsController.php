@@ -79,7 +79,7 @@ class GroupsController
              FROM conversation_members cm
              JOIN users u ON u.id = cm.user_id
              WHERE cm.conversation_id = ? AND cm.left_at IS NULL
-             ORDER BY FIELD(cm.role, "owner", "admin", "member"), cm.joined_at ASC'
+             ORDER BY (CASE cm.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 WHEN 'member' THEN 3 ELSE 4 END), cm.joined_at ASC'
         );
         $stmt->execute([(int)$group['conversation_id']]);
         $members = $stmt->fetchAll();
@@ -294,11 +294,15 @@ class GroupsController
         }
 
         $convId = (int)$access['group']['conversation_id'];
-        $this->pdo->prepare(
-            'UPDATE groups g JOIN conversations c ON c.id = g.conversation_id
-             SET g.name = ?, c.title = ?, g.updated_at = datetime("now"), c.updated_at = datetime("now")
-             WHERE g.id = ?'
-        )->execute([$title, $title, $id]);
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare('UPDATE groups SET name = ?, updated_at = datetime("now") WHERE id = ?')->execute([$title, $id]);
+            $this->pdo->prepare('UPDATE conversations SET title = ?, updated_at = datetime("now") WHERE id = ?')->execute([$title, $convId]);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
 
         Response::success(null, 'تم تحديث اسم المجموعة');
     }

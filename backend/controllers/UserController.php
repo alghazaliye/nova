@@ -102,7 +102,7 @@ class UserController
         }
 
         $params[] = $auth['user_id'];
-        $sql      = 'UPDATE users SET ' . implode(', ', $updates) . ', updated_at = NOW() WHERE id = ?';
+        $sql      = 'UPDATE users SET ' . implode(', ', $updates) . ', updated_at = datetime("now") WHERE id = ?';
         $this->pdo->prepare($sql)->execute($params);
 
         Response::success($this->getUserById((int)$auth['user_id']), 'تم تحديث الملف الشخصي بنجاح');
@@ -149,7 +149,7 @@ class UserController
 
         $avatarUrl = rtrim($_ENV['STORAGE_URL'] ?? '', '/') . '/avatars/' . $fileName;
 
-        $this->pdo->prepare('UPDATE users SET avatar = ?, updated_at = NOW() WHERE id = ?')
+        $this->pdo->prepare('UPDATE users SET avatar = ?, updated_at = datetime("now") WHERE id = ?')
                   ->execute([$avatarUrl, $auth['user_id']]);
 
         $user = $this->getUserById((int)$auth['user_id']);
@@ -391,7 +391,7 @@ class UserController
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, NOW())'
+            'INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, datetime("now"))'
         );
         $stmt->execute([$myId, $targetId]);
 
@@ -472,7 +472,7 @@ class UserController
 
         $this->pdo->prepare(
             'INSERT INTO contacts (user_id, contact_user_id, nickname) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE is_blocked = 0' . ($nickname !== null ? ', nickname = VALUES(nickname)' : '')
+             ON CONFLICT(user_id, contact_user_id) DO UPDATE SET is_blocked = 0' . ($nickname !== null ? ', nickname = EXCLUDED.nickname' : '')
         )->execute([$userId, $target, $nickname]);
 
         Response::success(null, 'تمت إضافة جهة الاتصال');
@@ -515,8 +515,8 @@ class UserController
             'fcm_enabled'     => ($settings['fcm_enabled'] ?? '1') === '1',
             'edit_time_limit_minutes'   => (int)($settings['edit_time_limit_minutes'] ?? 0),
             'delete_time_limit_minutes' => (int)($settings['delete_time_limit_minutes'] ?? 0),
-            'message_type_default'      => $settings['message_type_default'] ?? 'chat',
-            'disappearing_default_seconds' => (int)($settings['disappearing_default_seconds'] ?? 0),
+            'message_type_default'      => $settings['message_type_default'] ?? '0',
+            'disappearing_default_seconds' => (int)($settings['message_type_default'] ?? 0),
         ]);
     }
 
