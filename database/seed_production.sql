@@ -116,3 +116,20 @@ ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, u
 -- INSERT OR IGNORE INTO users (uuid, phone, password_hash, email_verified, phone_verified, name, username, bio, is_verified, is_blocked) VALUES
 --   ('a1001111-1111-4111-8111-111111111111', '+966501234567', '$2b$10$N/jFhyztLc.n.t.qV16fB.wxI6ZDtFtwDF0WSpCTMFl7Bp/BO4VLe', 1, 1, 'أحمد الغزالي', 'ahmed', 'مطور برمجيات', 1, 0),
 --   ('a1002222-2222-4222-8222-222222222222', '+966502345678', '$2b$10$N/jFhyztLc.n.t.qV16fB.wxI6ZDtFtwDF0WSpCTMFl7Bp/BO4VLe', 1, 1, 'سارة العمري', 'sara', 'مصممة UX', 1, 0);
+
+-- =====================================================
+-- 2026-08: الصلاحيات الجديدة (المراحل 4-6)
+-- super_admin يحصل عليها تلقائياً عبر: SELECT 1, id FROM permissions
+-- =====================================================
+INSERT OR IGNORE INTO permissions (id, name, description) VALUES
+  (100, 'appeals.view', 'عرض الاعتراضات'),
+  (101, 'appeals.resolve', 'الرد على الاعتراضات'),
+  (102, 'users.suspend', 'التعليق المؤقت'),
+  (103, 'payment_requests.view', 'عرض طلبات الاشتراك'),
+  (104, 'payment_requests.approve', 'قبول طلب اشتراك'),
+  (105, 'payment_requests.reject', 'رفض طلب اشتراك'),
+  (106, 'chats.view', 'عرض المحادثات'),
+  (107, 'calls.view', 'عرض سجل المكالمات'),
+  (108, 'chats.admin_delete', 'الحذف الإداري للرسائل'),
+  (109, 'plans.view', 'عرض الباقات'),
+  (110, 'subscriptions.view', 'عرض الحسابات المميزة');
