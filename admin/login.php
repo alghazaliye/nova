@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['admin_id'] = $admin['id'];
             session_regenerate_id(true);
 
-            $pdo->prepare('UPDATE admins SET last_login_at = datetime("now") WHERE id = ?')->execute([$admin['id']]);
+            $pdo->prepare('UPDATE admins SET last_login_at = datetime('now') WHERE id = ?')->execute([$admin['id']]);
 
             header('Location: index.php');
             exit;

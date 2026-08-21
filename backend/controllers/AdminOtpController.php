@@ -72,7 +72,7 @@ class AdminOtpController
         if (!$ok) {
             $this->out(['success' => false, 'message' => 'بيانات الدخول غير صحيحة', 'error_code' => 'AUTH_FAILED'], 401, 'بيانات الدخول غير صحيحة');
         }
-        $this->pdo->prepare('UPDATE admins SET last_login_at = datetime("now") WHERE id = ?')->execute([(int)$admin['id']]);
+        $this->pdo->prepare('UPDATE admins SET last_login_at = datetime('now') WHERE id = ?')->execute([(int)$admin['id']]);
         $token = JwtHelper::generate([
             'user_id' => (int)$admin['id'],
             'role'    => 'admin',
@@ -188,7 +188,7 @@ class AdminOtpController
 
         // Ensure unique default
         if (!empty($data['is_default'])) {
-            $this->pdo->prepare('UPDATE otp_providers SET is_default = 0, updated_at = datetime("now") WHERE type = ?')->execute([$type]);
+            $this->pdo->prepare('UPDATE otp_providers SET is_default = 0, updated_at = datetime('now') WHERE type = ?')->execute([$type]);
         }
 
         $id = (new ProviderManager())->create($data);
@@ -210,7 +210,7 @@ class AdminOtpController
         $type = trim((string)($data['type'] ?? $current['type']));
 
         if (!empty($data['is_default'])) {
-            $this->pdo->prepare('UPDATE otp_providers SET is_default = 0, updated_at = datetime("now") WHERE type = ? AND id != ?')->execute([$type, $id]);
+            $this->pdo->prepare('UPDATE otp_providers SET is_default = 0, updated_at = datetime('now') WHERE type = ? AND id != ?')->execute([$type, $id]);
         }
 
         $ok = $manager->update($id, array_merge($current, $data, ['name' => $name, 'type' => $type]));
@@ -400,7 +400,7 @@ class AdminOtpController
             $val = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : trim((string)$value);
             $this->pdo->prepare(
                 'INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
-ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime("now")'
+ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime('now')'
 	            )->execute([$key, $val]);
         }
         logAdminAudit($admin, 'OTP_SETTINGS_UPDATED', 'app_settings', 0, 'تحديث إعدادات OTP');
@@ -418,7 +418,7 @@ function logAdminAudit(array $admin, string $action, string $entityType, int $en
         $pdo = Database::getInstance();
         $pdo->prepare(
             'INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"))'
+             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))'
         )->execute([
             $admin['id'], $action, $entityType, $entityId ?: null, $description,
             $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null,

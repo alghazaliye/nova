@@ -817,7 +817,7 @@ class MessageController
                 // صالح 4 ثوانٍ؛ كل حدث كتابة يعيد تعيينه
                 $this->pdo->prepare('DELETE FROM typing_status WHERE conversation_id = ? AND user_id = ?')->execute([$convId, $userId]);
                 $this->pdo->prepare(
-                    'INSERT INTO typing_status (conversation_id, user_id, expires_at, updated_at) VALUES (?, ?, datetime("now", "+4 seconds"), datetime("now"))'
+                    'INSERT INTO typing_status (conversation_id, user_id, expires_at, updated_at) VALUES (?, ?, datetime("now", "+4 seconds"), datetime('now'))'
                 )->execute([$convId, $userId]);
                 Response::success(['typing' => true, 'expires_at' => '+4s'], 'ok');
             } else {
@@ -842,7 +842,7 @@ class MessageController
                 'SELECT ts.user_id, u.name, u.avatar
                  FROM typing_status ts
                  JOIN users u ON u.id = ts.user_id
-                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime("now") AND ts.user_id != ?'
+                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime('now') AND ts.user_id != ?'
             );
             $stmt->execute([$convId, $userId]);
             $typing = $stmt->fetchAll(PDO::FETCH_ASSOC);
