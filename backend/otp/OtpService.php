@@ -151,8 +151,8 @@ class OtpService
 
         // simplified check for the new schema
         $stmt = $this->pdo->prepare(
-            'SELECT attempts_count, last_attempt_at FROM otp_rate_limits
-             WHERE phone = ? LIMIT 1'
+            "SELECT attempts_count, last_attempt_at FROM otp_rate_limits
+             WHERE phone = ? LIMIT 1"
         );
         $stmt->execute([$phone]);
         $row = $stmt->fetch();
@@ -168,9 +168,11 @@ class OtpService
 
         // increment counters
         $this->pdo->prepare(
-            'INSERT INTO otp_rate_limits (phone, last_attempt_at, attempts_count)
-             VALUES (?, datetime(\'now\'), 1)
-             ON CONFLICT(phone) DO UPDATE SET attempts_count = CASE WHEN last_attempt_at < datetime(\'now\', \'-1 hour\') THEN 1 ELSE attempts_count + 1 END, last_attempt_at = datetime(\'now\')'
+            "INSERT INTO otp_rate_limits (phone, last_attempt_at, attempts_count)
+             VALUES (?, datetime('now'), 1)
+             ON CONFLICT(phone) DO UPDATE SET
+             attempts_count = CASE WHEN last_attempt_at < datetime('now', '-1 hour') THEN 1 ELSE attempts_count + 1 END,
+             last_attempt_at = datetime('now')"
         )->execute([$phone]);
 
         return null;

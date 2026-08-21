@@ -172,8 +172,7 @@ class Database
         ];
         // payment_requests is a whole table, not columns — create it separately
         $tableMigrations = [
-            'story_reactions' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `story_reactions` (
+            'story_reactions' => "CREATE TABLE IF NOT EXISTS `story_reactions` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `story_id` integer NOT NULL,
   `user_id` integer NOT NULL,
@@ -182,10 +181,8 @@ CREATE TABLE IF NOT EXISTS `story_reactions` (
   UNIQUE (`story_id`, `user_id`),
   CONSTRAINT `fk_story_reactions_story` FOREIGN KEY (`story_id`) REFERENCES `stories` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_story_reactions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-)
-SQL,
-            'story_replies' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `story_replies` (
+)",
+            'story_replies' => "CREATE TABLE IF NOT EXISTS `story_replies` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `story_id` integer NOT NULL,
   `sender_id` integer NOT NULL,
@@ -194,10 +191,8 @@ CREATE TABLE IF NOT EXISTS `story_replies` (
   CONSTRAINT `fk_story_replies_story` FOREIGN KEY (`story_id`) REFERENCES `stories` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_story_replies_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_story_replies_message` FOREIGN KEY (`message_id`) REFERENCES `messages` (`id`) ON DELETE CASCADE
-)
-SQL,
-            'payment_requests' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `payment_requests` (
+)",
+            'payment_requests' => "CREATE TABLE IF NOT EXISTS `payment_requests` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `user_id` integer NOT NULL,
   `plan_id` integer NOT NULL,
@@ -207,8 +202,7 @@ CREATE TABLE IF NOT EXISTS `payment_requests` (
   `reviewed_by` integer DEFAULT NULL,
   `reviewed_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp
-)
-SQL,
+)",
         ];
         foreach ($migrations as $table => $columns) {
             if ($table === 'payment_requests') {
@@ -240,8 +234,7 @@ SQL,
     private static function migrateMissingTables(): void
     {
         $tables = [
-            'user_bans' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `user_bans` (
+            'user_bans' => "CREATE TABLE IF NOT EXISTS `user_bans` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `user_id` integer NOT NULL,
   `reason` text DEFAULT NULL,
@@ -250,10 +243,8 @@ CREATE TABLE IF NOT EXISTS `user_bans` (
   `suspend_until` datetime DEFAULT NULL,
   `unbanned_at` datetime DEFAULT NULL,
   `unbanned_by` integer DEFAULT NULL
-)
-SQL,
-            'user_appeals' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `user_appeals` (
+)",
+            'user_appeals' => "CREATE TABLE IF NOT EXISTS `user_appeals` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `user_id` integer NOT NULL,
   `contact_value` text DEFAULT NULL,
@@ -263,20 +254,16 @@ CREATE TABLE IF NOT EXISTS `user_appeals` (
   `reviewed_by` integer DEFAULT NULL,
   `reviewed_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp
-)
-SQL,
-            'report_attachments' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `report_attachments` (
+)",
+            'report_attachments' => "CREATE TABLE IF NOT EXISTS `report_attachments` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `report_id` integer NOT NULL,
   `message_id` integer NOT NULL,
   `conversation_id` integer NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp,
   UNIQUE (report_id, message_id)
-)
-SQL,
-            'audit_logs' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `audit_logs` (
+)",
+            'audit_logs' => "CREATE TABLE IF NOT EXISTS `audit_logs` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `admin_id` integer NOT NULL,
   `action` varchar(100) NOT NULL,
@@ -286,8 +273,7 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `ip_address` varchar(45) DEFAULT NULL,
   `user_agent` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp
-)
-SQL,
+)",
             'privacy_settings' => "CREATE TABLE IF NOT EXISTS `privacy_settings` (
   `user_id` integer NOT NULL PRIMARY KEY,
   `show_last_seen` integer DEFAULT 1,
