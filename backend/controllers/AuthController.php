@@ -179,8 +179,8 @@ class AuthController
             } catch (\Throwable $e) {}
             $displayName = $name ?? $collectedName ?? ($legacyOtp['name'] ?? 'مستخدم NOVA');
             $stmt = $this->pdo->prepare(
-                'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))'
+                "INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)" .
+                 " VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))"
             );
             $stmt->execute([$uuid, $phone, $displayName]);
             $userId = (int)$this->pdo->lastInsertId();
@@ -209,7 +209,7 @@ class AuthController
 
             // Update name if provided WITHOUT auto-verifying (verification is admin-controlled)
             if ($name !== null) {
-                $stmt = $this->pdo->prepare('UPDATE users SET name = ?, updated_at = datetime('now') WHERE id = ?');
+                $stmt = $this->pdo->prepare("UPDATE users SET name = ?, updated_at = datetime('now') WHERE id = ?");
                 $stmt->execute([$name, $userId]);
             }
         }
@@ -476,8 +476,8 @@ class AuthController
         if (!$user) {
             $uuid = UuidHelper::generate();
             $stmt = $this->pdo->prepare(
-                'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))'
+                "INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)" .
+                 " VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))"
             );
             $name = isset($name) && trim($name) !== '' ? trim($name) : 'مستخدم NOVA';
             $stmt->execute([$uuid, $phone, $name]);
@@ -609,8 +609,8 @@ ON CONFLICT(user_id, device_uuid) DO UPDATE SET fcm_token = excluded.fcm_token, 
         $insertSession = function (int $uid, string $th, ?int $did, string $expStr) use ($expiresAt): bool {
             try {
                 $this->pdo->prepare(
-                    'INSERT INTO sessions (user_id, token_hash, device_id, ip_address, user_agent, expires_at, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))'
+                    "INSERT INTO sessions (user_id, token_hash, device_id, ip_address, user_agent, expires_at, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))"
                 )->execute([
                     $uid,
                     $th,

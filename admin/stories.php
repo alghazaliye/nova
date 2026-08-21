@@ -28,11 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = ['warn', 'الحالة محذوفة إداريًا مسبقًا.'];
             } else {
                 $pdo->beginTransaction();
-                $pdo->prepare('UPDATE stories SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?')
+                $pdo->prepare("UPDATE stories SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?")
                     ->execute([0 - (int)$admin['id'], $id]);
                 $pdo->prepare(
-                    'INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))'
+                    "INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
+	                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))"
                 )->execute([
                     (int)$admin['id'], 'statuses.admin_deleted', 'story', $id,
                     'حذف إداري للحالة #' . $id . ' — صاحبها: ' . (int)$story['user_id'] . ' — السبب: ' . ($reason ?: 'لم يُذكر'),

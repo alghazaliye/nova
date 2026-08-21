@@ -227,15 +227,15 @@ class OtpService
 
         // 1. Cancel previous pending OTPs for this phone
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'cancelled\', updated_at = datetime('now')
-             WHERE phone_number = ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')'
+            "UPDATE otp_verifications SET status = 'cancelled', updated_at = datetime('now')
+             WHERE phone_number = ? AND status IN ('pending','sent','manual','delivery_failed')"
         )->execute([$phone]);
 
         // 2. Expire old delivered ones (cleanup, never touch verified)
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'expired\'
-             WHERE phone_number = ? AND status IN (\'sent\',\'manual\',\'delivery_failed\')
-               AND expires_at IS NOT NULL AND expires_at < datetime('now')'
+            "UPDATE otp_verifications SET status = 'expired'
+             WHERE phone_number = ? AND status IN ('sent','manual','delivery_failed')
+               AND expires_at IS NOT NULL AND expires_at < datetime('now')"
         )->execute([$phone]);
 
         // 3. Generate code + hash (dev code, if provided, is the visible code)
@@ -253,9 +253,9 @@ class OtpService
         $expiresAt = $expiryMinutes > 0 ? gmdate('Y-m-d H:i:s', time() + $expiryMinutes * 60) : null;
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO otp_verifications
+            "INSERT INTO otp_verifications
                 (phone_number, name, otp_hash, manual_code_hash, manual_code, status, attempts, max_attempts, delivery_mode, delivery_status, expires_at, ip_address, user_agent, created_at)
-             VALUES (?, ?, ?, ?, ?, \'pending\', 0, ?, ?, NULL, ?, ?, ?, datetime('now'))'
+             VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, NULL, ?, ?, ?, datetime('now'))"
         );
         // في وضع تطوير (dev code) أو وضع التسليم اليدوي: تخزين الرمز نصيًا حتى يطابق
         // ما يراه المستخدم في الرد (otp_dev) وما يعرضه المدير في لوحة التحكم
@@ -273,17 +273,16 @@ class OtpService
 
         if ($sent) {
             $this->pdo->prepare(
-                'UPDATE otp_verifications SET status = \'sent\', delivery_status = \'sent\', updated_at = datetime('now')
-                 WHERE id = ?'
+                "UPDATE otp_verifications SET status = 'sent', delivery_status = 'sent', updated_at = datetime('now') WHERE id = ?"
             )->execute([$otpId]);
         } elseif (!$manual) {
             // All providers failed → switch to manual fallback (admin sees the code)
             $fallbackEnabled = $this->getSetting('otp_enable_manual_fallback', '1') === '1';
             if ($fallbackEnabled) {
                 $this->pdo->prepare(
-                    'UPDATE otp_verifications SET manual_code_hash = ?, manual_code = ?, status = \'manual\',
-                           delivery_status = \'manual\', updated_at = datetime('now')
-                     WHERE id = ?'
+                    "UPDATE otp_verifications SET manual_code_hash = ?, manual_code = ?, status = 'manual',
+                           delivery_status = 'manual', updated_at = datetime('now')
+                     WHERE id = ?"
                 )->execute([password_hash($otpCode, PASSWORD_BCRYPT), $otpCode, $otpId]);
                 $manual = true;
             }
@@ -320,8 +319,8 @@ class OtpService
             $instance = $this->providerInstance($row['type']);
 
             $this->pdo->prepare(
-                'INSERT INTO otp_delivery_logs (otp_id, provider_id, provider_type, phone_number, status, created_at)
-                 VALUES (?, ?, ?, ?, \'attempt\', datetime('now'))'
+                "INSERT INTO otp_delivery_logs (otp_id, provider_id, provider_type, phone_number, status, created_at)
+                 VALUES (?, ?, ?, ?, 'attempt', datetime('now'))"
             )->execute([$otpId, (int)$row['id'], $row['type'], $phone]);
 
             $result = null;
@@ -333,13 +332,11 @@ class OtpService
 
             if ($result->success) {
                 $this->pdo->prepare(
-                    'UPDATE otp_providers SET success_count = success_count + 1, last_used_at = datetime('now'), updated_at = datetime('now')
-                     WHERE id = ?'
+                    "UPDATE otp_providers SET success_count = success_count + 1, last_used_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
                 )->execute([(int)$row['id']]);
             } else {
                 $this->pdo->prepare(
-                    'UPDATE otp_providers SET failure_count = failure_count + 1, updated_at = datetime('now')
-                     WHERE id = ?'
+                    "UPDATE otp_providers SET failure_count = failure_count + 1, updated_at = datetime('now') WHERE id = ?"
                 )->execute([(int)$row['id']]);
             }
 
@@ -477,13 +474,13 @@ class OtpService
         }
 
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'verified\', verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?'
+            "UPDATE otp_verifications SET status = 'verified', verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
         )->execute([(int)$otp['id']]);
 
         // Cleanup: expire other pending OTPs for the same phone
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'cancelled\', updated_at = datetime('now')
-             WHERE phone_number = ? AND id != ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')'
+            "UPDATE otp_verifications SET status = 'cancelled', updated_at = datetime('now')
+             WHERE phone_number = ? AND id != ? AND status IN ('pending','sent','manual','delivery_failed')"
         )->execute([$phone, (int)$otp['id']]);
 
         return ['verified' => true, 'otp_id' => (int)$otp['id']];
@@ -569,9 +566,9 @@ class OtpService
         // DB (SQLite datetime('now')) يخزن الوقت بصيغة UTC — نحفظ بنفس الصيغة لقراءة صحيحة لاحقًا
         $freshExpiry = gmdate('Y-m-d H:i:s', $freshExpiryTs);
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET manual_code_hash = ?, manual_code = ?, status = \'manual\',
+            "UPDATE otp_verifications SET manual_code_hash = ?, manual_code = ?, status = 'manual',
                    expires_at = ?, updated_at = datetime('now')
-             WHERE id = ?'
+             WHERE id = ?"
         )->execute([$hash, $code, $freshExpiry, $otpId]);
         return ['code' => $code, 'expires_at' => $freshExpiry];
     }
@@ -582,8 +579,8 @@ class OtpService
     public function cancel(int $otpId): bool
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'cancelled\', updated_at = datetime('now')
-             WHERE id = ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')'
+            "UPDATE otp_verifications SET status = 'cancelled', updated_at = datetime('now') " .
+            "WHERE id = ? AND status IN ('pending','sent','manual','delivery_failed')"
         );
         $stmt->execute([$otpId]);
         return (bool)$stmt->rowCount();
@@ -602,9 +599,9 @@ class OtpService
         $otp = $stmt->fetch();
         if (!$otp) return null;
 
-        $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'verified\', verified_at = datetime('now'), updated_at = datetime('now')
-             WHERE id = ?'
+                $this->pdo->prepare(
+            "UPDATE otp_verifications SET status = 'verified', verified_at = datetime('now'), updated_at = datetime('now') " .
+            "WHERE id = ?"
         )->execute([$otpId]);
 
         $userStmt = $this->pdo->prepare('SELECT id FROM users WHERE phone = ? LIMIT 1');
