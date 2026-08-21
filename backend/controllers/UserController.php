@@ -192,17 +192,33 @@ class UserController
         $like      = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
 
         if ($isNumeric) {
-            // تحسين البحث بالرقم: إذا كان الرقم لا يبدأ بـ +، نقوم بالبحث عنه كما هو وعن النسخة المنسقة بـ +966
+            // تحسين البحث بالرقم: تنظيف المدخلات وتجربة عدة تنسيقات
             $cleanPhone = preg_replace('/[^0-9]/', '', $query);
             $formattedPhone = $cleanPhone;
-            if (!str_starts_with($query, '+')) {
-                $formattedPhone = '+966' . ltrim($cleanPhone, '0');
+            
+            // إذا كان الرقم يبدأ بـ 7 أو 07 وهو 9 أو 10 أرقام، فهو رقم يمني أو سعودي محلي
+            $localPhone = ltrim($cleanPhone, '0');
+            if (strlen($localPhone) === 9) {
+                // تجربة كود السعودية واليمن (حسب ما هو شائع في التطبيق)
+                $variants = [
+                    '+966' . $localPhone,
+                    '+967' . $localPhone,
+                    '0' . $localPhone
+                ];
             } else {
-                $formattedPhone = '+' . $cleanPhone;
+                $variants = [$cleanPhone, '+' . $cleanPhone];
             }
             
-            $nameCols = ['name LIKE ?', 'phone LIKE ?', 'phone LIKE ?', 'phone LIKE ?'];
-            $params = [$like, $like, '%' . $cleanPhone . '%', '%' . $formattedPhone . '%'];
+            $nameCols = ['name LIKE ?', 'phone LIKE ?'];
+            $params = [$like, $like];
+            
+            foreach ($variants as $v) {
+                $nameCols[] = 'phone LIKE ?';
+                $params[] = '%' . $v . '%';
+            }
+            // إضافة البحث بالرقم الخام بدون أي رموز
+            $nameCols[] = 'phone LIKE ?';
+            $params[] = '%' . $localPhone . '%';
         } elseif ($isEmail) {
             $nameCols = ['name LIKE ?', 'email LIKE ?'];
             $params = [$like, $like];
