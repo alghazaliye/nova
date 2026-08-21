@@ -246,7 +246,9 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     required String subtitle,
     required String key,
   }) {
-    final value = _settings[key] ?? 'everybody';
+    final rawValue = _settings[key];
+    final String value = (rawValue is String) ? rawValue : 'everybody';
+    
     return RowItem(
       leading: Container(
         width: 42,
@@ -265,7 +267,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           color: NovaColors.of(context).accent.withOpacity(0.12),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(_labels[value] ?? value,
+        child: Text(_labels[value] ?? (value == 'everyone' ? 'الجميع' : value),
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: NovaColors.of(context).accent)),
       ),
       onTap: () => _showVisibilitySheet(title, key, value),
@@ -334,7 +336,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                           subtitle: 'من يمكنه رؤية آخر ظهور لك',
                           key: 'last_seen_visibility',
                         ),
-                        _visibilityRow(
+                        _toggleRow(
                           icon: Icons.cloud,
                           title: 'حالة النشاط (متصل)',
                           subtitle: 'من يمكنه رؤية أنك متصل الآن',
@@ -447,11 +449,11 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                            _labels[_settings['display_identity'] ?? 'name_username'] ?? 'name_username',
+                            _labels[_settings['display_identity']?.toString() ?? 'name_username'] ?? 'الاسم + اسم المستخدم',
                             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.accent)),
                       ),
                       onTap: () => _showIdentitySheet('الاسم الظاهر للآخرين',
-                          'display_identity', (_settings['display_identity'] ?? 'name_username') as String),
+                          'display_identity', (_settings['display_identity']?.toString() ?? 'name_username')),
                     ),
                   ),
                   _sectionTitle('إعدادات أخرى'),

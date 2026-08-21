@@ -58,7 +58,8 @@ class Database
                 // Pragmas for SQLite performance and reliability
                 try {
                     self::$instance->exec("PRAGMA journal_mode = WAL");
-                    self::$instance->exec("PRAGMA busy_timeout = 5000");
+                    self::$instance->exec("PRAGMA synchronous = NORMAL");
+                    self::$instance->exec("PRAGMA busy_timeout = 10000");
                     // Read-uncommitted so that statements within the same request
                     // (e.g. INSERT then SELECT) always see their own writes under WAL.
                     self::$instance->exec("PRAGMA read_uncommitted = 1");

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
@@ -564,5 +565,67 @@ class AuthProvider extends ChangeNotifier {
     _appSettings = null;
     await clearToken();
     notifyListeners();
+  }
+
+  /// تحديث بيانات الملف الشخصي (الاسم، البريد، إلخ)
+  Future<bool> updateProfile({String? name, String? email, String? username, String? bio}) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (email != null) body['email'] = email;
+    if (username != null) body['username'] = username;
+    if (bio != null) body['bio'] = bio;
+
+    final res = await ApiService.put('/users/me', body: body);
+    _loading = false;
+    
+    if (res['success'] == true) {
+      if (res['data'] != null && res['data'] is Map) {
+        _user = NovaUser.fromJson(Map<String, dynamic>.from(res['data']));
+      } else {
+        await fetchMe();
+      }
+      notifyListeners();
+      return true;
+    } else {
+      _error = res['message'] ?? 'فشل تحديث الملف الشخصي';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// رفع صورة شخصية جديدة
+  Future<bool> uploadAvatar(List<int> bytes, String fileName) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final file = http.MultipartFile.fromBytes('avatar', bytes, filename: fileName);
+      final res = await ApiService.uploadMultipart('/users/me/avatar', [file]);
+      _loading = false;
+      
+      if (res['success'] == true) {
+        if (res['data'] != null && res['data'] is Map) {
+           _user = NovaUser.fromJson(Map<String, dynamic>.from(res['data']));
+        } else {
+           await fetchMe();
+        }
+        notifyListeners();
+        return true;
+      } else {
+        _error = res['message'] ?? 'فشل رفع الصورة';
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _loading = false;
+      _error = 'خطأ في الاتصال أثناء رفع الصورة';
+      notifyListeners();
+      return false;
+    }
   }
 }

@@ -1676,7 +1676,9 @@ class _ContactsTabState extends State<ContactsTab> {
   }
 
   Future<void> _openChatWith(Map<String, dynamic> user) async {
-    final targetId = user['id'] ?? user['user_id'];
+    // الأولوية لـ contact_user_id لأنه المعرف الحقيقي للمستخدم في قائمة جهات الاتصال
+    // أما 'id' في استجابة /contacts/new فهو معرف السجل في جدول contacts
+    final targetId = user['contact_user_id'] ?? user['user_id'] ?? user['id'];
     if (targetId == null) return;
     final r =
         await ApiService.post('/conversations', body: {'user_id': targetId});
