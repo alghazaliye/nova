@@ -188,15 +188,30 @@ class UserController
         $isNumeric = preg_match('/^[0-9+\s\-()]+$/', $query) === 1;
         $isEmail   = mb_strpos($query, '@') !== false;
         $nameCols  = ['name LIKE ?', 'username LIKE ?'];
+        $params    = [];
+        $like      = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
+
         if ($isNumeric) {
-            $nameCols = ['name LIKE ?', 'phone LIKE ?'];
-        }
-        if ($isEmail) {
+            // تحسين البحث بالرقم: إذا كان الرقم لا يبدأ بـ +، نقوم بالبحث عنه كما هو وعن النسخة المنسقة بـ +966
+            $cleanPhone = preg_replace('/[^0-9]/', '', $query);
+            $formattedPhone = $cleanPhone;
+            if (!str_starts_with($query, '+')) {
+                $formattedPhone = '+966' . ltrim($cleanPhone, '0');
+            } else {
+                $formattedPhone = '+' . $cleanPhone;
+            }
+            
+            $nameCols = ['name LIKE ?', 'phone LIKE ?', 'phone LIKE ?', 'phone LIKE ?'];
+            $params = [$like, $like, '%' . $cleanPhone . '%', '%' . $formattedPhone . '%'];
+        } elseif ($isEmail) {
             $nameCols = ['name LIKE ?', 'email LIKE ?'];
+            $params = [$like, $like];
+        } else {
+            $params = [$like, $like];
         }
-        $cols  = implode(' OR ', $nameCols);
-        $stmt  = $this->pdo->prepare(
-            'SELECT id, uuid, name, username, avatar, is_online, last_seen, is_verified
+
+        $cols = implode(' OR ', $nameCols);
+        $sql = 'SELECT id, uuid, name, username, phone, avatar, is_online, last_seen, is_verified
              FROM users
              WHERE (' . $cols . ')
                AND id != ? AND is_blocked = 0
@@ -205,10 +220,11 @@ class UserController
                    UNION ALL
                    SELECT blocked_user_id FROM blocks WHERE user_id = ?
                )
-             LIMIT 20'
-        );
-        $like = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
-        $stmt->execute([$like, $like, $auth['user_id'], $auth['user_id'], $auth['user_id']]);
+             LIMIT 20';
+        
+        $stmt = $this->pdo->prepare($sql);
+        $execParams = array_merge($params, [$auth['user_id'], $auth['user_id'], $auth['user_id']]);
+        $stmt->execute($execParams);
         $rows = $stmt->fetchAll();
 
         // فلترة find_by_* لكل مستخدم في النتائج وفرض الخصوصية

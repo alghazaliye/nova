@@ -7,22 +7,21 @@
 
 declare(strict_types=1);
 
-// Exception handler disabled for debugging
-/*
-if (true) {
-    set_exception_handler(function (\Throwable $e): void {
-        error_log('[nova error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-        if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
-        $env = $_ENV['APP_ENV'] ?? 'production';
-        $msg = ($env === 'development' || true) ? $e->getMessage() : 'خطأ داخلي في الخادم';
-        $payload = ['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'];
-        if ($env === 'development' || true) {
-            $payload['trace'] = $e->getFile().':'.$e->getLine().' | '.$e->getTraceAsString();
-        }
-        echo json_encode($payload,JSON_UNESCAPED_UNICODE);
-    });
-}
-*/
+// Exception handler
+set_exception_handler(function (\Throwable $e): void {
+    error_log('[nova error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) { 
+        http_response_code(500); 
+        header('Content-Type: application/json; charset=utf-8'); 
+    }
+    $env = $_ENV['APP_ENV'] ?? 'production';
+    $msg = ($env === 'development') ? $e->getMessage() : 'خطأ داخلي في الخادم';
+    $payload = ['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'];
+    if ($env === 'development') {
+        $payload['trace'] = $e->getFile().':'.$e->getLine().' | '.$e->getTraceAsString();
+    }
+    echo json_encode($payload,JSON_UNESCAPED_UNICODE);
+});
 
 // Bootstrap
 require_once __DIR__ . '/../config/app.php';
