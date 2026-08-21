@@ -1,7 +1,6 @@
 import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
-import 'dart:js_util' as js_util;
 
+import 'dart:js_interop_unsafe';
 // ═══ JS interop موثوق في WASM/skwasm mode ═══
 // نمط: external @JS getter لـ window (مفيد globalThis) ثم extensions من
 // dart:js_interop_unsafe للتحكم الديناميكي.
@@ -26,7 +25,9 @@ String novaHrefImpl() {
   Object? propOf(Object? obj, String name) {
     if (obj == null) return null;
     try {
-      return js_util.getProperty<Object?>(obj, name);
+      final JSAny? r = (obj as JSObject)[name];
+      if (r == null) return null;
+      return r.dartify();
     } catch (_) {
       return null;
     }
@@ -35,7 +36,9 @@ String novaHrefImpl() {
     if (v == null) return '';
     if (v is String) return v;
     try {
-      return js_util.getProperty<String>(v, 'toString') as String;
+      final str = (v as JSObject)['toString'];
+      final called = (str as JSFunction).callAsConstructor<JSAny>();
+      return (called as JSString).toDart;
     } catch (_) {
       return v.toString();
     }
@@ -66,12 +69,10 @@ String novaHrefImpl() {
 /// (موثوق في dart2js وwasm بعكس getProperty<JSAny>)
 String? webOriginFallbackImpl() {
   try {
-    final loc = js_util.getProperty<Object?>(_window, 'location');
-    if (loc != null) {
-      final o = js_util.getProperty<Object?>(loc, 'origin');
-      final s = o is String ? o : o?.toString();
-      if (s != null && s.isNotEmpty && s.startsWith('http')) return s;
-    }
+    final JSObject loc = _window.getProperty<JSObject>('location'.toJS);
+    final JSAny? o = loc['origin'];
+    final s = (o is JSString) ? o.toDart : o?.dartify().toString();
+    if (s != null && s is String && s.isNotEmpty && s.startsWith('http')) return s;
   } catch (_) {}
   return null;
 }
