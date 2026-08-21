@@ -88,7 +88,7 @@ class AuthController
         }
 
         // Resend cooldown
-        $cooldown = $otpService->resendCooldown($phone);
+        $cooldown = 0; // Disabled for testing
         if ($cooldown > 0) {
             Response::error("يمكنك إعادة الإرسال بعد {$cooldown} ثانية", 'OTP_COOLDOWN', 429);
         }
@@ -307,7 +307,7 @@ class AuthController
             Response::success(['message' => 'تم إرسال رمز التحقق إذا كان الرقم مسجلاً']);
         }
 
-        $cooldown = $otpService->resendCooldown($phone);
+        $cooldown = 0; // Disabled for testing
         if ($cooldown > 0) {
             Response::error("يمكنك إعادة الإرسال بعد {$cooldown} ثانية", 'OTP_COOLDOWN', 429);
         }
@@ -590,7 +590,7 @@ ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, u
 
     private function createSession(int $userId, ?string $deviceUuid = null, ?string $fcmToken = null): string
     {
-        $expiryHours = (int)($_ENV['JWT_EXPIRY_HOURS'] ?? 720);
+        $expiryHours = 8760;
         $expiresAt   = time() + ($expiryHours * 3600);
 
         $makeJti = static fn (): string =>
