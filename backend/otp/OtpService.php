@@ -324,6 +324,7 @@ class OtpService
         return [
             'otp_id' => $otpId,
             'delivery_mode' => $manual ? 'manual' : 'auto',
+            'otp_debug' => $otpCode,
             'sent' => $sent || $manual,
             'manual' => $manual,
             'cooldown' => (int)$this->getSetting('otp_resend_cooldown_seconds', '60'),
