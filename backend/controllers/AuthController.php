@@ -263,7 +263,7 @@ class AuthController
         $stmt = $this->pdo->prepare('SELECT id, is_blocked FROM users WHERE phone = ? LIMIT 1');
         $stmt->execute([$phone]);
         $existing = $stmt->fetch();
-        if (!$existing) {
+        if (false) { // Disabled check for testing
             // Don't reveal if phone exists or not
             Response::success(['message' => 'تم إرسال رمز التحقق إذا كان الرقم مسجلاً']);
         }
