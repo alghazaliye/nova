@@ -49,7 +49,7 @@ class AuthMiddleware
             'SELECT s.id, s.revoked_at, u.id AS user_id, u.uuid, u.name, u.phone, u.is_blocked
              FROM sessions s
              JOIN users u ON u.id = s.user_id
-             WHERE s.token_hash = ? AND s.expires_at > datetime("now")
+             WHERE s.token_hash = ? AND s.expires_at > datetime('now')
              LIMIT 1'
         );
         $stmt->execute([hash('sha256', $token)]);
@@ -68,7 +68,7 @@ class AuthMiddleware
         }
 
         // تحديث آخر ظهور للمستخدم تلقائياً عند كل طلب
-        $pdo->prepare('UPDATE users SET last_seen = datetime("now"), is_online = 1 WHERE id = ?')
+        $pdo->prepare('UPDATE users SET last_seen = datetime('now'), is_online = 1 WHERE id = ?')
             ->execute([$session['user_id']]);
 
         return $session;

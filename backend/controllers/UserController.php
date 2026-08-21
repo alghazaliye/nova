@@ -102,7 +102,7 @@ class UserController
         }
 
         $params[] = $auth['user_id'];
-        $sql      = 'UPDATE users SET ' . implode(', ', $updates) . ', updated_at = datetime("now") WHERE id = ?';
+        $sql      = 'UPDATE users SET ' . implode(', ', $updates) . ', updated_at = datetime('now') WHERE id = ?';
         $this->pdo->prepare($sql)->execute($params);
 
         Response::success($this->getUserById((int)$auth['user_id']), 'تم تحديث الملف الشخصي بنجاح');
@@ -149,7 +149,7 @@ class UserController
 
         $avatarUrl = rtrim($_ENV['STORAGE_URL'] ?? '', '/') . '/avatars/' . $fileName;
 
-        $this->pdo->prepare('UPDATE users SET avatar = ?, updated_at = datetime("now") WHERE id = ?')
+        $this->pdo->prepare('UPDATE users SET avatar = ?, updated_at = datetime('now') WHERE id = ?')
                   ->execute([$avatarUrl, $auth['user_id']]);
 
         $user = $this->getUserById((int)$auth['user_id']);
@@ -245,7 +245,7 @@ class UserController
             // تجاهل — غير حرج
         }
         $this->pdo->prepare(
-            'UPDATE users SET is_online = 1, last_seen = datetime("now"), updated_at = datetime("now") WHERE id = ?'
+            'UPDATE users SET is_online = 1, last_seen = datetime('now'), updated_at = datetime('now') WHERE id = ?'
         )->execute([$userId]);
         Response::success(null, 'ok');
     }
@@ -256,7 +256,7 @@ class UserController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
         $this->pdo->prepare(
-            'UPDATE users SET is_online = 0, last_seen = datetime("now"), updated_at = datetime("now") WHERE id = ?'
+            'UPDATE users SET is_online = 0, last_seen = datetime('now'), updated_at = datetime('now') WHERE id = ?'
         )->execute([$userId]);
         Response::success(null, 'ok');
     }
@@ -407,7 +407,7 @@ class UserController
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, datetime("now"))'
+            'INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, datetime('now'))'
         );
         $stmt->execute([$myId, $targetId]);
 
@@ -597,7 +597,7 @@ class UserController
         $lastSeen  = $row['last_seen'] ?? null;
         if ($rawOnline && $lastSeen) {
             try {
-                // DB يخزن last_seen بـUTC (SQLite datetime("now"))، لذا تُفسَّر القيم بـUTC دائمًا
+                // DB يخزن last_seen بـUTC (SQLite datetime('now'))، لذا تُفسَّر القيم بـUTC دائمًا
                 $ls = new \DateTime((string)$lastSeen . ' UTC');
                 $now = new \DateTime('now UTC');
                 if ($now->getTimestamp() - $ls->getTimestamp() > 300) {

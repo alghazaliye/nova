@@ -52,7 +52,7 @@ class MessageController
         // Mark unread non-deleted messages sent to this user as delivered, then mark all as read
         foreach ($messages as $m) {
             if ((int)$m['sender_id'] !== $userId && in_array($m['status'], ['sent', 'delivered'], true) && $m['status'] !== 'deleted') {
-                $this->pdo->prepare('UPDATE messages SET status = "delivered", updated_at = datetime("now") WHERE id = ? AND status = "sent"')
+                $this->pdo->prepare('UPDATE messages SET status = "delivered", updated_at = datetime('now') WHERE id = ? AND status = "sent"')
                           ->execute([$m['id']]);
             }
         }
@@ -61,10 +61,10 @@ class MessageController
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $this->pdo->prepare(
                 "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at)
-		                 SELECT id, ?, datetime("now") FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+		                 SELECT id, ?, datetime('now') FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
             )->execute(array_merge([$userId], $ids, [$userId]));
             $this->pdo->prepare(
-                "UPDATE messages SET status = 'read', updated_at = datetime("now") WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+                "UPDATE messages SET status = 'read', updated_at = datetime('now') WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
             )->execute(array_merge($ids, [$userId]));
         }
 
@@ -209,14 +209,14 @@ class MessageController
             $uuid = UuidHelper::generate();
             $this->pdo->prepare(
                 'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, disappear_after, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, "sent", ?, datetime("now"), datetime("now"))'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, "sent", ?, datetime('now'), datetime('now'))'
             )->execute([$uuid, $convId, $userId, $replyToId, $type, $messageBody, $fileId, $clientMessageId, $disappearAfter]);
 
             $messageId = (int)$this->pdo->lastInsertId();
 
             // Update conversation last_message_id and updated_at
             $this->pdo->prepare(
-                'UPDATE conversations SET last_message_id = ?, updated_at = datetime("now") WHERE id = ?'
+                'UPDATE conversations SET last_message_id = ?, updated_at = datetime('now') WHERE id = ?'
             )->execute([$messageId, $convId]);
 
             $this->pdo->commit();
@@ -261,10 +261,10 @@ class MessageController
         // Save edit history (before/after) for admin tracking
         $this->pdo->prepare(
             'INSERT INTO message_edits (message_id, conversation_id, user_id, old_body, new_body, edited_at)
-             VALUES (?, ?, ?, ?, ?, datetime("now"))'
+             VALUES (?, ?, ?, ?, ?, datetime('now'))'
         )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'], $newBody]);
 
-        $this->pdo->prepare('UPDATE messages SET body = ?, updated_at = datetime("now") WHERE id = ?')
+        $this->pdo->prepare('UPDATE messages SET body = ?, updated_at = datetime('now') WHERE id = ?')
                   ->execute([$newBody, $id]);
 
         // Notify other members (for both-parties update sync)
@@ -299,19 +299,19 @@ class MessageController
         // Save deletion record with original content for admin tracking (before deletion)
         $this->pdo->prepare(
             'INSERT INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
-             VALUES (?, ?, ?, ?, ?, ?, datetime("now"))'
+             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))'
         )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'], $msg['type'], $scope]);
 
         if ($forAll) {
             // Delete for everyone: mark deleted server-side for all members
             $this->pdo->prepare(
-                'UPDATE messages SET status = "deleted", deleted_at = datetime("now"), body = NULL, updated_at = datetime("now") WHERE id = ?'
+                'UPDATE messages SET status = "deleted", deleted_at = datetime('now'), body = NULL, updated_at = datetime('now') WHERE id = ?'
             )->execute([$id]);
         } else {
             // Delete for self only: record per-user deletion (keeps the message visible to others)
             $this->pdo->prepare(
                 "INSERT OR REPLACE INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
-                 VALUES (?, ?, ?, ?, ?, 'self', datetime("now"))"
+                 VALUES (?, ?, ?, ?, ?, 'self', datetime('now'))"
             )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'] ?? '', $msg['type'] ?? 'text']);
         }
 
@@ -363,22 +363,22 @@ class MessageController
         $this->requireMember((int)$message['conversation_id'], $userId);
 
         $this->pdo->prepare(
-            "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, datetime("now"))"
+            "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, datetime('now'))"
         )->execute([$id, $userId]);
 
         // Update message status to read if all recipients have read it
         $this->pdo->prepare(
-            'UPDATE messages SET status = "read", updated_at = datetime("now") WHERE id = ? AND status NOT IN ("deleted", "read")'
+            'UPDATE messages SET status = "read", updated_at = datetime('now') WHERE id = ? AND status NOT IN ("deleted", "read")'
         )->execute([$id]);
 
         // Disappearing messages: delete immediately after reading when disappear_after = -1
         if ((int)($message['disappear_after'] ?? 0) === -1) {
             $this->pdo->prepare(
                 'INSERT INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
-                 VALUES (?, ?, ?, ?, ?, "expired", datetime("now"))'
+                 VALUES (?, ?, ?, ?, ?, "expired", datetime('now'))'
             )->execute([$id, (int)$message['conversation_id'], $userId, $message['body'], $message['type']]);
             $this->pdo->prepare(
-                'UPDATE messages SET status = "deleted", deleted_at = datetime("now"), body = NULL, updated_at = datetime("now") WHERE id = ?'
+                'UPDATE messages SET status = "deleted", deleted_at = datetime('now'), body = NULL, updated_at = datetime('now') WHERE id = ?'
             )->execute([$id]);
             $this->notifyMessageEvent((int)$message['conversation_id'], $id, 'disappeared', $userId);
         }
@@ -415,7 +415,7 @@ class MessageController
 
         $this->pdo->prepare(
             "INSERT OR REPLACE INTO message_reactions (message_id, user_id, reaction, created_at)
-             VALUES (?, ?, ?, datetime("now"))"
+             VALUES (?, ?, ?, datetime('now'))"
         )->execute([$id, $userId, $reaction]);
 
         Response::success(null, 'تم إضافة التفاعل');
@@ -465,7 +465,7 @@ class MessageController
         try {
             $this->pdo->prepare(
                 'UPDATE messages m
-                 SET status = "deleted", deleted_at = datetime("now"), body = NULL, updated_at = datetime("now")
+                 SET status = "deleted", deleted_at = datetime('now'), body = NULL, updated_at = datetime('now')
                  WHERE m.conversation_id = ? AND m.disappear_after = -1 AND m.deleted_at IS NULL
                    AND NOT EXISTS (
                        SELECT 1 FROM conversation_members cm2
@@ -488,7 +488,7 @@ class MessageController
     {
         try {
             $this->pdo->prepare(
-                "UPDATE messages SET status = 'deleted', deleted_at = datetime("now"), body = NULL, updated_at = datetime("now")
+                "UPDATE messages SET status = 'deleted', deleted_at = datetime('now'), body = NULL, updated_at = datetime('now')
                  WHERE conversation_id = ? AND disappear_after > 0 AND deleted_at IS NULL
                  AND (strftime('%s', 'now') - strftime('%s', COALESCE(updated_at, created_at))) > disappear_after"
             )->execute([$convId]);
@@ -563,7 +563,7 @@ class MessageController
             foreach ($stmt->fetchAll() as $member) {
                 $this->pdo->prepare(
                     'INSERT INTO notifications (user_id, type, title, body, data_json, created_at)
-                     VALUES (?, "message", ?, ?, ?, datetime("now"))'
+                     VALUES (?, "message", ?, ?, ?, datetime('now'))'
                 )->execute([
                     (int)$member['user_id'],
                     $title,
@@ -688,7 +688,7 @@ class MessageController
         $attachmentUuid = UuidHelper::generate();
         $stmt = $this->pdo->prepare(
             'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, thumbnail_path, duration, width, height, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime("now"))'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))'
         );
         $stmt->execute([
             $attachmentUuid, $userId, $type, basename((string)$file['name']), $fileName, $realMime,
@@ -706,10 +706,10 @@ class MessageController
             $msgUuid = UuidHelper::generate();
             $this->pdo->prepare(
                 'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, disappear_after, created_at, updated_at)
-                 VALUES (?, ?, ?, NULL, ?, \'\', ?, ?, "sent", ?, datetime("now"), datetime("now"))'
+                 VALUES (?, ?, ?, NULL, ?, \'\', ?, ?, "sent", ?, datetime('now'), datetime('now'))'
             )->execute([$msgUuid, $convId, $userId, $type, $fileId, $clientId, $disappearAfter]);
             $msgId = (int)$this->pdo->lastInsertId();
-            $this->pdo->prepare('UPDATE conversations SET last_message_id = ?, updated_at = datetime("now") WHERE id = ?')
+            $this->pdo->prepare('UPDATE conversations SET last_message_id = ?, updated_at = datetime('now') WHERE id = ?')
                   ->execute([$msgId, $convId]);
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -774,7 +774,7 @@ class MessageController
         $uuid = UuidHelper::generate();
         $stmt = $this->pdo->prepare(
             'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, duration, created_at)
-             VALUES (?, ?, "audio", "voice_message.webm", ?, ?, ?, ?, ?, datetime("now"))'
+             VALUES (?, ?, "audio", "voice_message.webm", ?, ?, ?, ?, ?, datetime('now'))'
         );
         $stmt->execute([$uuid, $userId, $fileName, $file['type'], (int)$file['size'], $relPath, $duration]);
         $fileId = (int)$this->pdo->lastInsertId();
@@ -785,10 +785,10 @@ class MessageController
             $msgUuid = UuidHelper::generate();
             $this->pdo->prepare(
                 'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, type, body, file_id, client_message_id, status, disappear_after, created_at, updated_at)
-                 VALUES (?, ?, ?, NULL, "audio", ?, ?, ?, "sent", 0, datetime("now"), datetime("now"))'
+                 VALUES (?, ?, ?, NULL, "audio", ?, ?, ?, "sent", 0, datetime('now'), datetime('now'))'
             )->execute([$msgUuid, $convId, $userId, '', $fileId, $clientId ?? $msgUuid]);
             $msgId = (int)$this->pdo->lastInsertId();
-            $this->pdo->prepare('UPDATE conversations SET last_message_id = ?, updated_at = datetime("now") WHERE id = ?')
+            $this->pdo->prepare('UPDATE conversations SET last_message_id = ?, updated_at = datetime('now') WHERE id = ?')
                   ->execute([$msgId, $convId]);
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -797,7 +797,7 @@ class MessageController
         }
 
         // إشعار المستخدمين الآخرين (عبر polling /conversations/{id}/messages)
-        $this->pdo->prepare('UPDATE conversations SET updated_at = datetime("now") WHERE id = ?')->execute([$convId]);
+        $this->pdo->prepare('UPDATE conversations SET updated_at = datetime('now') WHERE id = ?')->execute([$convId]);
 
         Response::success(['id' => $msgId, 'type' => 'audio', 'file_id' => $fileId], 'تم إرسال الرسالة الصوتية', 201);
     }
@@ -817,7 +817,7 @@ class MessageController
                 // صالح 4 ثوانٍ؛ كل حدث كتابة يعيد تعيينه
                 $this->pdo->prepare('DELETE FROM typing_status WHERE conversation_id = ? AND user_id = ?')->execute([$convId, $userId]);
                 $this->pdo->prepare(
-                    'INSERT INTO typing_status (conversation_id, user_id, expires_at, updated_at) VALUES (?, ?, datetime("now", "+4 seconds"), datetime("now"))'
+                    'INSERT INTO typing_status (conversation_id, user_id, expires_at, updated_at) VALUES (?, ?, datetime("now", "+4 seconds"), datetime('now'))'
                 )->execute([$convId, $userId]);
                 Response::success(['typing' => true, 'expires_at' => '+4s'], 'ok');
             } else {
@@ -842,7 +842,7 @@ class MessageController
                 'SELECT ts.user_id, u.name, u.avatar
                  FROM typing_status ts
                  JOIN users u ON u.id = ts.user_id
-                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime("now") AND ts.user_id != ?'
+                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime('now') AND ts.user_id != ?'
             );
             $stmt->execute([$convId, $userId]);
             $typing = $stmt->fetchAll(PDO::FETCH_ASSOC);
