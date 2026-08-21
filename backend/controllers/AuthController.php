@@ -18,7 +18,8 @@ class AuthController
     // POST /api/v1/auth/register
     public function register(): void
     {
-        RateLimitMiddleware::checkByIp();
+        try {
+            RateLimitMiddleware::checkByIp();
         // Server-side enforcement of registration methods
         require_once __DIR__ . '/../helpers/AuthConfigService.php';
         $cfg = new AuthConfigService();
@@ -94,6 +95,10 @@ class AuthController
         }
 
         Response::success($responseData, 'تم إرسال رمز التحقق إلى رقم هاتفك');
+        } catch (\Throwable $e) {
+            error_log("[nova error] AuthController::register: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+            throw $e;
+        }
     }
 
     // POST /api/v1/auth/verify-otp
