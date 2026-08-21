@@ -19,12 +19,10 @@ class AuthController
     public function register(): void
     {
         RateLimitMiddleware::checkByIp();
-        // Bypass registration method enforcement for development
-        /*
+        // Server-side enforcement of registration methods
         require_once __DIR__ . '/../helpers/AuthConfigService.php';
         $cfg = new AuthConfigService();
         $cfg->assertRegistrationMethod('phone');
-        */
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
@@ -244,12 +242,10 @@ class AuthController
         if (!str_starts_with($phone, '+')) {
             $phone = '+966' . ltrim($phone, '0');
         }
-        // Bypass login method enforcement for development
-        /*
+        // Server-side enforcement of login methods
         require_once __DIR__ . '/../helpers/AuthConfigService.php';
         $cfg = new AuthConfigService();
         $cfg->assertLoginMethod('phone');
-        */
 
         // Check user exists
         $stmt = $this->pdo->prepare('SELECT id, is_blocked FROM users WHERE phone = ? LIMIT 1');

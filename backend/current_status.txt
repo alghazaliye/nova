@@ -1,0 +1,24 @@
+# Nova Messenger - Current Status (Aug 22, 2026)
+
+## Database Info (SQLite on Render)
+- Database File: `backend/config/nova.sqlite`
+- Critical Tables: `users`, `otp_verifications`, `otp_rate_limits`, `sessions`, `privacy_settings`.
+- Manus Test User: phone=700000000, is_verified=1.
+- Admin Test User: phone=738155861, is_verified=1.
+
+## Auth Logic
+- `AuthController.php` handles `register`, `login`, `verifyOtp`.
+- `OtpService.php` handles creation, sending, and verification of OTPs.
+- SQLite Compatibility: Must use `datetime('now')` and avoid MySQL-specific syntax.
+
+## Recent Fixes
+- Fixed `base href` in `nova_flutter/web/index.html` to `/web_app/`.
+- Fixed `UserController.php` to handle missing privacy settings gracefully.
+- Fixed `OtpService.php` SQLite datetime syntax for rate limiting.
+- Restored `AuthController.php` registration logic.
+
+## Pending Tasks
+- Test registration flow on Render.
+- Verify Blue Badge appearance in Chat.
+- Test Privacy screen again.
+- Test QR and Calls.
