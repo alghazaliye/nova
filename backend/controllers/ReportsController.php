@@ -42,9 +42,9 @@ class ReportsController
         $convId = !empty($body['conversation_id']) ? (int)$body['conversation_id'] : null;
         $msgId  = !empty($body['message_id']) ? (int)$body['message_id'] : null;
 
-        // If a message was reported, make sure it belongs to the reported conversation/user
+        // If a message was reported, make sure it exists and grab its conversation.
         if ($msgId !== null) {
-            $ms = $this->pdo->prepare('SELECT conversation_id, sender_id FROM messages WHERE id = ? LIMIT 1');
+            $ms = $this->pdo->prepare('SELECT id, conversation_id, sender_id FROM messages WHERE id = ? LIMIT 1');
             $ms->execute([$msgId]);
             $m  = $ms->fetch();
             if (!$m) {
@@ -55,19 +55,36 @@ class ReportsController
             }
         }
 
-        // Prevent duplicate pending reports
-        $stmt = $this->pdo->prepare(
-            'SELECT id FROM reports WHERE reporter_id = ? AND reported_user_id = ? AND (message_id = ? OR (message_id IS NULL AND ? IS NULL)) AND status = "pending" LIMIT 1'
-        );
-        $stmt->execute([$reporter, $reportedId, $msgId, $msgId]);
-        if ($stmt->fetch()) {
+        // Prevent duplicate pending reports from the same reporter about the
+        // same reported user. Match on message_id when a message is reported,
+        // otherwise treat any pending report on the same user+reason as duplicate.
+        if ($msgId !== null) {
+            $dupSql  = "SELECT id FROM reports WHERE reporter_id = ? AND reported_user_id = ? AND message_id = ? AND status = 'pending' LIMIT 1";
+            $dupParams = [$reporter, $reportedId, $msgId];
+        } else {
+            $dupSql  = "SELECT id FROM reports WHERE reporter_id = ? AND reported_user_id = ? AND reason = ? AND status = 'pending' LIMIT 1";
+            $dupParams = [$reporter, $reportedId, $reason];
+        }
+
+        $dup = $this->pdo->prepare($dupSql);
+        $dup->execute($dupParams);
+        if ($dup->fetch()) {
             Response::error('سبق الإبلاغ عن هذا المستخدم وسيتم مراجعته قريبًا', 'DUPLICATE_REPORT', 409);
         }
 
-        $this->pdo->prepare(
-            'INSERT INTO reports (reporter_id, reported_user_id, message_id, conversation_id, reason, description, status, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, "pending", NOW())'
-        )->execute([$reporter, $reportedId, $msgId, $convId, $reason, $desc]);
+        // Use a real transaction so concurrent duplicate reports cannot pass.
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare(
+                "INSERT INTO reports (reporter_id, reported_user_id, message_id, conversation_id, reason, description, status, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', datetime('now','localtime'))"
+            )->execute([$reporter, $reportedId, $msgId, $convId, $reason, $desc]);
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            try { $this->pdo->rollBack(); } catch (\Throwable $ignore) {}
+            throw $e;
+        }
 
         Response::success(null, 'تم تسجيل البلاغ وسيتم مراجعته من قبل الإدارة', 201);
     }

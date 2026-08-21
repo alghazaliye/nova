@@ -15,6 +15,9 @@ if (PHP_SAPI !== 'cli') {
         $env = $_ENV['APP_ENV'] ?? 'production';
         $msg = ($env === 'development') ? $e->getMessage() : 'خطأ داخلي في الخادم';
         $payload = ['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'];
+        if ($env === 'development') {
+            $payload['trace'] = $e->getFile().':'.$e->getLine().' | '.$e->getTraceAsString();
+        }
         echo json_encode($payload,JSON_UNESCAPED_UNICODE);
     });
 }

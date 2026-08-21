@@ -58,6 +58,9 @@ class Database
                 try {
                     self::$instance->exec("PRAGMA journal_mode = WAL");
                     self::$instance->exec("PRAGMA busy_timeout = 5000");
+                    // Read-uncommitted so that statements within the same request
+                    // (e.g. INSERT then SELECT) always see their own writes under WAL.
+                    self::$instance->exec("PRAGMA read_uncommitted = 1");
                     self::$instance->exec("PRAGMA foreign_keys = ON");
                     self::$instance->exec("PRAGMA encoding = 'UTF-8'");
                 } catch (PDOException $e) {
