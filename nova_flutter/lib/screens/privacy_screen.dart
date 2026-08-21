@@ -21,6 +21,13 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     'everybody': 'الجميع',
     'contacts': 'جهات الاتصال',
     'nobody': 'لا أحد',
+    'none': 'لا أحد',
+    'name_username': 'الاسم + اسم المستخدم',
+    'username': 'اسم المستخدم فقط',
+    'phone': 'رقم الهاتف فقط',
+    'email': 'البريد الإلكتروني فقط',
+    'name_phone': 'الاسم + رقم الهاتف',
+    'name_email': 'الاسم + البريد',
   };
 
   @override
@@ -37,7 +44,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     try {
       final res = await ApiService.get('/privacy').timeout(const Duration(seconds: 15));
       if (!mounted) return;
-      if (res is Map && res['success'] == true && res['data'] is Map) {
+      if (res['success'] == true && res['data'] is Map) {
         setState(() {
           _settings = Map<String, dynamic>.from(res['data'] as Map<String, dynamic>);
           // API returns read_receipts as bool; keep int semantics for the toggle
@@ -63,16 +70,162 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     }
   }
 
-  Future<void> _update(String key, String value) async {
+  Future<void> _update(String key, dynamic value) async {
     final payload = <String, dynamic>{key: value};
     final res = await ApiService.put('/privacy', body: payload);
     if (!mounted) return;
     if (res['success'] == true) {
-      _load();
+      setState(() => _settings[key] = value);
       showToast(context, 'تم الحفظ');
     } else {
       showToast(context, res['message'] ?? 'فشل الحفظ');
     }
+  }
+
+  bool _boolSetting(String key) => _settings[key] == true || _settings[key] == 1;
+
+  Future<void> _showVisibilitySheet(String title, String key, String current) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.42),
+      builder: (c) {
+        final cl = NovaColors.of(c);
+        return Container(
+          decoration: BoxDecoration(
+            color: cl.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(c).bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                    width: 42, height: 4,
+                    decoration: BoxDecoration(color: cl.line, borderRadius: BorderRadius.circular(5))),
+              ),
+              const SizedBox(height: 15),
+              Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cl.text)),
+              const SizedBox(height: 14),
+              ...['everybody', 'contacts', 'nobody'].map((v) => PressScale(
+                    onTap: () => Navigator.pop(c, v),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Radio<String>(
+                            value: v,
+                            groupValue: current,
+                            onChanged: null,
+                            activeColor: cl.accent,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_labels[v]!,
+                                style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
+                          ),
+                          if (v == current)
+                            const Icon(Icons.check, size: 18, color: Color(0xFF25D366)),
+                        ],
+                      ),
+                    ),
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null && selected != current && mounted) {
+      _update(key, selected);
+    }
+  }
+
+  Future<void> _showIdentitySheet(String title, String key, String current) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.42),
+      builder: (c) {
+        final cl = NovaColors.of(c);
+        return Container(
+          decoration: BoxDecoration(
+            color: cl.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(c).bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                    width: 42, height: 4,
+                    decoration: BoxDecoration(color: cl.line, borderRadius: BorderRadius.circular(5))),
+              ),
+              const SizedBox(height: 15),
+              Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cl.text)),
+              const SizedBox(height: 14),
+              ...['name_username', 'username', 'phone', 'email', 'name_phone', 'name_email'].map((v) => PressScale(
+                    onTap: () => Navigator.pop(c, v),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Radio<String>(
+                            value: v,
+                            groupValue: current,
+                            onChanged: null,
+                            activeColor: cl.accent,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_labels[v]!,
+                                style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
+                          ),
+                          if (v == current)
+                            const Icon(Icons.check, size: 18, color: Color(0xFF25D366)),
+                        ],
+                      ),
+                    ),
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null && selected != current && mounted) {
+      _update(key, selected);
+    }
+  }
+
+  Widget _toggleRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String key,
+  }) {
+    final on = _boolSetting(key);
+    return RowItem(
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: NovaColors.of(context).surface2,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(icon, size: 20, color: NovaColors.of(context).text),
+      ),
+      title: title,
+      subtitle: subtitle,
+      trailing: Switch(
+        value: on,
+        onChanged: (_) => _update(key, on ? 0 : 1),
+        activeColor: NovaColors.of(context).accent,
+      ),
+      onTap: () => _update(key, on ? 0 : 1),
+    );
   }
 
   Future<void> _toggleReadReceipts() async {
@@ -119,63 +272,13 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     );
   }
 
-  Future<void> _showVisibilitySheet(String title, String key, String current) async {
-    final choices = ['everybody', 'contacts', 'nobody'];
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.42),
-      builder: (c) {
-        final cl = NovaColors.of(c);
-        return Container(
-          decoration: BoxDecoration(
-            color: cl.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-          ),
-          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(c).bottom + 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                    width: 42, height: 4,
-                    decoration: BoxDecoration(color: cl.line, borderRadius: BorderRadius.circular(5))),
-              ),
-              const SizedBox(height: 15),
-              Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cl.text)),
-              const SizedBox(height: 14),
-              ...choices.map((v) => PressScale(
-                    onTap: () => Navigator.pop(c, v),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Radio<String>(
-                            value: v,
-                            groupValue: current,
-                            onChanged: null,
-                            activeColor: cl.accent,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(_labels[v]!,
-                                style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
-                          ),
-                          if (v == current)
-                            const Icon(Icons.check, size: 18, color: Color(0xFF25D366)),
-                        ],
-                      ),
-                    ),
-                  )),
-            ],
-          ),
-        );
-      },
+  Widget _sectionTitle(String title) {
+    final c = NovaColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+      child: Text(title,
+          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: c.muted)),
     );
-    if (selected != null && selected != current && mounted) {
-      _update(key, selected);
-    }
   }
 
   @override
@@ -220,6 +323,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 8),
+                  _sectionTitle('من يمكنه رؤية معلوماتي'),
                   NovaCard(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Column(
@@ -231,6 +335,12 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                           key: 'last_seen_visibility',
                         ),
                         _visibilityRow(
+                          icon: Icons.cloud,
+                          title: 'حالة النشاط (متصل)',
+                          subtitle: 'من يمكنه رؤية أنك متصل الآن',
+                          key: 'online_status',
+                        ),
+                        _visibilityRow(
                           icon: Icons.photo,
                           title: 'الصورة الشخصية',
                           subtitle: 'من يمكنه رؤية صورتك الشخصية',
@@ -238,11 +348,117 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                         ),
                         _visibilityRow(
                           icon: Icons.text_fields,
-                          title: 'حالة النشاط (متصل)',
-                          subtitle: 'من يمكنه رؤية أنك متصل الآن',
+                          title: 'حالة الحالة (About)',
+                          subtitle: 'من يمكنه رؤية حالتك النصية',
                           key: 'status_visibility',
                         ),
-                        const Divider(height: 1),
+                        _visibilityRow(
+                          icon: Icons.phone,
+                          title: 'رقم الهاتف',
+                          subtitle: 'من يمكنه رؤية رقم هاتفك',
+                          key: 'phone_visibility',
+                        ),
+                        _visibilityRow(
+                          icon: Icons.email,
+                          title: 'البريد الإلكتروني',
+                          subtitle: 'من يمكنه رؤية بريدك الإلكتروني',
+                          key: 'email_visibility',
+                        ),
+                      ],
+                    ),
+                  ),
+                  _sectionTitle('من يمكنه التواصل معي'),
+                  NovaCard(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      children: [
+                        _visibilityRow(
+                          icon: Icons.message,
+                          title: 'الرسائل',
+                          subtitle: 'من يمكنه إرسال رسائل لي',
+                          key: 'messages_from',
+                        ),
+                        _visibilityRow(
+                          icon: Icons.call,
+                          title: 'المكالمات',
+                          subtitle: 'من يمكنه الاتصال بي',
+                          key: 'calls_from',
+                        ),
+                        _visibilityRow(
+                          icon: Icons.group,
+                          title: 'المجموعات',
+                          subtitle: 'من يمكنه إضافتي إلى المجموعات',
+                          key: 'groups_from',
+                        ),
+                      ],
+                    ),
+                  ),
+                  _sectionTitle('قابلية الاكتشاف'),
+                  NovaCard(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      children: [
+                        _toggleRow(
+                          icon: Icons.phone,
+                          title: 'البحث برقم الهاتف',
+                          subtitle: _boolSetting('find_by_phone')
+                              ? 'يمكن للآخرين العثور عليك برقم هاتفك'
+                              : 'لا يمكن العثور عليك برقم هاتفك',
+                          key: 'find_by_phone',
+                        ),
+                        _toggleRow(
+                          icon: Icons.email,
+                          title: 'البحث بالبريد الإلكتروني',
+                          subtitle: _boolSetting('find_by_email')
+                              ? 'يمكن للآخرين العثور عليك ببريدك الإلكتروني'
+                              : 'لا يمكن العثور عليك ببريدك الإلكتروني',
+                          key: 'find_by_email',
+                        ),
+                        _toggleRow(
+                          icon: Icons.person_search,
+                          title: 'البحث باسم المستخدم',
+                          subtitle: _boolSetting('find_by_username')
+                              ? 'يمكن للآخرين العثور عليك باسم المستخدم'
+                              : 'لا يمكن العثور عليك باسم المستخدم',
+                          key: 'find_by_username',
+                        ),
+                      ],
+                    ),
+                  ),
+                  _sectionTitle('الهوية الظاهرة'),
+                  NovaCard(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: RowItem(
+                      leading: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: c.surface2,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(Icons.badge, size: 20, color: c.text),
+                      ),
+                      title: 'الاسم الظاهر للآخرين',
+                      subtitle: 'ما يراه الآخرون بدلاً من اسمك',
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: c.accent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                            _labels[_settings['display_identity'] ?? 'name_username'] ?? 'name_username',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.accent)),
+                      ),
+                      onTap: () => _showIdentitySheet('الاسم الظاهر للآخرين',
+                          'display_identity', (_settings['display_identity'] ?? 'name_username') as String),
+                    ),
+                  ),
+                  _sectionTitle('إعدادات أخرى'),
+                  NovaCard(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      children: [
                         RowItem(
                           leading: Container(
                             width: 42,
@@ -264,6 +480,14 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                           ),
                           onTap: () => _toggleReadReceipts(),
                         ),
+                        _toggleRow(
+                          icon: Icons.phonelink,
+                          title: 'السماح بالتواصل عبر الهاتف',
+                          subtitle: _boolSetting('allow_by_phone')
+                              ? 'يمكن للآخرين بدء محادثة معك من رقمك'
+                              : 'لا يمكن بدء محادثة من رقمك',
+                          key: 'allow_by_phone',
+                        ),
                       ],
                     ),
                   ),
@@ -272,7 +496,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c.text)),
                   const SizedBox(height: 8),
                   Text(
-                    'إذا اخترت \"لا أحد\" لآخر الظهور، لن تتمكن أنت أيضًا من رؤية آخر ظهور الآخرين.',
+                    'إذا اخترت "لا أحد" لآخر الظهور، لن تتمكن أنت أيضًا من رؤية آخر ظهور الآخرين. إعدادات "جهات الاتصال" تعتمد على حفظ الطرفين لبعضهما في جهات الاتصال.',
                     style: TextStyle(fontSize: 13, color: c.muted),
                   ),
                 ],

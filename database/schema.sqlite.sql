@@ -252,6 +252,7 @@ CREATE TABLE `messages` (
 ,  `created_at` datetime NOT NULL DEFAULT current_timestamp
 ,  `updated_at` datetime NOT NULL DEFAULT current_timestamp 
 ,  `deleted_at` datetime DEFAULT NULL
+,  `deleted_by` integer DEFAULT NULL
 ,  UNIQUE (`uuid`)
 ,  UNIQUE (`conversation_id`,`client_message_id`)
 ,  CONSTRAINT `fk_messages_attachment` FOREIGN KEY (`file_id`) REFERENCES `attachments` (`id`) ON DELETE SET NULL
@@ -349,6 +350,9 @@ CREATE TABLE `plans` (
 ,  `description` varchar(500) DEFAULT NULL
 ,  `features` text DEFAULT NULL
 ,  `is_active` integer NOT NULL DEFAULT 1
+,  `plan_type` text NOT NULL DEFAULT 'free'
+,  `enable_verification` integer NOT NULL DEFAULT 0
+,  `verification_duration_days` integer DEFAULT NULL
 );
 CREATE TABLE `reports` (
   `id` integer  NOT NULL PRIMARY KEY AUTOINCREMENT
@@ -458,6 +462,7 @@ CREATE TABLE `users` (
 ,  `is_online` integer NOT NULL DEFAULT 0
 ,  `last_seen` datetime DEFAULT NULL
 ,  `is_verified` integer NOT NULL DEFAULT 0
+,  `verified_until` datetime DEFAULT NULL
 ,  `is_blocked` integer NOT NULL DEFAULT 0
 ,  `blocked_at` datetime DEFAULT NULL
 ,  `created_at` datetime NOT NULL DEFAULT current_timestamp
@@ -554,3 +559,51 @@ CREATE TABLE message_edits (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INT
 CREATE TABLE message_deletions (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER NOT NULL, conversation_id INTEGER NOT NULL, deleted_by INTEGER NOT NULL, original_body TEXT, original_type VARCHAR(50), scope_type VARCHAR(20) NOT NULL DEFAULT 'for_me', deleted_at DATETIME NOT NULL DEFAULT (datetime('now','localtime')));
 CREATE UNIQUE INDEX idx_message_deletions_unique ON message_deletions (message_id, conversation_id, deleted_by, scope_type);
 CREATE TABLE typing_status (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL, user_id INTEGER NOT NULL, expires_at DATETIME NOT NULL, updated_at DATETIME NOT NULL DEFAULT (datetime('now','localtime')), UNIQUE(conversation_id, user_id));
+CREATE TABLE `user_bans` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT
+, `user_id` integer NOT NULL
+, `reason` text DEFAULT NULL
+, `banned_by` integer DEFAULT NULL
+, `banned_at` datetime NOT NULL DEFAULT current_timestamp
+, `suspend_until` datetime DEFAULT NULL
+, `unbanned_at` datetime DEFAULT NULL
+, `unbanned_by` integer DEFAULT NULL
+, CONSTRAINT `fk_user_bans_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+);
+CREATE INDEX idx_user_bans_user_id ON user_bans (user_id);
+CREATE TABLE `user_appeals` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT
+, `user_id` integer NOT NULL
+, `contact_value` text DEFAULT NULL
+, `reason` text NOT NULL
+, `status` text NOT NULL DEFAULT 'pending'
+, `admin_note` text DEFAULT NULL
+, `reviewed_by` integer DEFAULT NULL
+, `reviewed_at` datetime DEFAULT NULL
+, `created_at` datetime NOT NULL DEFAULT current_timestamp
+, CONSTRAINT `fk_user_appeals_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+);
+CREATE INDEX idx_user_appeals_user_id ON user_appeals (user_id);
+CREATE TABLE `report_attachments` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT
+, `report_id` integer NOT NULL
+, `message_id` integer NOT NULL
+, `conversation_id` integer NOT NULL
+, `created_at` datetime NOT NULL DEFAULT current_timestamp
+, UNIQUE (report_id, message_id)
+, CONSTRAINT `fk_report_attachments_report` FOREIGN KEY (`report_id`) REFERENCES `reports` (`id`) ON DELETE CASCADE
+, CONSTRAINT `fk_report_attachments_message` FOREIGN KEY (`message_id`) REFERENCES `messages` (`id`) ON DELETE CASCADE
+);
+CREATE TABLE `payment_requests` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT
+, `user_id` integer NOT NULL
+, `plan_id` integer NOT NULL
+, `status` text NOT NULL DEFAULT 'pending'
+, `receipt_path` text DEFAULT NULL
+, `admin_note` text DEFAULT NULL
+, `reviewed_by` integer DEFAULT NULL
+, `reviewed_at` datetime DEFAULT NULL
+, `created_at` datetime NOT NULL DEFAULT current_timestamp
+, CONSTRAINT `fk_payment_requests_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+, CONSTRAINT `fk_payment_requests_plan` FOREIGN KEY (`plan_id`) REFERENCES `plans` (`id`) ON DELETE CASCADE
+);

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
-$admin = requireAdminLogin(); requirePermission($admin, 'users.manage');
+$admin = requireAdminLogin(); requirePermission($admin, 'subscriptions.view');
 $pageTitle = 'الحسابات المميزة'; $pdo = getAdminDB();
 
 $message = '';
@@ -53,7 +53,7 @@ $search = trim($_GET['q'] ?? '');
 $where = $search !== '' ? 'WHERE u.name LIKE ? OR u.phone LIKE ?' : '';
 $params = $search !== '' ? ["%$search%", "%$search%"] : [];
 $rows = $pdo->prepare(
-    "SELECT u.id, u.name, u.phone, u.is_verified,
+    "SELECT u.id, u.name, u.phone, u.is_verified, u.verified_until,
             us.id sub_id, us.plan_id, us.status, us.expires_at
      FROM users u
      LEFT JOIN user_subscriptions us ON us.user_id = u.id
@@ -91,7 +91,7 @@ include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.p
   </form>
 </div>
 <div class="filters"><form method="GET" class="search"><span>⌕</span><input name="q" placeholder="ابحث بالاسم أو الرقم..." value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>"><button class="btn sm" type="submit">بحث</button></form></div>
-<div class="card panel tablewrap"><table class="table"><thead><tr><th>المستخدم</th><th>الباقة</th><th>ينتهي في</th><th>الحالة</th><th>التحقق</th><th>إجراء</th></tr></thead><tbody>
+<div class="card panel tablewrap"><table class="table"><thead><tr><th>المستخدم</th><th>الباقة</th><th>ينتهي في</th><th>التحقق حتى</th><th>الحالة</th><th>التحقق</th><th>إجراء</th></tr></thead><tbody>
 <?php
 $statusStyle = ['active'=>'rgba(34,197,94,.1);color:#16a34a','expired'=>'rgba(239,68,68,.1);color:#dc2626','cancelled'=>'rgba(245,158,11,.1);color:#d97706'];
 foreach ($subs as $s):
@@ -104,7 +104,7 @@ foreach ($subs as $s):
   <td><?= $planRef ? htmlspecialchars((string)$planRef) : '<span style="color:var(--muted)">لا يوجد</span>' ?></td>
   <td><?= !empty($s['expires_at']) ? date('d/m/Y H:i', strtotime((string)$s['expires_at'])) : '—' ?></td>
   <td><span style="background:<?= $statusStyle[$status] ?? 'var(--surface2)' ?>;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:800"><?= ['active'=>'نشط','expired'=>'منتهي','cancelled'=>'ملغي'][$status] ?? $status ?></span></td>
-  <td style="text-align:center"><?= (int)$s['is_verified'] ? '<span style="color:#2563eb">✓ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
+  <td><?= !empty($s['verified_until']) ? date('d/m/Y', strtotime((string)$s['verified_until'])) : '—' ?></td><td style="text-align:center"><?= (int)$s['is_verified'] ? '<span style="color:#2563eb">✓ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
   <td><?php if ($status === 'active'): ?>
       <form method="POST" style="display:inline"><input type="hidden" name="_csrf" value="<?= csrfToken() ?>"><input type="hidden" name="action" value="cancel"><input type="hidden" name="sub_id" value="<?= (int)$s['sub_id'] ?>"><button class="btn sm" type="submit" style="background:rgba(239,68,68,.1);color:#dc2626">إلغاء</button></form>
       <?php endif; ?></td>

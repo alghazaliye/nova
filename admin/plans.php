@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 $admin     = requireAdminLogin();
-requirePermission($admin, 'users.manage');
+requirePermission($admin, 'plans.view');
 $pageTitle = 'إدارة الباقات والاشتراكات';
 $pdo       = getAdminDB();
 
@@ -21,8 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'add' && hasPermission($admin, 'users.manage')) {
+    if ($action === 'add' && hasPermission($admin, 'plans.view')) {
         $name = trim((string)($_POST['plan_name'] ?? ''));
+        $planType = in_array($_POST['plan_type'] ?? '', ['free', 'verification', 'premium', 'pro', 'custom'], true) ? $_POST['plan_type'] : 'premium';
+        $enableVerification = !empty($_POST['enable_verification']) ? 1 : 0;
+        $verificationDays = max(1, (int)($_POST['verification_duration_days'] ?? 30));
         $price = is_numeric($_POST['plan_price'] ?? null) ? (float)$_POST['plan_price'] : 0.0;
         $period = in_array($_POST['plan_period'] ?? '', ['monthly', 'yearly', 'lifetime'], true) ? $_POST['plan_period'] : 'monthly';
         $maxDevices = max(1, (int)($_POST['plan_max_devices'] ?? 1));
@@ -31,23 +34,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $features = array_filter(array_map('trim', explode("\n", (string)($_POST['plan_features'] ?? ''))));
         try {
             $stmt = $pdo->prepare(
-                'INSERT INTO plans (name, description, price, currency, period, max_devices, features, badge_color, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)'
+                'INSERT INTO plans (name, description, price, currency, period, max_devices, features, badge_color, is_active,
+                 plan_type, enable_verification, verification_duration_days)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)'
             );
-            $stmt->execute([$name, trim((string)($_POST['plan_description'] ?? '')), $price, $currency, $period, $maxDevices, $features ? json_encode($features, JSON_UNESCAPED_UNICODE) : null, $color]);
+            $stmt->execute([$name, trim((string)($_POST['plan_description'] ?? '')), $price, $currency, $period, $maxDevices, $features ? json_encode($features, JSON_UNESCAPED_UNICODE) : null, $color,
+                            $planType, $enableVerification, $verificationDays]);
             logAudit($admin, 'PLAN_CREATE', 'plan', (int)$pdo->lastInsertId(), "إنشاء باقة: {$name}");
             $message = 'تم إنشاء الباقة بنجاح';
         } catch (\Throwable $e) { $error = 'خطأ: ' . $e->getMessage(); }
     }
 
-    if ($action === 'toggle' && hasPermission($admin, 'users.manage')) {
+    if ($action === 'toggle' && hasPermission($admin, 'plans.view')) {
         $planId = (int)$_POST['plan_id'];
         $pdo->prepare('UPDATE plans SET is_active = IF(is_active = 1, 0, 1) WHERE id = ?')->execute([$planId]);
         logAudit($admin, 'PLAN_TOGGLE', 'plan', $planId, "تبديل حالة الباقة #{$planId}");
         $message = 'تم تغيير حالة الباقة';
     }
 
-    if ($action === 'delete' && hasPermission($admin, 'users.manage')) {
+    if ($action === 'delete' && hasPermission($admin, 'plans.view')) {
         $planId = (int)$_POST['plan_id'];
         $pdo->prepare("UPDATE user_subscriptions SET plan_id = NULL WHERE plan_id = ?")->execute([$planId]);
         $pdo->prepare('DELETE FROM plans WHERE id = ?')->execute([$planId]);
@@ -137,6 +142,14 @@ include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.p
               <option value="monthly">شهري</option><option value="yearly">سنوي</option><option value="lifetime">مدى الحياة</option>
             </select></div>
           <div><label class="form-label">حد الأجهزة (للباركود) *</label><input class="form-control" type="number" min="1" name="plan_max_devices" required value="1"></div>
+          <div><label class="form-label">نوع الباقة</label>
+            <select class="form-control" name="plan_type">
+              <option value="free">مجانية</option><option value="verification">توثيق</option><option value="premium">مميزة</option><option value="pro">احترافية</option><option value="custom">مخصصة</option>
+            </select></div>
+          <div style="display:flex;align-items:flex-end;gap:8px">
+            <div style="flex:1"><label class="form-label">مدة التوثيق (يوم)</label><input class="form-control" type="number" min="1" name="verification_duration_days" value="30"></div>
+            <div style="flex:1;padding-bottom:0"><label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;height:42px;padding-top:0"><input type="checkbox" name="enable_verification" value="1" style="width:18px;height:18px"> تفعيل التوثيق</label></div>
+          </div>
           <div><label class="form-label">لون شارة التوثيق</label>
             <select class="form-control" name="badge_color">
               <option value="blue">أزرق</option><option value="gold">ذهبي</option><option value="platinum">بلاتيني</option><option value="green">أخضر</option><option value="gray">رمادي</option>
@@ -148,13 +161,15 @@ include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.p
     </div>
 
     <div class="card panel tablewrap"><h3>📦 الباقات الحالية</h3>
-      <table class="table"><thead><tr><th>الباقة</th><th>السعر</th><th>الفترة</th><th>حد الأجهزة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+      <table class="table"><thead><tr><th>الباقة</th><th>النوع</th><th>السعر</th><th>الفترة</th><th>حد الأجهزة</th><th>التوثيق</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
       <?php foreach ($plans as $p): ?>
       <tr>
         <td><b><?= htmlspecialchars((string)$p['name']) ?></b><br><small style="color:var(--muted)"><?= htmlspecialchars((string)($p['description'] ?? '')) ?></small></td>
+        <td><span style="background:rgba(99,102,241,.1);color:#6366f1;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:800"><?= ['free'=>'مجانية','verification'=>'توثيق','premium'=>'مميزة','pro'=>'احترافية','custom'=>'مخصصة'][$p['plan_type'] ?? 'premium'] ?? ($p['plan_type'] ?? '—') ?></span></td>
         <td><?= number_format((float)$p['price'], 2) ?> <?= htmlspecialchars((string)$p['currency']) ?></td>
         <td><?= ['monthly'=>'شهري','yearly'=>'سنوي','lifetime'=>'مدى الحياة'][$p['period']] ?? $p['period'] ?></td>
         <td><b><?= (int)$p['max_devices'] ?></b> جهاز</td>
+        <td><?= !empty($p['enable_verification']) ? '✓ ' . (int)$p['verification_duration_days'] . ' يوم' : '<span style="color:var(--muted)">—</span>' ?></td>
         <td><span style="background:<?= $p['is_active'] ? 'rgba(34,197,94,.1);color:#16a34a' : 'rgba(239,68,68,.1);color:#dc2626' ?>;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:800"><?= $p['is_active'] ? 'مفعلة' : 'معطلة' ?></span></td>
         <td><div style="display:flex;gap:5px">
           <form method="POST" style="display:inline"><input type="hidden" name="_csrf" value="<?= csrfToken() ?>"><input type="hidden" name="action" value="toggle"><input type="hidden" name="plan_id" value="<?= (int)$p['id'] ?>"><button class="btn sm" type="submit"><?= $p['is_active'] ? '⏸ تعطيل' : '▶ تفعيل' ?></button></form>
@@ -162,7 +177,7 @@ include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.p
         </div></td>
       </tr>
       <?php endforeach; ?>
-      <?php if (!$plans): ?><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px">لا توجد باقات — أضف أول باقة من الأعلى</td></tr><?php endif; ?>
+      <?php if (!$plans): ?><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">لا توجد باقات — أضف أول باقة من الأعلى</td></tr><?php endif; ?>
       </tbody></table>
     </div>
   </div>
@@ -182,6 +197,7 @@ include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.p
               <?php foreach ($plans as $p): if ((int)$p['is_active']): ?><option value="<?= (int)$p['id'] ?>"><?= htmlspecialchars((string)$p['name']) ?> — <?= number_format((float)$p['price'],2) ?> <?= htmlspecialchars((string)$p['currency']) ?> (<?= (int)$p['max_devices'] ?> أجهزة)</option><?php endif; endforeach; ?>
             </select></div>
           <div><label class="form-label">المدة بالأيام (0 = حتى الإلغاء يدويًا)</label><input class="form-control" type="number" min="0" name="sub_days" value="30"></div>
+          <div><label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" name="sub_verification" value="1" style="width:18px;height:18px"> توثيق مستقل (لا ينتهي بانتهاء الباقة)</label></div>
           <button class="btn primary" type="submit">✓ تفعيل الاشتراك + التوثيق</button>
         </div>
       </form>

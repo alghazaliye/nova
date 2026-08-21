@@ -109,10 +109,17 @@ class UserController
     // GET /api/v1/users/{id}
     public function getUser(int $id): void
     {
-        AuthMiddleware::authenticate();
-        $user = $this->getPublicProfile($id);
+        $auth = AuthMiddleware::authenticate();
+        $viewerId = (int)$auth['user_id'];
+        $user = $this->getPublicProfile($id, $viewerId);
         if (!$user) {
             Response::notFound('المستخدم غير موجود');
+        }
+        // صاحبه يرى دائمًا آخر ظهور/الوضع المتصل كاملين من قاعدة البيانات
+        if ($viewerId === $id) {
+            $raw = $this->getUserById($id);
+            $user['last_seen'] = $raw['last_seen'] ?? null;
+            $user['is_online'] = (bool)($raw['is_online'] ?? false);
         }
         Response::success($user);
     }
@@ -127,16 +134,62 @@ class UserController
             Response::error('يجب إدخال حرفين على الأقل للبحث', 'QUERY_TOO_SHORT', 400);
         }
 
-        $search = '%' . $query . '%';
-        $stmt   = $this->pdo->prepare(
+        // فلترة البحث بحسب إعدادات find_by_* لصاحب الحساب، واستبعاد المستخدمين الذين حظرهم viewer أو حظروا viewer
+        $isNumeric = preg_match('/^[0-9+\s\-()]+$/', $query) === 1;
+        $isEmail   = mb_strpos($query, '@') !== false;
+        $nameCols  = ['name LIKE ?', 'username LIKE ?'];
+        if ($isNumeric) {
+            $nameCols = ['name LIKE ?', 'phone LIKE ?'];
+        }
+        if ($isEmail) {
+            $nameCols = ['name LIKE ?', 'email LIKE ?'];
+        }
+        $cols  = implode(' OR ', $nameCols);
+        $stmt  = $this->pdo->prepare(
             'SELECT id, uuid, name, username, avatar, is_online, last_seen, is_verified
              FROM users
-             WHERE (name LIKE ? OR username LIKE ? OR phone LIKE ?)
+             WHERE (' . $cols . ')
                AND id != ? AND is_blocked = 0
+               AND id NOT IN (
+                   SELECT user_id FROM blocks WHERE blocked_user_id = ?
+                   UNION ALL
+                   SELECT blocked_user_id FROM blocks WHERE user_id = ?
+               )
              LIMIT 20'
         );
-        $stmt->execute([$search, $search, $search, $auth['user_id']]);
-        Response::success($stmt->fetchAll());
+        $like = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
+        $stmt->execute([$like, $like, $auth['user_id'], $auth['user_id'], $auth['user_id']]);
+        $rows = $stmt->fetchAll();
+
+        // فلترة find_by_* لكل مستخدم في النتائج
+        $filtered = [];
+        foreach ($rows as $r) {
+            $ownerId = (int)$r['id'];
+            $p = $this->pdo->prepare('SELECT find_by_phone, find_by_email, find_by_username FROM privacy_settings WHERE user_id = ? LIMIT 1');
+            $p->execute([$ownerId]);
+            $ps = $p->fetch() ?: ['find_by_phone' => 1, 'find_by_email' => 1, 'find_by_username' => 1];
+            if ($isNumeric && ((int)($ps['find_by_phone'] ?? 1)) === 0) {
+                continue;
+            }
+            if ($isEmail && ((int)($ps['find_by_email'] ?? 1)) === 0) {
+                continue;
+            }
+            if (!$isNumeric && !$isEmail && ((int)($ps['find_by_username'] ?? 1)) === 0) {
+                continue;
+            }
+            $displayName = self::_displayNameForIdentity($r); // يبني من name قبل حذفه
+            unset($r['name']); // لا كشف الاسم الخام في نتائج البحث
+            $r['phone'] = null;
+            $r['email'] = null;
+            // display_name وفق إعدادات صاحب الحساب
+            $q = $this->pdo->prepare('SELECT display_identity FROM privacy_settings WHERE user_id = ? LIMIT 1');
+            $q->execute([$ownerId]);
+            $r['display_identity'] = $q->fetchColumn() ?: 'name_username';
+            $r['display_name'] = $displayName ?: self::_displayNameForIdentity($r);
+            $r['is_online'] = (bool)($r['is_online'] ?? false);
+            $filtered[] = $r;
+        }
+        Response::success($filtered);
     }
 
     // POST /api/v1/heartbeat — تحديث آخر الظهور وحالة الاتصال (يُستدعى مع كل نبضة من التطبيق)
@@ -152,14 +205,18 @@ class UserController
         Response::success(null, 'ok');
     }
 
-    // GET /api/v1/privacy
+    // GET /api/v1/privacy — جميع إعدادات الخصوصية والهوية
     public function privacyGet(): void
     {
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
 
         $stmt = $this->pdo->prepare(
-            'SELECT show_last_seen, show_online_status, show_read_receipts
+            'SELECT show_last_seen, show_online_status, show_read_receipts,
+                    show_phone, show_email, show_avatar, show_status_text,
+                    messages_from, calls_from, groups_from,
+                    find_by_phone, find_by_email, find_by_username,
+                    display_identity, story_privacy, allow_by_phone
              FROM privacy_settings WHERE user_id = ? LIMIT 1'
         );
         $stmt->execute([$userId]);
@@ -168,18 +225,29 @@ class UserController
             $this->pdo->prepare(
                 'INSERT INTO privacy_settings (user_id) VALUES (?)'
             )->execute([$userId]);
-            $row = ['show_last_seen' => 1, 'show_online_status' => 1, 'show_read_receipts' => 1];
+            $row = self::_defaultPrivacyRow();
         }
         Response::success([
             'last_seen_visibility' => self::_visibilityForInt((int)($row['show_last_seen'] ?? 1)),
             'online_status'        => ((int)($row['show_online_status'] ?? 1)) === 1,
-            'photo_visibility'     => 'contacts',
-            'status_visibility'    => 'contacts',
+            'photo_visibility'     => self::_visibilityForInt((int)($row['show_avatar'] ?? 1)),
+            'status_visibility'    => self::_visibilityForInt((int)($row['show_status_text'] ?? 1)),
+            'phone_visibility'     => self::_visibilityForInt((int)($row['show_phone'] ?? 2)),
+            'email_visibility'     => self::_visibilityForInt((int)($row['show_email'] ?? 2)),
             'read_receipts'        => ((int)($row['show_read_receipts'] ?? 1)) === 1,
+            'messages_from'        => self::_visibilityForInt((int)($row['messages_from'] ?? 1)),
+            'calls_from'           => self::_visibilityForInt((int)($row['calls_from'] ?? 1)),
+            'groups_from'          => self::_visibilityForInt((int)($row['groups_from'] ?? 1)),
+            'find_by_phone'        => ((int)($row['find_by_phone'] ?? 1)) === 1,
+            'find_by_email'        => ((int)($row['find_by_email'] ?? 1)) === 1,
+            'find_by_username'     => ((int)($row['find_by_username'] ?? 1)) === 1,
+            'display_identity'     => (string)($row['display_identity'] ?? 'name_username'),
+            'story_privacy'        => (int)($row['story_privacy'] ?? 1),
+            'allow_by_phone'       => ((int)($row['allow_by_phone'] ?? 1)) === 1,
         ]);
     }
 
-    // PUT /api/v1/privacy
+    // PUT /api/v1/privacy — جميع إعدادات الخصوصية والهوية
     public function privacyUpdate(): void
     {
         $auth   = AuthMiddleware::authenticate();
@@ -187,24 +255,65 @@ class UserController
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 
         $sets = []; $params = [];
-        // last_seen_visibility: everybody|contacts|nobody → show_last_seen (2|1|0)
-        if (array_key_exists('last_seen_visibility', $body)) {
-            $val = in_array($body['last_seen_visibility'], ['everybody', 'contacts', 'nobody'], true) ? $body['last_seen_visibility'] : null;
-            if ($val !== null) {
-                $sets[] = 'show_last_seen = ?';
-                $params[] = self::_visibilityToInt($val);
+
+        $map = [
+            'last_seen_visibility' => ['show_last_seen', 'visibility'],
+            'photo_visibility'     => ['show_avatar', 'visibility'],
+            'status_visibility'    => ['show_status_text', 'visibility'],
+            'phone_visibility'     => ['show_phone', 'visibility'],
+            'email_visibility'     => ['show_email', 'visibility'],
+            'messages_from'        => ['messages_from', 'visibility'],
+            'calls_from'           => ['calls_from', 'visibility'],
+            'groups_from'          => ['groups_from', 'visibility'],
+        ];
+        foreach ($map as $input => [$col, $type]) {
+            if (array_key_exists($input, $body)) {
+                $val = in_array($body[$input], ['everybody', 'contacts', 'nobody'], true) ? $body[$input] : null;
+                if ($val !== null) {
+                    $sets[] = "{$col} = ?";
+                    $params[] = self::_visibilityToInt($val);
+                }
             }
         }
-        // online_status: bool → show_online_status (1|0)
+        // online_status / read_receipts: bool
         if (array_key_exists('online_status', $body)) {
             $sets[] = 'show_online_status = ?';
             $params[] = filter_var($body['online_status'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
         }
-        // read_receipts: bool/int → show_read_receipts
         if (array_key_exists('read_receipts', $body)) {
             $sets[] = 'show_read_receipts = ?';
             $params[] = filter_var($body['read_receipts'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
         }
+        // find_by_*: bool
+        foreach (['find_by_phone', 'find_by_email', 'find_by_username'] as $f) {
+            if (array_key_exists($f, $body)) {
+                $sets[] = "{$f} = ?";
+                $params[] = filter_var($body[$f], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+            }
+        }
+        // display_identity: name_username|username|phone|email|name_phone|name_email
+        if (array_key_exists('display_identity', $body)) {
+            $valid = ['name_username', 'username', 'phone', 'email', 'name_phone', 'name_email'];
+            $val   = in_array((string)$body['display_identity'], $valid, true) ? (string)$body['display_identity'] : null;
+            if ($val !== null) {
+                $sets[] = 'display_identity = ?';
+                $params[] = $val;
+            }
+        }
+        // story_privacy: 1=all 2=contacts 3=share_with 4=nobody (numbers)
+        if (array_key_exists('story_privacy', $body)) {
+            $v = (int)$body['story_privacy'];
+            if (in_array($v, [1, 2, 3, 4], true)) {
+                $sets[] = 'story_privacy = ?';
+                $params[] = $v;
+            }
+        }
+        // allow_by_phone: bool
+        if (array_key_exists('allow_by_phone', $body)) {
+            $sets[] = 'allow_by_phone = ?';
+            $params[] = filter_var($body['allow_by_phone'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
+
         if (empty($sets)) {
             Response::error('لا توجد بيانات للتحديث', 'NO_DATA', 400);
         }
@@ -250,7 +359,7 @@ class UserController
 
         $stmt = $this->pdo->prepare(
             'SELECT c.id, c.contact_user_id, c.nickname, c.created_at,
-                    u.name, u.username, u.phone, u.avatar, u.is_online, u.last_seen, u.is_verified
+                    u.name, u.username, u.avatar, u.is_online, u.last_seen, u.is_verified
              FROM contacts c
              JOIN users u ON u.id = c.contact_user_id
              WHERE c.user_id = ? AND c.is_blocked = 0
@@ -258,6 +367,28 @@ class UserController
         );
         $stmt->execute([$userId]);
         $rows = $stmt->fetchAll();
+
+        // contact_name = nickname إن وُجد ELSE display_name وفق إعدادات صاحب الحساب؛ لا كشف phone في القائمة
+        foreach ($rows as &$r) {
+            $ownerId = (int)$r['contact_user_id'];
+            unset($r['name']);
+            $r['phone'] = null;
+            $r['email'] = null;
+            $q = $this->pdo->prepare('SELECT display_identity FROM privacy_settings WHERE user_id = ? LIMIT 1');
+            $q->execute([$ownerId]);
+            $r['display_identity'] = $q->fetchColumn() ?: 'name_username';
+            $nick = trim((string)($r['nickname'] ?? ''));
+            $r['display_name'] = self::_displayNameForIdentity($r);
+            $r['contact_name'] = $nick !== '' ? $nick : $r['display_name'];
+            // احترام show_last_seen/show_online_status لصاحب الحساب
+            if (!$this->canSeeOnline($userId, $ownerId)) {
+                $r['is_online'] = false;
+            }
+            if (!$this->canSeeLastSeen($userId, $ownerId)) {
+                $r['last_seen'] = null;
+            }
+        }
+        unset($r);
 
         Response::success($rows);
     }
@@ -387,6 +518,134 @@ class UserController
         };
     }
 
+    private static function _defaultPrivacyRow(): array
+    {
+        return [
+            'show_last_seen' => 1, 'show_online_status' => 1, 'show_read_receipts' => 1,
+            'show_phone' => 2, 'show_email' => 2, 'show_avatar' => 1, 'show_status_text' => 1,
+            'messages_from' => 1, 'calls_from' => 1, 'groups_from' => 1,
+            'find_by_phone' => 1, 'find_by_email' => 1, 'find_by_username' => 1,
+            'display_identity' => 'name_username', 'story_privacy' => 1, 'allow_by_phone' => 1,
+        ];
+    }
+
+    /** هل الحظر متبادل بين $a و$b؟ (blocks اتجاه واحد يكفي لأن الحظر يمنع الطرف الآخر أيضًا) */
+    private function isBlockedEither(int $a, int $b): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1'
+        );
+        $stmt->execute([$a, $b, $b, $a]);
+        return (bool)$stmt->fetch();
+    }
+
+    /** هل $a جهة اتصال لـ$b أو العكس؟ (علاقة جهة اتصال واحدة الاتجاه تكفي) */
+    private function isContactOf(int $a, int $b): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM contacts WHERE (user_id = ? AND contact_user_id = ?) OR (user_id = ? AND contact_user_id = ?) LIMIT 1'
+        );
+        $stmt->execute([$a, $b, $b, $a]);
+        return (bool)$stmt->fetch();
+    }
+
+    /** اسم جهة الاتصال المحفوظ (nickname > display identity) لـ$target أمام $viewer */
+    private function contactNameDisplay(int $viewerId, int $targetId, array $profile): ?string
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT nickname FROM contacts WHERE user_id = ? AND contact_user_id = ? LIMIT 1'
+        );
+        $stmt->execute([$viewerId, $targetId]);
+        $row = $stmt->fetch();
+        $nick = $row ? trim((string)($row['nickname'] ?? '')) : null;
+        if ($nick !== '' && $nick !== null) {
+            return $nick;
+        }
+        return self::_displayNameForIdentity($profile);
+    }
+
+    /** بناء display_name من profile وفق display_identity */
+    private static function _displayNameForIdentity(array $p): ?string
+    {
+        $mode = (string)($p['display_identity'] ?? 'name_username');
+        $name = trim((string)($p['name'] ?? ''));
+        $username = trim((string)($p['username'] ?? ''));
+        $phone = trim((string)($p['phone'] ?? ''));
+        $email = trim((string)($p['email'] ?? ''));
+        switch ($mode) {
+            case 'username':
+                return $username !== '' ? $username : ($name !== '' ? $name : null);
+            case 'phone':
+                return $phone !== '' ? $phone : ($name !== '' ? $name : null);
+            case 'email':
+                return $email !== '' ? $email : ($name !== '' ? $name : null);
+            case 'name_phone':
+                return $name !== '' ? ($phone !== '' ? $name . ' (' . $phone . ')' : $name) : ($phone !== '' ? $phone : null);
+            case 'name_email':
+                return $name !== '' ? ($email !== '' ? $name . ' (' . $email . ')' : $name) : ($email !== '' ? $email : null);
+            case 'name_username':
+            default:
+                return $name !== '' ? $name : ($username !== '' ? $username : null);
+        }
+    }
+
+    /** تطبيق قواعد خصوصية على profile لـ$ownerId أمام $viewerId (null = لا عرض) */
+    public function filterProfile(array $profile, int $viewerId, int $ownerId): ?array
+    {
+        if ($viewerId === $ownerId) {
+            return $profile; // صاحبه يرى كل شيء
+        }
+        if ($this->isBlockedEither($viewerId, $ownerId)) {
+            // طرف محظور: أقصى حد معلومات — فقط display name من الاسم الأول
+            $name = trim((string)($profile['name'] ?? ''));
+            $first = mb_strpos($name, ' ') !== false ? mb_substr($name, 0, (int)mb_strpos($name, ' ')) : $name;
+            return [
+                'id' => $profile['id'],
+                'display_name' => $first !== '' ? $first : null,
+                'avatar' => null, 'status_text' => null,
+                'phone' => null, 'email' => null,
+                'is_online' => false, 'last_seen' => null,
+                'is_verified' => false,
+            ];
+        }
+
+        // إعدادات صاحب الحساب
+        $stmt = $this->pdo->prepare(
+            'SELECT show_last_seen, show_online_status, show_read_receipts,
+                    show_phone, show_email, show_avatar, show_status_text,
+                    display_identity
+             FROM privacy_settings WHERE user_id = ? LIMIT 1'
+        );
+        $stmt->execute([$ownerId]);
+        $row = $stmt->fetch() ?: self::_defaultPrivacyRow();
+
+        $isContact = $this->isContactOf($viewerId, $ownerId);
+        $show = function (int $mode) use ($isContact): bool {
+            if ($mode === 2) return true;
+            if ($mode === 0) return false;
+            return $isContact; // 1 = جهات الاتصال
+        };
+
+        $profile['phone'] = $show((int)($row['show_phone'] ?? 2)) ? $profile['phone'] : null;
+        $profile['email'] = $show((int)($row['show_email'] ?? 2)) ? $profile['email'] : null;
+        if (!$show((int)($row['show_avatar'] ?? 1))) {
+            $profile['avatar'] = null;
+        }
+        $profile['status_text'] = $show((int)($row['show_status_text'] ?? 1)) ? $profile['status_text'] : null;
+
+        if (!$show((int)($row['show_online_status'] ?? 1))) {
+            $profile['is_online'] = false;
+        }
+        if (!$show((int)($row['show_last_seen'] ?? 1))) {
+            $profile['last_seen'] = null;
+            $profile['is_online'] = false;
+        }
+
+        $profile['display_name'] = self::_displayNameForIdentity($profile);
+        $profile['contact_name'] = $this->contactNameDisplay($viewerId, $ownerId, $profile);
+        return $profile;
+    }
+
     private function getUserById(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
@@ -419,13 +678,18 @@ class UserController
         return $user;
     }
 
-    private function getPublicProfile(int $id): ?array
+    private function getPublicProfile(int $id, ?int $viewerId = null): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, uuid, name, username, bio, avatar, status_text, is_online, last_seen, is_verified
+            'SELECT id, uuid, name, username, phone, email, bio, avatar, status_text,
+                    is_online, last_seen, is_verified
              FROM users WHERE id = ? AND is_blocked = 0 LIMIT 1'
         );
         $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        $profile = $stmt->fetch() ?: null;
+        if (!$profile || $viewerId === null) {
+            return $profile;
+        }
+        return $this->filterProfile($profile, $viewerId, $id);
     }
 }

@@ -200,12 +200,20 @@ class AuthController
             // Global ban check BEFORE allowing any login
             if ((int)$user['is_blocked']) {
                 $banStmt = $this->pdo->prepare(
-                    'SELECT reason FROM user_bans WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
+                    'SELECT reason, suspend_until FROM user_bans
+                     WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
                 );
                 $banStmt->execute([$userId]);
                 $ban = $banStmt->fetch();
                 $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
-                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يرجى التواصل مع إدارة التطبيق');
+                // Temporary suspension: if suspend_until is set and not yet passed, show a clear message
+                if ($ban && !empty($ban['suspend_until']) && $ban['suspend_until'] > date('Y-m-d H:i:s')) {
+                    Response::forbidden(
+                        'هذا الحساب معلق مؤقتًا حتى ' . $ban['suspend_until'] . $reason .
+                        ' — يمكنك تقديم اعتراض بعد انتهاء التعليق أو التواصل مع الإدارة'
+                    );
+                }
+                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يمكنك تقديم اعتراض أو التواصل مع إدارة التطبيق');
             }
 
             // Update name if provided WITHOUT auto-verifying (verification is admin-controlled)
@@ -252,11 +260,33 @@ class AuthController
         $this->assertOtpProviderAvailable();
 
         // Check user exists
-        $stmt = $this->pdo->prepare('SELECT id FROM users WHERE phone = ? AND is_blocked = 0 LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT id, is_blocked FROM users WHERE phone = ? LIMIT 1');
         $stmt->execute([$phone]);
-        if (!$stmt->fetch()) {
+        $existing = $stmt->fetch();
+        if (!$existing) {
             // Don't reveal if phone exists or not
             Response::success(['message' => 'تم إرسال رمز التحقق إذا كان الرقم مسجلاً']);
+        }
+        // Blocked users cannot start a new login session at all
+        if ((int)$existing['is_blocked']) {
+            $banStmt = $this->pdo->prepare(
+                'SELECT reason, suspend_until FROM user_bans
+                 WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
+            );
+            $banStmt->execute([(int)$existing['id']]);
+            $ban = $banStmt->fetch();
+            $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
+            if ($ban && !empty($ban['suspend_until']) && $ban['suspend_until'] > date('Y-m-d H:i:s')) {
+                Response::error(
+                    'هذا الحساب معلق مؤقتًا حتى ' . $ban['suspend_until'] . $reason
+                    . ' — يمكنك تقديم اعتراض أو التواصل مع الإدارة',
+                    'ACCOUNT_SUSPENDED', 403
+                );
+            }
+            Response::error(
+                'تم حظر هذا الحساب' . $reason . ' — يمكنك تقديم اعتراض أو التواصل مع إدارة التطبيق',
+                'ACCOUNT_BANNED', 403
+            );
         }
 
         // ---- New multi-provider OTP pipeline ----
@@ -467,12 +497,19 @@ class AuthController
             $userId = (int)$user['id'];
             if ((int)$user['is_blocked']) {
                 $banStmt = $this->pdo->prepare(
-                    'SELECT reason FROM user_bans WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
+                    'SELECT reason, suspend_until FROM user_bans
+                     WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
                 );
                 $banStmt->execute([$userId]);
                 $ban = $banStmt->fetch();
                 $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
-                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يرجى التواصل مع إدارة التطبيق');
+                if ($ban && !empty($ban['suspend_until']) && $ban['suspend_until'] > date('Y-m-d H:i:s')) {
+                    Response::forbidden(
+                        'هذا الحساب معلق مؤقتًا حتى ' . $ban['suspend_until'] . $reason
+                        . ' — يمكنك تقديم اعتراض أو التواصل مع الإدارة'
+                    );
+                }
+                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يمكنك تقديم اعتراض أو التواصل مع الإدارة');
             }
         }
         $token    = $this->createSession($userId, null, null);

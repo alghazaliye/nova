@@ -52,6 +52,7 @@ class Database
 
                 self::connectCompat($dsn, $options);
                 self::migrateMissingColumns();
+                self::migrateMissingTables();
                 self::applyConfiguredTimezone();
 
                 // Pragmas for SQLite performance and reliability
@@ -118,9 +119,70 @@ class Database
     {
         $migrations = [
             'conversation_members' => ['disappear_after' => 'INTEGER DEFAULT NULL'],
-            'messages'             => ['disappear_after' => 'INTEGER DEFAULT NULL'],
+            'messages'             => [
+                'disappear_after' => 'INTEGER DEFAULT NULL',
+                'deleted_by'      => 'INTEGER DEFAULT NULL',
+            ],
+            'privacy_settings' => [
+                'show_phone'         => 'INTEGER NOT NULL DEFAULT 2',
+                'show_email'         => 'INTEGER NOT NULL DEFAULT 2',
+                'show_avatar'        => 'INTEGER NOT NULL DEFAULT 1',
+                'show_status_text'   => 'INTEGER NOT NULL DEFAULT 1',
+                'messages_from'      => 'INTEGER NOT NULL DEFAULT 1',
+                'calls_from'         => 'INTEGER NOT NULL DEFAULT 1',
+                'groups_from'        => 'INTEGER NOT NULL DEFAULT 1',
+                'find_by_phone'      => 'INTEGER NOT NULL DEFAULT 1',
+                'find_by_email'      => 'INTEGER NOT NULL DEFAULT 1',
+                'find_by_username'   => 'INTEGER NOT NULL DEFAULT 1',
+                'display_identity'   => "TEXT NOT NULL DEFAULT 'name_username'",
+                'story_privacy'      => 'INTEGER NOT NULL DEFAULT 1',
+                'allow_by_phone'     => 'INTEGER NOT NULL DEFAULT 1',
+            ],
+            'reports' => [
+                'reason_code' => "TEXT DEFAULT NULL",
+                'priority'    => "TEXT NOT NULL DEFAULT 'medium'",
+            ],
+            'plans' => [
+                'plan_type'                 => "TEXT NOT NULL DEFAULT 'free'",
+                'enable_verification'       => 'INTEGER NOT NULL DEFAULT 0',
+                'verification_duration_days' => 'INTEGER DEFAULT NULL',
+            ],
+            'users' => [
+                'verified_until' => 'DATETIME DEFAULT NULL',
+            ],
+            'payment_requests' => [
+                'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
+                'user_id'                => 'INTEGER NOT NULL',
+                'plan_id'                => 'INTEGER NOT NULL',
+                'status'                 => "TEXT NOT NULL DEFAULT 'pending'",
+                'receipt_path'           => 'TEXT DEFAULT NULL',
+                'admin_note'             => 'TEXT DEFAULT NULL',
+                'reviewed_by'            => 'INTEGER DEFAULT NULL',
+                'reviewed_at'            => 'DATETIME DEFAULT NULL',
+                'created_at'             => 'DATETIME NOT NULL DEFAULT current_timestamp',
+            ],
+        ];
+        // payment_requests is a whole table, not columns — create it separately
+        $tableMigrations = [
+            'payment_requests' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `payment_requests` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `user_id` integer NOT NULL,
+  `plan_id` integer NOT NULL,
+  `status` text NOT NULL DEFAULT 'pending',
+  `receipt_path` text DEFAULT NULL,
+  `admin_note` text DEFAULT NULL,
+  `reviewed_by` integer DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp
+)
+SQL,
         ];
         foreach ($migrations as $table => $columns) {
+            if ($table === 'payment_requests') {
+                // Whole table — handled via table migrations below
+                continue;
+            }
             foreach ($columns as $column => $definition) {
                 try {
                     self::$instance->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
@@ -128,6 +190,78 @@ class Database
                     // Column already exists or table missing — migration already applied or not needed
                     error_log('Migration skipped: ' . $e->getMessage());
                 }
+            }
+        }
+        foreach ($tableMigrations as $ddl) {
+            try {
+                self::$instance->exec($ddl);
+            } catch (PDOException $e) {
+                error_log('Table migration skipped: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Safe, idempotent migrations: creates tables that newer code expects
+     * but may be missing in older database files (e.g. after deployment).
+     */
+    private static function migrateMissingTables(): void
+    {
+        $tables = [
+            'user_bans' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `user_bans` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `user_id` integer NOT NULL,
+  `reason` text DEFAULT NULL,
+  `banned_by` integer DEFAULT NULL,
+  `banned_at` datetime NOT NULL DEFAULT current_timestamp,
+  `suspend_until` datetime DEFAULT NULL,
+  `unbanned_at` datetime DEFAULT NULL,
+  `unbanned_by` integer DEFAULT NULL
+)
+SQL,
+            'user_appeals' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `user_appeals` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `user_id` integer NOT NULL,
+  `contact_value` text DEFAULT NULL,
+  `reason` text NOT NULL,
+  `status` text NOT NULL DEFAULT 'pending',
+  `admin_note` text DEFAULT NULL,
+  `reviewed_by` integer DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp
+)
+SQL,
+            'report_attachments' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `report_attachments` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `report_id` integer NOT NULL,
+  `message_id` integer NOT NULL,
+  `conversation_id` integer NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  UNIQUE (report_id, message_id)
+)
+SQL,
+            'audit_logs' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `audit_logs` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `admin_id` integer NOT NULL,
+  `action` varchar(100) NOT NULL,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `entity_id` integer DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp
+)
+SQL,
+        ];
+        foreach ($tables as $table => $ddl) {
+            try {
+                self::$instance->exec($ddl);
+            } catch (PDOException $e) {
+                error_log('Table migration skipped: ' . $e->getMessage());
             }
         }
     }

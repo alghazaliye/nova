@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 
 $admin = requireAdminLogin();
-requirePermission($admin, 'settings.manage');
+requirePermission($admin, 'settings.view');
 
 $pageTitle = 'المراقبة الحية';
 $pdo = getAdminDB();
@@ -16,7 +16,8 @@ try {
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM users');
     $stats['users_total'] = $stmt->fetch()['count'] ?? 0;
     
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM users WHERE is_online = 1');
+    // is_online قد لا يُحدّث دائمًا؛ نحسب المتصلين بالنشاط الأخير خلال 5 دقائق أيضًا
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE is_online = 1 OR last_seen >= datetime('now','-5 minutes','localtime')");
     $stats['users_online'] = $stmt->fetch()['count'] ?? 0;
     
     // إحصائيات المحادثات
@@ -30,19 +31,36 @@ try {
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM messages');
     $stats['messages_total'] = $stmt->fetch()['count'] ?? 0;
     
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM messages WHERE DATE(created_at) = CURDATE()');
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE DATE(created_at) = DATE('now','localtime')");
     $stats['messages_today'] = $stmt->fetch()['count'] ?? 0;
-    
-    // إحصائيات الحالات
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM stories');
-    $stats['stories_total'] = $stmt->fetch()['count'] ?? 0;
-    
-    $stmt = $pdo->query('SELECT COUNT(*) as count FROM stories WHERE DATE(created_at) = CURDATE()');
-    $stats['stories_today'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE DATE(created_at) = DATE('now','-1 day','localtime')");
+    $stats['messages_yesterday'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE created_at >= datetime('now','-7 days','localtime')");
+    $stats['messages_week'] = $stmt->fetch()['count'] ?? 0;
+
+    // إحصائيات المستخدمين: جديد اليوم/الأسبوع/الشهر + نسب التفعيل
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE DATE(created_at) = DATE('now','localtime')");
+    $stats['users_today'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE created_at >= datetime('now','-7 days','localtime')");
+    $stats['users_week'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE created_at >= datetime('now','-30 days','localtime')");
+    $stats['users_month'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE last_seen >= datetime('now','-1 hour','localtime')");
+    $stats['users_active_hour'] = $stmt->fetch()['count'] ?? 0;
     
     // إحصائيات المكالمات
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM calls');
     $stats['calls_total'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM calls WHERE DATE(created_at) = DATE('now','localtime')");
+    $stats['calls_today'] = $stmt->fetch()['count'] ?? 0;
+
+    // إحصائيات البلاغات والاعتراضات والحظر
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM reports WHERE status IN ('pending','reviewing')");
+    $stats['reports_pending'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM user_appeals WHERE status = 'pending'");
+    $stats['appeals_pending'] = $stmt->fetch()['count'] ?? 0;
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE is_blocked = 1");
+    $stats['bans_active'] = $stmt->fetch()['count'] ?? 0;
     
     // إحصائيات الملفات
     $stmt = $pdo->query('SELECT COUNT(*) as count, SUM(file_size) as total_size FROM attachments');
@@ -68,21 +86,19 @@ $error_logs = $pdo->query(
 
 // أنشط المستخدمين
 $active_users = $pdo->query(
-    'SELECT u.id, u.name, u.username, u.avatar, u.is_online, u.last_seen, COUNT(m.id) as message_count
+    "SELECT u.id, u.name, u.username, u.avatar, u.last_seen, (SELECT COUNT(*) FROM messages m WHERE m.sender_id = u.id AND DATE(m.created_at) = DATE('now','localtime')) as message_count
      FROM users u
-     LEFT JOIN messages m ON m.sender_id = u.id AND DATE(m.created_at) = CURDATE()
-     GROUP BY u.id
-     ORDER BY u.last_seen DESC LIMIT 20'
+     ORDER BY u.last_seen DESC NULLS LAST LIMIT 20"
 )->fetchAll() ?: [];
 
-// الأجهزة المتصلة (الجدول الفعلي: user_devices بأعمدة device_uuid, device_name, platform, app_version, last_active_at)
+// الأجهزة المتصلة (الجدول الفعلي: device_registrations بأعمدة device_uuid, device_name, os, os_version, app_version, last_seen)
 $connected_devices = $pdo->query(
-    "SELECT d.id, d.device_name, d.platform, d.device_uuid,
-            d.app_version, d.last_active_at, u.name as user_name, u.is_online
-     FROM user_devices d
+    "SELECT d.id, d.device_name, d.os, d.device_uuid,
+            d.app_version, d.last_seen, u.name as user_name
+     FROM device_registrations d
      JOIN users u ON u.id = d.user_id
-     WHERE d.last_active_at >= '" . date('Y-m-d H:i:s', time() - 3600) . "'
-     ORDER BY d.last_active_at DESC LIMIT 20"
+     WHERE d.last_seen >= datetime('now','-1 hour','localtime') AND d.is_active = 1
+     ORDER BY d.last_seen DESC LIMIT 20"
 )->fetchAll() ?: [];
 
 // استخدام قاعدة البيانات — SQLite-safe: physical file size
@@ -92,6 +108,10 @@ $db_size = ($db_size_db !== false && is_file($db_size_db)) ? round(filesize($db_
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
 ?>
+<style>
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+</style>
 
 <div class="pagehead">
     <div>
@@ -107,7 +127,7 @@ include __DIR__ . '/includes/sidebar.php';
             <div>
                 <p style="opacity: 0.9; margin-bottom: 5px;">المستخدمون</p>
                 <h3 style="font-size: 28px; margin: 0;"><?= $stats['users_total'] ?></h3>
-                <small style="opacity: 0.8;">🟢 <?= $stats['users_online'] ?> متصل الآن</small>
+                <small style="opacity: 0.8;">🟢 <?= $stats['users_online'] ?> متصل الآن<?= $stats['users_total'] > 0 ? ' (' . round(($stats['users_online'] / max((int)$stats['users_total'], 1)) * 100) . '%)' : '' ?></small>
             </div>
             <div style="font-size: 40px; opacity: 0.3;">👥</div>
         </div>
@@ -124,12 +144,24 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
     </div>
     
+    <div class="card" style="padding: 20px; background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <p style="opacity: 0.9; margin-bottom: 5px; color:#555">نشاط المستخدمين</p>
+                <h3 style="font-size: 28px; margin: 0;"><?= $stats['users_today'] ?> جديد اليوم</h3>
+                <small style="opacity: 0.8;">📅 <?= $stats['users_week'] ?> هذا الأسبوع · <?= $stats['users_month'] ?> هذا الشهر</small>
+                <small style="opacity: 0.8; display:block">🟢 <?= $stats['users_active_hour'] ?> نشط خلال الساعة</small>
+            </div>
+            <div style="font-size: 40px; opacity: 0.3;">👤</div>
+        </div>
+    </div>
+    
     <div class="card" style="padding: 20px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <p style="opacity: 0.9; margin-bottom: 5px;">الرسائل</p>
                 <h3 style="font-size: 28px; margin: 0;"><?= $stats['messages_total'] ?></h3>
-                <small style="opacity: 0.8;">📅 <?= $stats['messages_today'] ?> اليوم</small>
+                <small style="opacity: 0.8;">📅 <?= $stats['messages_today'] ?> اليوم · <?= $stats['messages_yesterday'] ?> أمس · <?= $stats['messages_week'] ?> أسبوع</small>
             </div>
             <div style="font-size: 40px; opacity: 0.3;">✉️</div>
         </div>
@@ -150,15 +182,15 @@ include __DIR__ . '/includes/sidebar.php';
 <!-- إحصائيات إضافية -->
 <div class="grid3" style="margin: 20px;">
     <div class="card" style="padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-        <h4 style="margin-bottom: 15px; color: #333;">📊 الحالات</h4>
-        <p style="font-size: 24px; font-weight: bold; color: #667eea; margin: 10px 0;"><?= $stats['stories_total'] ?></p>
-        <small style="color: #666;">📅 <?= $stats['stories_today'] ?> حالة اليوم</small>
+        <h4 style="margin-bottom: 15px; color: #333;">🔒 الحظر والاعتراضات</h4>
+        <p style="font-size: 24px; font-weight: bold; color: #dc3545; margin: 10px 0;"><?= number_format($stats['bans_active'] ?? 0) ?> محظور نشط</p>
+        <small style="color: #666;">⚖️ <?= number_format($stats['appeals_pending'] ?? 0) ?> اعتراض معلق · 📋 <?= number_format($stats['reports_pending'] ?? 0) ?> بلاغ معلق</small>
     </div>
     
     <div class="card" style="padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
         <h4 style="margin-bottom: 15px; color: #333;">☎️ المكالمات</h4>
         <p style="font-size: 24px; font-weight: bold; color: #f5576c; margin: 10px 0;"><?= $stats['calls_total'] ?></p>
-        <small style="color: #666;">إجمالي المكالمات</small>
+        <small style="color: #666;">إجمالي المكالمات · <?= $stats['calls_today'] ?? 0 ?> اليوم</small>
     </div>
     
     <div class="card" style="padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">

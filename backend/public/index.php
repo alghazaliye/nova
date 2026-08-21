@@ -41,6 +41,8 @@ require_once __DIR__ . '/../controllers/DeviceController.php';
 require_once __DIR__ . '/../controllers/GroupsController.php';
 require_once __DIR__ . '/../helpers/SettingsHelper.php';
 require_once __DIR__ . '/../controllers/ReportsController.php';
+require_once __DIR__ . '/../controllers/AppealsController.php';
+require_once __DIR__ . '/../controllers/PaymentRequestsController.php';
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -399,11 +401,50 @@ if (preg_match('#^/admin/users/(\d+)/ban$#', $uri, $m) && $method === 'POST') {
 if (preg_match('#^/admin/users/(\d+)/unban$#', $uri, $m) && $method === 'POST') {
     (new AdminController())->unbanUser((int)$m[1]);
 }
+if (preg_match('#^/admin/users/(\d+)/suspend$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->suspendUser((int)$m[1]);
+}
+if ($uri === '/admin/appeals' && $method === 'GET') {
+    (new AdminController())->listAppeals();
+}
+if (preg_match('#^/admin/appeals/(\d+)/review$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->reviewAppeal((int)$m[1]);
+}
+if (preg_match('#^/admin/users/(\d+)/appeals$#', $uri, $m) && $method === 'POST') {
+    (new AdminController())->createAppeal((int)$m[1]);
+}
+// Appeals (user-facing)
+if ($uri === '/appeals' && $method === 'POST') {
+    (new AppealsController())->create();
+}
+if ($uri === '/appeals' && $method === 'GET') {
+    (new AppealsController())->index();
+}
 if (preg_match('#^/admin/users/(\d+)/subscribe$#', $uri, $m) && $method === 'POST') {
     (new AdminController())->subscribeUser((int)$m[1]);
 }
 if (preg_match('#^/admin/subscriptions/(\d+)/cancel$#', $uri, $m) && $method === 'POST') {
     (new AdminController())->cancelSubscription((int)$m[1]);
+}
+// Subscriptions (user-facing)
+if ($uri === '/subscriptions/my' && $method === 'GET') {
+    (new PaymentRequestsController())->mySubscriptions();
+}
+if ($uri === '/subscriptions/request' && $method === 'POST') {
+    (new PaymentRequestsController())->createRequest();
+}
+if (preg_match('#^/subscriptions/request/(\d+)/upload$#', $uri, $m) && $method === 'POST') {
+    (new PaymentRequestsController())->uploadReceipt((int)$m[1]);
+}
+// Payment requests (admin)
+if ($uri === '/admin/payment-requests' && $method === 'GET') {
+    (new PaymentRequestsController())->adminIndex();
+}
+if (preg_match('#^/admin/payment-requests/(\d+)/approve$#', $uri, $m) && $method === 'POST') {
+    (new PaymentRequestsController())->approveRequest((int)$m[1]);
+}
+if (preg_match('#^/admin/payment-requests/(\d+)/reject$#', $uri, $m) && $method === 'POST') {
+    (new PaymentRequestsController())->rejectRequest((int)$m[1]);
 }
 if (preg_match('#^/admin/users/(\d+)/admin$#', $uri, $m) && $method === 'GET') {
     (new AdminController())->userAdmin((int)$m[1]);

@@ -17,6 +17,18 @@ try {
     $pendingReports = (int)$stmt->fetchColumn();
 } catch (\Throwable $e) {}
 
+$pendingAppeals = 0;
+try {
+    $stmt = $pdo->query("SELECT COUNT(*) FROM user_appeals WHERE status = 'pending'");
+    $pendingAppeals = (int)$stmt->fetchColumn();
+} catch (\Throwable $e) {}
+
+$pendingPaymentRequests = 0;
+try {
+    $stmt = $pdo->query("SELECT COUNT(*) FROM payment_requests WHERE status = 'pending'");
+    $pendingPaymentRequests = (int)$stmt->fetchColumn();
+} catch (\Throwable $e) {}
+
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 if (!isset($admin)) { $admin = ['name' => '', 'role_name' => '']; }
 function navActive(string $page, string $current): string {
@@ -70,6 +82,18 @@ function navActive(string $page, string $current): string {
       <span>⚑</span> البلاغات
       <?php if ($pendingReports > 0): ?>
         <em class="count"><?= $pendingReports ?></em>
+      <?php endif; ?>
+    </a>
+    <a href="appeals.php" class="<?= navActive('appeals', $currentPage) ?>">
+      <span>⚖</span> الاعتراضات
+      <?php if ($pendingAppeals > 0): ?>
+        <em class="count"><?= $pendingAppeals ?></em>
+      <?php endif; ?>
+    </a>
+    <a href="payment-requests.php" class="<?= navActive('payment-requests', $currentPage) ?>">
+      <span>⟠</span> طلبات الاشتراك
+      <?php if ($pendingPaymentRequests > 0): ?>
+        <em class="count"><?= $pendingPaymentRequests ?></em>
       <?php endif; ?>
     </a>
     <a href="notifications.php" class="<?= navActive('notifications', $currentPage) ?>">
