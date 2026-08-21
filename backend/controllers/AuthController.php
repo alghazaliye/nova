@@ -189,7 +189,7 @@ class AuthController
             $displayName = $name ?? $collectedName ?? ($legacyOtp['name'] ?? 'مستخدم NOVA');
             $stmt = $this->pdo->prepare(
                 'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, 0, datetime("now"), datetime("now"))'
+                 VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))'
             );
             $stmt->execute([$uuid, $phone, $displayName]);
             $userId = (int)$this->pdo->lastInsertId();
@@ -218,7 +218,7 @@ class AuthController
 
             // Update name if provided WITHOUT auto-verifying (verification is admin-controlled)
             if ($name !== null) {
-                $stmt = $this->pdo->prepare('UPDATE users SET name = ?, updated_at = datetime("now") WHERE id = ?');
+                $stmt = $this->pdo->prepare('UPDATE users SET name = ?, updated_at = datetime('now') WHERE id = ?');
                 $stmt->execute([$name, $userId]);
             }
         }
@@ -414,10 +414,10 @@ class AuthController
         $token      = substr($authHeader, 7);
         $tokenHash  = hash('sha256', $token);
 
-        $this->pdo->prepare('UPDATE sessions SET revoked_at = datetime("now") WHERE token_hash = ?')
+        $this->pdo->prepare('UPDATE sessions SET revoked_at = datetime('now') WHERE token_hash = ?')
                   ->execute([$tokenHash]);
 
-        $this->pdo->prepare('UPDATE users SET is_online = 0, last_seen = datetime("now") WHERE id = ?')
+        $this->pdo->prepare('UPDATE users SET is_online = 0, last_seen = datetime('now') WHERE id = ?')
                   ->execute([(int)$user['user_id']]);
 
         Response::success(null, 'تم تسجيل الخروج بنجاح');
@@ -488,7 +488,7 @@ class AuthController
             $uuid = UuidHelper::generate();
             $stmt = $this->pdo->prepare(
                 'INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, 0, datetime("now"), datetime("now"))'
+                 VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))'
             );
             $name = isset($name) && trim($name) !== '' ? trim($name) : 'مستخدم NOVA';
             $stmt->execute([$uuid, $phone, $name]);
@@ -560,7 +560,7 @@ class AuthController
         $stmt = $this->pdo->prepare(
             'INSERT INTO app_settings (setting_key, setting_value)
              VALUES (?, ?)
-ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime("now")'
+ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime('now')'
 	        );
 	        $stmt->execute([$key, $value]);
     }
@@ -605,8 +605,8 @@ ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, u
             try {
                 $stmt = $this->pdo->prepare(
                     'INSERT INTO user_devices (user_id, device_uuid, fcm_token, last_active_at, created_at, updated_at)
-                     VALUES (?, ?, ?, datetime("now"), datetime("now"), datetime("now"))
-ON CONFLICT(user_id, device_uuid) DO UPDATE SET fcm_token = excluded.fcm_token, last_active_at = datetime("now"), updated_at = datetime("now")'
+                     VALUES (?, ?, ?, datetime('now'), datetime('now'), datetime('now'))
+ON CONFLICT(user_id, device_uuid) DO UPDATE SET fcm_token = excluded.fcm_token, last_active_at = datetime('now'), updated_at = datetime('now')'
 	                );
 	                $stmt->execute([$userId, $deviceUuid, $fcmToken]);
                 $deviceId = (int)($this->pdo->lastInsertId() ?: 0) ?: null;
@@ -621,7 +621,7 @@ ON CONFLICT(user_id, device_uuid) DO UPDATE SET fcm_token = excluded.fcm_token, 
             try {
                 $this->pdo->prepare(
                     'INSERT INTO sessions (user_id, token_hash, device_id, ip_address, user_agent, expires_at, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, datetime("now"))'
+                     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))'
                 )->execute([
                     $uid,
                     $th,
