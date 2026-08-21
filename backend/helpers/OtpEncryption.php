@@ -42,8 +42,8 @@ class OtpEncryption
                 Database::getInstance()->prepare(
                     'INSERT INTO app_settings (setting_key, setting_value)
                      VALUES (?, ?)
-                     ON DUPLICATE KEY UPDATE setting_value = IF(setting_value = \'\', ?, setting_value), updated_at = NOW()'
-                )->execute(['otp_encryption_key', $key, $key]);
+ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime("now")'
+		                )->execute(['otp_encryption_key', $key]);
             } catch (Throwable $e) {
                 // best-effort; fall back to the generated key for this request
             }

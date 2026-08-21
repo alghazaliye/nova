@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
 
@@ -241,19 +242,47 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   }
 
   Future<void> _scanQr() async {
-    final TextEditingController uuidCtrl = TextEditingController();
-    final uuid = await showDialog<String>(
+    String? uuid = await showModalBottomSheet<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('ربط جهاز جديد'),
-        content: TextField(
-          controller: uuidCtrl,
-          decoration: const InputDecoration(hintText: 'أدخل رمز UUID المعروض في الجهاز الآخر'),
+      isScrollControlled: true,
+      backgroundColor: Colors.black,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        child: Column(
+          children: [
+            AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: const Text('امسح رمز QR للربط', style: TextStyle(color: Colors.white)),
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Expanded(
+              child: MobileScanner(
+                onDetect: (capture) {
+                  final List<Barcode> barcodes = capture.barcodes;
+                  for (final barcode in barcodes) {
+                    final String? code = barcode.rawValue;
+                    if (code != null && code.isNotEmpty) {
+                      Navigator.pop(context, code);
+                      break;
+                    }
+                  }
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                'وجه الكاميرا نحو رمز QR المعروض في شاشة تسجيل الدخول على الجهاز الآخر',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          TextButton(onPressed: () => Navigator.pop(ctx, uuidCtrl.text.trim()), child: const Text('ربط')),
-        ],
       ),
     );
 

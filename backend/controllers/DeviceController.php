@@ -39,8 +39,8 @@ class DeviceController
             'INSERT INTO device_registrations
                 (user_id, device_uuid, device_name, os, app_version, is_active, last_seen)
              VALUES (?, ?, ?, ?, ?, 1, datetime("now"))
-             ON DUPLICATE KEY UPDATE
-                device_name = VALUES(device_name), os = VALUES(os), app_version = VALUES(app_version),
+             ON CONFLICT(user_id, device_uuid) DO UPDATE SET
+                device_name = excluded.device_name, os = excluded.os, app_version = excluded.app_version,
                 is_active = 1, last_seen = datetime("now")'
         );
         $stmt->execute([$userId, $fingerprint, ($model ?? '') . ' (' . ($osName ?? 'unknown') . ')', $osName, $appVersion]);

@@ -28,11 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = ['warn', 'الحالة محذوفة إداريًا مسبقًا.'];
             } else {
                 $pdo->beginTransaction();
-                $pdo->prepare('UPDATE stories SET deleted_at = datetime(\'now\',\'localtime\'), deleted_by = ? WHERE id = ?')
+                $pdo->prepare('UPDATE stories SET deleted_at = datetime("now"), deleted_by = ? WHERE id = ?')
                     ->execute([0 - (int)$admin['id'], $id]);
                 $pdo->prepare(
                     'INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, datetime(\'now\',\'localtime\'))'
+                     VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"))'
                 )->execute([
                     (int)$admin['id'], 'statuses.admin_deleted', 'story', $id,
                     'حذف إداري للحالة #' . $id . ' — صاحبها: ' . (int)$story['user_id'] . ' — السبب: ' . ($reason ?: 'لم يُذكر'),
@@ -64,9 +64,9 @@ try {
     };
     $stats = [
         'total'         => $q(''),
-        'active'        => $q("WHERE s.expires_at > datetime('now','localtime') AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
-        'today'         => $q("WHERE DATE(s.created_at) = DATE('now','localtime')"),
-        'expired'       => $q("WHERE s.expires_at <= datetime('now','localtime')"),
+        'active'        => $q("WHERE s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),
+        'today'         => $q("WHERE DATE(s.created_at) = date("now")"),
+        'expired'       => $q("WHERE s.expires_at <= datetime("now")"),
         'deleted'       => $q('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NULL'),
         'admin_deleted' => $q('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NOT NULL'),
         'views'         => 0,
@@ -83,11 +83,11 @@ try {
 // ===== جدول الحالات =====
 $filter = $_GET['filter'] ?? 'active';
 $where = match ($filter) {
-    'expired' => "WHERE s.expires_at <= datetime('now','localtime')",
+    'expired' => "WHERE s.expires_at <= datetime("now")",
     'deleted' => 'WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NULL',
     'admin_deleted' => 'WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NOT NULL',
     'all' => '',
-    default => "WHERE s.expires_at > datetime('now','localtime') AND s.deleted_at IS NULL AND s.deleted_by IS NULL",
+    default => "WHERE s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL",
 };
 try {
     $stmt = $pdo->query(

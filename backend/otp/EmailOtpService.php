@@ -461,7 +461,7 @@ class EmailOtpService
 
             $this->pdo->prepare(
                 'UPDATE email_providers SET ' . ($result['success'] ? 'success_count = success_count + 1' : 'failure_count = failure_count + 1')
-                . ', last_used_at = NOW(), updated_at = NOW() WHERE id = ?'
+                . ', last_used_at = datetime("now"), updated_at = datetime("now") WHERE id = ?'
             )->execute([(int)$row['id']]);
 
             if ($result['success']) {
@@ -480,7 +480,7 @@ class EmailOtpService
         try {
             $this->pdo->prepare(
                 'INSERT INTO email_delivery_logs (email_type, to_email, provider_id, subject, status, http_code, response_time_ms, response_summary, error_message, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime("now"))'
             )->execute([
                 $purpose, $to, $providerId ?: null, $subject,
                 $result['success'] ? 'sent' : 'failed',
@@ -504,7 +504,7 @@ class EmailOtpService
 
         // Cancel previous pending codes for this email
         $this->pdo->prepare(
-            'UPDATE email_verification_codes SET status = \'cancelled\', updated_at = NOW()
+            'UPDATE email_verification_codes SET status = \'cancelled\', updated_at = datetime("now")
              WHERE email = ? AND status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\')'
         )->execute([$email]);
 
@@ -527,7 +527,7 @@ class EmailOtpService
         $stmt = $this->pdo->prepare(
             'INSERT INTO email_verification_codes
                 (email, name, code_hash, manual_code_hash, manual_code, purpose, status, attempts, max_attempts, resends, delivery_mode, expires_at, ip_address, user_agent, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, NOW())'
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, datetime("now"))'
         );
         // حفظ الرمز نصيًا — يطابق ما يُعرض للمستخدم (otp_dev) والمدير في لوحة التحكم
         $plainManualCode = $devCode !== null || $manual ? $code : null;
@@ -543,12 +543,12 @@ class EmailOtpService
         if (!$manual) {
             $result = $this->sendViaProviders($email, $code, $subject);
             if ($result['success']) {
-                $this->pdo->prepare('UPDATE email_verification_codes SET status = \'sent\', updated_at = NOW() WHERE id = ?')->execute([$codeId]);
+                $this->pdo->prepare('UPDATE email_verification_codes SET status = \'sent\', updated_at = datetime("now") WHERE id = ?')->execute([$codeId]);
                 return ['success' => true, 'delivery_mode' => 'auto', 'cooldown' => $this->cooldownSeconds()];
             }
             // All providers failed → manual fallback
             $this->pdo->prepare(
-                'UPDATE email_verification_codes SET manual_code_hash = ?, manual_code = ?, status = \'manual\', updated_at = NOW()
+                'UPDATE email_verification_codes SET manual_code_hash = ?, manual_code = ?, status = \'manual\', updated_at = datetime("now")
                  WHERE id = ? AND status IN (\'pending\')'
             )->execute([password_hash($code, PASSWORD_BCRYPT), $code, $codeId]);
             return ['success' => true, 'delivery_mode' => 'manual', 'cooldown' => $this->cooldownSeconds(),
@@ -579,15 +579,15 @@ class EmailOtpService
             return ['verified' => false, 'error_code' => $otp['status'] === 'blocked' ? 'OTP_BLOCKED' : 'OTP_EXPIRED', 'message' => $msg];
         }
         if ($otp['expires_at'] !== null && $this->toUnixTs($otp['expires_at']) < time()) {
-            $this->pdo->prepare('UPDATE email_verification_codes SET status = \'expired\', updated_at = NOW() WHERE id = ?')->execute([(int)$otp['id']]);
+            $this->pdo->prepare('UPDATE email_verification_codes SET status = \'expired\', updated_at = datetime("now") WHERE id = ?')->execute([(int)$otp['id']]);
             return ['verified' => false, 'error_code' => 'OTP_EXPIRED', 'message' => 'انتهت صلاحية الرمز. اطلب رمزًا جديدًا'];
         }
         if ((int)$otp['attempts'] >= (int)$otp['max_attempts']) {
-            $this->pdo->prepare('UPDATE email_verification_codes SET status = \'blocked\', updated_at = NOW() WHERE id = ?')->execute([(int)$otp['id']]);
+            $this->pdo->prepare('UPDATE email_verification_codes SET status = \'blocked\', updated_at = datetime("now") WHERE id = ?')->execute([(int)$otp['id']]);
             return ['verified' => false, 'error_code' => 'OTP_BLOCKED', 'message' => 'تجاوزت الحد الأقصى للمحاولات. اطلب رمزًا جديدًا'];
         }
 
-        $this->pdo->prepare('UPDATE email_verification_codes SET attempts = attempts + 1, updated_at = NOW() WHERE id = ?')->execute([(int)$otp['id']]);
+        $this->pdo->prepare('UPDATE email_verification_codes SET attempts = attempts + 1, updated_at = datetime("now") WHERE id = ?')->execute([(int)$otp['id']]);
 
         $valid = password_verify(trim($code), $otp['code_hash']);
         // قبول الكود اليدوي الذي عرضه المدير للمستخدم (وضع التسليم اليدوي)
@@ -600,7 +600,7 @@ class EmailOtpService
             return ['verified' => false, 'error_code' => 'OTP_INVALID', 'message' => $msg, 'attempts_left' => $left];
         }
 
-        $this->pdo->prepare('UPDATE email_verification_codes SET status = \'verified\', updated_at = NOW() WHERE id = ?')->execute([(int)$otp['id']]);
+        $this->pdo->prepare('UPDATE email_verification_codes SET status = \'verified\', updated_at = datetime("now") WHERE id = ?')->execute([(int)$otp['id']]);
         return ['verified' => true, 'email_code_id' => (int)$otp['id']];
     }
 
@@ -640,8 +640,8 @@ class EmailOtpService
             return ['success' => false, 'message' => 'تجاوزت الحد الأقصى لإعادة الإرسال', 'error_code' => 'OTP_MAX_RESENDS'];
         }
 
-        $this->pdo->prepare('UPDATE email_verification_codes SET resends = resends + 1, updated_at = NOW() WHERE id = ?')->execute([$codeId]);
-        $this->pdo->prepare('UPDATE email_verification_codes SET status = \'cancelled\', updated_at = NOW() WHERE id = ?')->execute([$codeId]);
+        $this->pdo->prepare('UPDATE email_verification_codes SET resends = resends + 1, updated_at = datetime("now") WHERE id = ?')->execute([$codeId]);
+        $this->pdo->prepare('UPDATE email_verification_codes SET status = \'cancelled\', updated_at = datetime("now") WHERE id = ?')->execute([$codeId]);
 
         $res = $this->createAndSend((string)$otp['email'], $otp['name'], (string)$otp['purpose'], $ip, $ua, $devCode);
         $res['success'] = true;
@@ -673,11 +673,11 @@ class EmailOtpService
             $code = $this->generateCode();
             $freshExpiryTs = $nowPlusTs;
         }
-        // DB (SQLite NOW()) يخزن الوقت بصيغة UTC — نحفظ بنفس الصيغة لقراءة صحيحة لاحقًا
+        // DB (SQLite datetime("now")) يخزن الوقت بصيغة UTC — نحفظ بنفس الصيغة لقراءة صحيحة لاحقًا
         $freshExpiry = gmdate('Y-m-d H:i:s', $freshExpiryTs);
         $this->pdo->prepare(
             'UPDATE email_verification_codes SET manual_code_hash = ?, manual_code = ?, status = \'manual\',
-                   expires_at = ?, updated_at = NOW() WHERE id = ?'
+                   expires_at = ?, updated_at = datetime("now") WHERE id = ?'
         )->execute([
             password_hash($code, PASSWORD_BCRYPT),
             $code,
@@ -718,14 +718,14 @@ class EmailOtpService
         $stmt->execute([$codeId]);
         $otp = $stmt->fetch();
         if (!$otp) return null;
-        $this->pdo->prepare('UPDATE email_verification_codes SET status = \'verified\', updated_at = NOW() WHERE id = ?')->execute([$codeId]);
+        $this->pdo->prepare('UPDATE email_verification_codes SET status = \'verified\', updated_at = datetime("now") WHERE id = ?')->execute([$codeId]);
         return ['email' => $otp['email'], 'purpose' => $otp['purpose']];
     }
 
     public function cancel(int $codeId): bool
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE email_verification_codes SET status = \'cancelled\', updated_at = NOW()
+            'UPDATE email_verification_codes SET status = \'cancelled\', updated_at = datetime("now")
              WHERE id = ? AND status IN (\'pending\',\'sent\',\'manual\')'
         );
         $stmt->execute([$codeId]);

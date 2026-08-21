@@ -560,9 +560,9 @@ class AuthController
         $stmt = $this->pdo->prepare(
             'INSERT INTO app_settings (setting_key, setting_value)
              VALUES (?, ?)
-             ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = datetime("now")'
-        );
-        $stmt->execute([$key, $value, $value]);
+ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime("now")'
+	        );
+	        $stmt->execute([$key, $value]);
     }
 
     private function getStoredOtp(string $phone): ?array
@@ -606,9 +606,9 @@ class AuthController
                 $stmt = $this->pdo->prepare(
                     'INSERT INTO user_devices (user_id, device_uuid, fcm_token, last_active_at, created_at, updated_at)
                      VALUES (?, ?, ?, datetime("now"), datetime("now"), datetime("now"))
-                     ON DUPLICATE KEY UPDATE fcm_token = ?, last_active_at = datetime("now"), updated_at = datetime("now")'
-                );
-                $stmt->execute([$userId, $deviceUuid, $fcmToken, $fcmToken]);
+ON CONFLICT(user_id, device_uuid) DO UPDATE SET fcm_token = excluded.fcm_token, last_active_at = datetime("now"), updated_at = datetime("now")'
+	                );
+	                $stmt->execute([$userId, $deviceUuid, $fcmToken]);
                 $deviceId = (int)($this->pdo->lastInsertId() ?: 0) ?: null;
             } catch (\Throwable $e) {
                 error_log('Device registration error (non-fatal): ' . $e->getMessage());

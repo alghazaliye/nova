@@ -158,7 +158,7 @@ class AdminAuthController
             $val = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : trim((string)$value);
             $this->pdo->prepare(
                 'INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()'
+                 ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = datetime("now")'
             )->execute([$key, $val, $val]);
         }
 

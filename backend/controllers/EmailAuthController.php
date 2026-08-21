@@ -112,7 +112,7 @@ class EmailAuthController
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT expires_at FROM email_verification_codes
-                 WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > datetime("now"))
+                 WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > datetime('now'))
                  ORDER BY id DESC LIMIT 1"
             );
             $stmt->execute([$email]);
@@ -168,7 +168,7 @@ class EmailAuthController
             $emailPhone = 'e_' . substr(hash('sha256', $email), 0, 26);
             $this->pdo->prepare(
                 'INSERT INTO users (uuid, email, name, phone, username, email_verified, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, 1, 1, datetime("now"), datetime("now"))'
+                 VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'), datetime('now'))'
             )->execute([$uuid, $email, $displayName, $emailPhone, $emailPhone]);
             $userId = (int)$this->pdo->lastInsertId();
         } else {
@@ -177,10 +177,10 @@ class EmailAuthController
                 Response::forbidden('تم حظر هذا الحساب — يرجى التواصل مع إدارة التطبيق');
             }
             $this->pdo->prepare(
-                'UPDATE users SET email_verified = 1, updated_at = datetime("now") WHERE id = ?'
+                'UPDATE users SET email_verified = 1, updated_at = datetime('now') WHERE id = ?'
             )->execute([$userId]);
             if ($name !== null && ($user['name'] ?? '') === 'مستخدم NOVA') {
-                $this->pdo->prepare('UPDATE users SET name = ?, updated_at = datetime("now") WHERE id = ?')->execute([$name, $userId]);
+                $this->pdo->prepare('UPDATE users SET name = ?, updated_at = datetime('now') WHERE id = ?')->execute([$name, $userId]);
             }
         }
 
@@ -347,7 +347,7 @@ class EmailAuthController
             }
         }
 
-        $this->pdo->prepare('UPDATE users SET password_hash = ?, updated_at = datetime("now") WHERE id = ?')
+        $this->pdo->prepare('UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?')
                   ->execute([password_hash($newPassword, PASSWORD_BCRYPT), (int)$user['user_id']]);
 
         Response::success(null, 'تم حفظ كلمة المرور بنجاح');
@@ -378,8 +378,8 @@ class EmailAuthController
             try {
                 $this->pdo->prepare(
                     'INSERT INTO device_registrations (user_id, device_uuid, is_active, created_at)
-                     VALUES (?, ?, 1, datetime("now"))
-                     ON DUPLICATE KEY UPDATE is_active = 1, last_seen = datetime("now")'
+                     VALUES (?, ?, 1, datetime('now'))
+                     ON CONFLICT(user_id, device_uuid) DO UPDATE SET is_active = 1, last_seen = datetime('now')'
                 )->execute([$userId, $deviceUuid]);
                 $deviceId = (int)($this->pdo->lastInsertId() ?: 0) ?: null;
             } catch (Throwable $e) {
@@ -399,7 +399,7 @@ class EmailAuthController
             try {
                 $this->pdo->prepare(
                     'INSERT INTO sessions (user_id, token_hash, device_id, ip_address, user_agent, expires_at, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, datetime("now"))'
+                     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))'
                 )->execute([
                     $userId, $tokenHash, $deviceId,
                     $_SERVER['REMOTE_ADDR'] ?? null,

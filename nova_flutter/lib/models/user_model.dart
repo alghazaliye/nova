@@ -191,6 +191,7 @@ class NovaMessage {
   final String createdAt;
   final bool isEdited;
   final bool isDeleted;
+  final bool isVerified;
 
   // Attachment fields
   final String? filePath;
@@ -212,6 +213,7 @@ class NovaMessage {
     required this.createdAt,
     this.isEdited = false,
     this.isDeleted = false,
+    this.isVerified = false,
     this.filePath,
     this.thumbnailPath,
     this.mimeType,
@@ -236,6 +238,7 @@ class NovaMessage {
         createdAt: j['created_at'] ?? '',
         isEdited: (j['is_edited'] ?? 0) == 1,
         isDeleted: j['deleted_at'] != null || j['status'] == 'deleted',
+        isVerified: (j['is_verified'] ?? 0) == 1,
         filePath: j['file_path'],
         thumbnailPath: j['thumbnail_path'],
         mimeType: j['mime_type'],

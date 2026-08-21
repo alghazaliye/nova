@@ -1226,9 +1226,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   static const _disappearOptions = [
-    {'label': 'دائم (لا تختفي)', 'value': 0, 'icon': Icons.inbox},
-    {'label': 'بعد 24 ساعة', 'value': 86400, 'icon': Icons.timelapse},
-    {'label': 'بعد القراءة', 'value': -1, 'icon': Icons.visibility},
+    {'label': 'دائم (إيقاف)', 'value': 0, 'icon': Icons.block},
+    {'label': 'بعد ساعة واحدة', 'value': 3600, 'icon': Icons.timer_outlined},
+    {'label': 'بعد 24 ساعة', 'value': 86400, 'icon': Icons.history_toggle_off},
+    {'label': 'بعد 7 أيام', 'value': 604800, 'icon': Icons.calendar_today_outlined},
+    {'label': 'بعد 30 يوماً', 'value': 2592000, 'icon': Icons.calendar_month_outlined},
+    {'label': 'بعد القراءة فوراً', 'value': -1, 'icon': Icons.visibility_off_outlined},
   ];
 
   Future<void> _showMessageMenu(NovaMessage msg, Offset globalPosition) async {
@@ -1887,7 +1890,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final auth = context.read<AuthProvider>();
     return Scaffold(
       backgroundColor: c.bg,
-      resizeToAvoidBottomInset: false, // نمنع Scaffold من تغيير حجمه عند ظهور لوحة المفاتيح
+      resizeToAvoidBottomInset: true, // نفعّل تغيير الحجم لرفع الـ Composer فوق لوحة المفاتيح
       body: Stack(
         children: [
           Column(
@@ -3087,6 +3090,10 @@ class _Bubble extends StatelessWidget {
               _bodyText(c, isMine),
             const SizedBox(height: 3),
             Row(mainAxisSize: MainAxisSize.min, children: [
+              if (!isMine && msg.isVerified) ...[
+                const Icon(Icons.verified, color: Color(0xFF5B6CFF), size: 12),
+                const SizedBox(width: 4),
+              ],
               if (msg.isEdited)
                 Text('(معدلة)  ',
                     style: TextStyle(

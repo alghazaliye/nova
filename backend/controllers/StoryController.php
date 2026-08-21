@@ -44,7 +44,7 @@ class StoryController
                     (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id AND sv.viewer_id = ?) AS viewed_by_me
              FROM stories s
              JOIN users u ON u.id = s.user_id
-             WHERE s.expires_at > datetime(\'now\', \'localtime\') AND s.deleted_at IS NULL AND s.deleted_by IS NULL
+             WHERE s.expires_at > datetime("now") AND s.deleted_at IS NULL AND s.deleted_by IS NULL
                AND s.user_id NOT IN (' . $blockedIn . ')
              ORDER BY s.created_at DESC'
         );
@@ -283,7 +283,7 @@ class StoryController
         }
 
         $ins = $this->pdo->prepare(
-            'INSERT INTO story_views (story_id, viewer_id, viewed_at) VALUES (?, ?, datetime(\'now\',\'localtime\'))'
+            'INSERT INTO story_views (story_id, viewer_id, viewed_at) VALUES (?, ?, datetime("now"))'
         );
         $ins->execute([$id, $userId]);
         // atomic counter
@@ -371,9 +371,9 @@ class StoryController
         try {
             $this->pdo->prepare(
                 'INSERT INTO story_reactions (story_id, user_id, reaction, created_at)
-                 VALUES (?, ?, ?, datetime(\'now\',\'localtime\'))
-                 ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, created_at = datetime(\'now\',\'localtime\')'
-            )->execute([$id, $userId, $reaction]);
+                 VALUES (?, ?, ?, datetime("now"))
+ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, created_at = datetime("now")'
+	            )->execute([$id, $userId, $reaction]);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
@@ -441,11 +441,11 @@ class StoryController
         } else {
             $uuid = UuidHelper::generate();
             $this->pdo->prepare(
-                'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime(\'now\',\'localtime\'), datetime(\'now\',\'localtime\'))'
+                'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime("now"), datetime("now"))'
             )->execute([$uuid, $userId]);
             $convId = (int)$this->pdo->lastInsertId();
-            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "owner", datetime(\'now\',\'localtime\'))')->execute([$convId, $userId]);
-            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", datetime(\'now\',\'localtime\'))')->execute([$convId, $authorId]);
+            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "owner", datetime("now"))')->execute([$convId, $userId]);
+            $this->pdo->prepare('INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", datetime("now"))')->execute([$convId, $authorId]);
         }
 
         $msgUuid = UuidHelper::generate();
@@ -453,17 +453,17 @@ class StoryController
         try {
             $this->pdo->prepare(
                 'INSERT INTO messages (uuid, conversation_id, sender_id, reply_to_message_id, reply_to_status_id, type, body, client_message_id, status, created_at, updated_at)
-                 VALUES (?, ?, ?, NULL, ?, "text", ?, ?, "sent", datetime(\'now\',\'localtime\'), datetime(\'now\',\'localtime\'))'
+                 VALUES (?, ?, ?, NULL, ?, "text", ?, ?, "sent", datetime("now"), datetime("now"))'
             )->execute([$msgUuid, $convId, $userId, $id, $messageBody, 'reply_' . $msgUuid]);
             $msgId = (int)$this->pdo->lastInsertId();
 
             $this->pdo->prepare(
                 'INSERT INTO story_replies (story_id, sender_id, message_id, created_at)
-                 VALUES (?, ?, ?, datetime(\'now\',\'localtime\'))'
+                 VALUES (?, ?, ?, datetime("now"))'
             )->execute([$id, $userId, $msgId]);
 
             $this->pdo->prepare(
-                'UPDATE conversations SET last_message_id = ?, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
+                'UPDATE conversations SET last_message_id = ?, updated_at = datetime("now") WHERE id = ?'
             )->execute([$msgId, $convId]);
 
             $this->pdo->commit();
@@ -540,7 +540,7 @@ class StoryController
             Response::forbidden('لا يمكنك حذف حالة شخص آخر');
         }
 
-        $this->pdo->prepare('UPDATE stories SET deleted_at = datetime(\'now\',\'localtime\'), deleted_by = ? WHERE id = ?')->execute([$userId, $id]);
+        $this->pdo->prepare('UPDATE stories SET deleted_at = datetime("now"), deleted_by = ? WHERE id = ?')->execute([$userId, $id]);
         Response::success(null, 'تم حذف الحالة');
     }
 
@@ -661,12 +661,12 @@ class StoryController
         $this->pdo->beginTransaction();
         try {
             $this->pdo->prepare(
-                'UPDATE stories SET deleted_at = datetime(\'now\',\'localtime\'), deleted_by = ? WHERE id = ?'
+                'UPDATE stories SET deleted_at = datetime("now"), deleted_by = ? WHERE id = ?'
             )->execute([0 - (int)$admin['id'], $id]); // deleted_by سالب = حذف إداري (ids موجبة للمستخدمين)
 
             $this->pdo->prepare(
                 'INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime(\'now\',\'localtime\'))'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"))'
             )->execute([
                 (int)$admin['id'], 'statuses.admin_deleted', 'story', $id,
                 'حذف إداري للحالة #' . $id . ' - صاحبها: ' . (int)$story['user_id'] . ' - السبب: ' . $reason,
@@ -846,7 +846,7 @@ class StoryController
 
         $this->pdo->prepare(
             'INSERT INTO stories (uuid, user_id, type, text, file_id, privacy, created_at, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\',\'localtime\'), ?)'
+             VALUES (?, ?, ?, ?, ?, ?, datetime("now"), ?)'
         )->execute([$uuid, $userId, $type, $text, $fileId, $privacy, $expiresAt]);
 
         return (int)$this->pdo->lastInsertId() ?: null;
@@ -857,7 +857,7 @@ class StoryController
     {
         $this->pdo->prepare(
             'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, duration, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime(\'now\',\'localtime\'))'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime("now"))'
         )->execute([$uuid, $userId, $type, $file['name'], $fileName, $mime, (int)$file['size'], 'attachments/' . $fileName]);
         return (int)$this->pdo->lastInsertId();
     }

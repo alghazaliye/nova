@@ -288,6 +288,38 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp
 )
 SQL,
+            'privacy_settings' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `privacy_settings` (
+  `user_id` integer NOT NULL PRIMARY KEY,
+  `show_last_seen` integer DEFAULT 1,
+  `show_online_status` integer DEFAULT 1,
+  `show_read_receipts` integer DEFAULT 1,
+  `show_phone` integer DEFAULT 2,
+  `show_email` integer DEFAULT 2,
+  `show_avatar` integer DEFAULT 1,
+  `show_status_text` integer DEFAULT 1,
+  `messages_from` integer DEFAULT 1,
+  `calls_from` integer DEFAULT 1,
+  `groups_from` integer DEFAULT 1,
+  `find_by_phone` integer DEFAULT 1,
+  `find_by_email` integer DEFAULT 1,
+  `find_by_username` integer DEFAULT 1,
+  `display_identity` varchar(50) DEFAULT 'name_username',
+  `story_privacy` integer DEFAULT 1,
+  `allow_by_phone` integer DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp
+)
+SQL,
+            'typing_status' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `typing_status` (
+  `conversation_id` integer NOT NULL,
+  `user_id` integer NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
+  PRIMARY KEY (conversation_id, user_id)
+)
+SQL,
         ];
         foreach ($tables as $table => $ddl) {
             try {

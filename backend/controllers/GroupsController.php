@@ -79,7 +79,7 @@ class GroupsController
              FROM conversation_members cm
              JOIN users u ON u.id = cm.user_id
              WHERE cm.conversation_id = ? AND cm.left_at IS NULL
-             ORDER BY (CASE cm.role WHEN 'owner' THEN 1 WHEN 'admin' THEN 2 WHEN 'member' THEN 3 ELSE 4 END), cm.joined_at ASC'
+             ORDER BY (CASE cm.role WHEN "owner" THEN 1 WHEN "admin" THEN 2 WHEN "member" THEN 3 ELSE 4 END), cm.joined_at ASC'
         );
         $stmt->execute([(int)$group['conversation_id']]);
         $members = $stmt->fetchAll();

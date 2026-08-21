@@ -185,7 +185,7 @@ class AdminController
             Response::success(null, 'لا تغيير مطلوب');
         }
 
-        $this->pdo->prepare('UPDATE users SET is_verified = ?, updated_at = NOW() WHERE id = ?')
+        $this->pdo->prepare('UPDATE users SET is_verified = ?, updated_at = datetime("now") WHERE id = ?')
              ->execute([$isVerified, $id]);
 
         Response::success(
@@ -219,13 +219,13 @@ class AdminController
 
         // Soft-delete every live session so the blocked user is kicked out immediately
         $this->pdo->prepare(
-            'UPDATE sessions SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL'
+            'UPDATE sessions SET revoked_at = datetime("now") WHERE user_id = ? AND revoked_at IS NULL'
         )->execute([$id]);
 
         // Revoke all device registrations so the quota must be re-validated on unban
         $this->pdo->prepare('UPDATE device_registrations SET is_active = 0 WHERE user_id = ?')->execute([$id]);
 
-        $this->pdo->prepare('UPDATE users SET is_blocked = 1, blocked_at = NOW() WHERE id = ?')->execute([$id]);
+        $this->pdo->prepare('UPDATE users SET is_blocked = 1, blocked_at = datetime("now") WHERE id = ?')->execute([$id]);
 
         Response::success(null, 'تم حظر المستخدم ومنع الدخول للتطبيق');
     }
@@ -261,7 +261,7 @@ class AdminController
         $this->pdo->prepare('UPDATE users SET is_blocked = 1 WHERE id = ?')->execute([$id]);
         // Kick live sessions
         $this->pdo->prepare(
-            'UPDATE sessions SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL'
+            'UPDATE sessions SET revoked_at = datetime("now") WHERE user_id = ? AND revoked_at IS NULL'
         )->execute([$id]);
 
         Response::success(
@@ -317,13 +317,13 @@ class AdminController
         }
 
         $this->pdo->prepare(
-            'UPDATE user_appeals SET status = ?, admin_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?'
+            'UPDATE user_appeals SET status = ?, admin_note = ?, reviewed_by = ?, reviewed_at = datetime("now") WHERE id = ?'
         )->execute([$newStatus, $adminNote ?: null, $this->adminId(), $id]);
 
         // Approved appeal → unban the user automatically
         if ($newStatus === 'approved') {
             $this->pdo->prepare(
-                'UPDATE user_bans SET unbanned_at = NOW(), unbanned_by = ?
+                'UPDATE user_bans SET unbanned_at = datetime("now"), unbanned_by = ?
                  WHERE user_id = ? AND unbanned_at IS NULL'
             )->execute([$this->adminId(), (int)$appeal['user_id']]);
             $this->pdo->prepare(
@@ -348,7 +348,7 @@ class AdminController
         }
 
         $stmt = $this->pdo->prepare(
-            'UPDATE user_bans SET unbanned_at = NOW(), unbanned_by = ?
+            'UPDATE user_bans SET unbanned_at = datetime("now"), unbanned_by = ?
              WHERE user_id = ? AND unbanned_at IS NULL'
         );
         $stmt->execute([$this->adminId(), $id]);
@@ -357,7 +357,7 @@ class AdminController
 
         // Also clear any active temporary suspension for this user
         $this->pdo->prepare(
-            'UPDATE user_bans SET unbanned_at = NOW(), unbanned_by = ?
+            'UPDATE user_bans SET unbanned_at = datetime("now"), unbanned_by = ?
              WHERE user_id = ? AND unbanned_at IS NULL AND suspend_until IS NOT NULL'
         )->execute([$this->adminId(), $id]);
 

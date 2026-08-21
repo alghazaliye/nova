@@ -17,7 +17,7 @@ try {
     $stats['users_total'] = $stmt->fetch()['count'] ?? 0;
     
     // is_online قد لا يُحدّث دائمًا؛ نحسب المتصلين بالنشاط الأخير خلال 5 دقائق أيضًا
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE is_online = 1 OR last_seen >= datetime('now','-5 minutes','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE is_online = 1 OR last_seen >= datetime("now","-5 minutes")");
     $stats['users_online'] = $stmt->fetch()['count'] ?? 0;
     
     // إحصائيات المحادثات
@@ -31,27 +31,27 @@ try {
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM messages');
     $stats['messages_total'] = $stmt->fetch()['count'] ?? 0;
     
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE DATE(created_at) = DATE('now','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE date(created_at) = date("now")");
     $stats['messages_today'] = $stmt->fetch()['count'] ?? 0;
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE DATE(created_at) = DATE('now','-1 day','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE date(created_at) = date("now","-1 day")");
     $stats['messages_yesterday'] = $stmt->fetch()['count'] ?? 0;
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE created_at >= datetime('now','-7 days','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM messages WHERE created_at >= datetime("now","-7 days")");
     $stats['messages_week'] = $stmt->fetch()['count'] ?? 0;
 
     // إحصائيات المستخدمين: جديد اليوم/الأسبوع/الشهر + نسب التفعيل
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE DATE(created_at) = DATE('now','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE date(created_at) = date("now")");
     $stats['users_today'] = $stmt->fetch()['count'] ?? 0;
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE created_at >= datetime('now','-7 days','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE created_at >= datetime("now","-7 days")");
     $stats['users_week'] = $stmt->fetch()['count'] ?? 0;
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE created_at >= datetime('now','-30 days','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE created_at >= datetime("now","-30 days")");
     $stats['users_month'] = $stmt->fetch()['count'] ?? 0;
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE last_seen >= datetime('now','-1 hour','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE last_seen >= datetime("now","-1 hour")");
     $stats['users_active_hour'] = $stmt->fetch()['count'] ?? 0;
     
     // إحصائيات المكالمات
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM calls');
     $stats['calls_total'] = $stmt->fetch()['count'] ?? 0;
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM calls WHERE DATE(created_at) = DATE('now','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM calls WHERE date(created_at) = date("now")");
     $stats['calls_today'] = $stmt->fetch()['count'] ?? 0;
 
     // إحصائيات البلاغات والاعتراضات والحظر
@@ -72,7 +72,7 @@ try {
     $stmt = $pdo->query('SELECT COUNT(*) as count FROM audit_logs WHERE action IN ("ERROR", "FAILED")');
     $stats['errors_total'] = $stmt->fetch()['count'] ?? 0;
     
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM audit_logs WHERE action IN ('ERROR', 'FAILED') AND DATE(created_at) = DATE('now','localtime')");
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM audit_logs WHERE action IN ('ERROR', 'FAILED') AND date(created_at) = date("now")");
     $stats['errors_today'] = $stmt->fetch()['count'] ?? 0;
     
 } catch (Exception $e) {
@@ -86,7 +86,7 @@ $error_logs = $pdo->query(
 
 // أنشط المستخدمين
 $active_users = $pdo->query(
-    "SELECT u.id, u.name, u.username, u.avatar, u.last_seen, (SELECT COUNT(*) FROM messages m WHERE m.sender_id = u.id AND DATE(m.created_at) = DATE('now','localtime')) as message_count
+    "SELECT u.id, u.name, u.username, u.avatar, u.last_seen, (SELECT COUNT(*) FROM messages m WHERE m.sender_id = u.id AND date(m.created_at) = date("now")) as message_count
      FROM users u
      ORDER BY u.last_seen DESC NULLS LAST LIMIT 20"
 )->fetchAll() ?: [];
@@ -97,7 +97,7 @@ $connected_devices = $pdo->query(
             d.app_version, d.last_seen, u.name as user_name
      FROM device_registrations d
      JOIN users u ON u.id = d.user_id
-     WHERE d.last_seen >= datetime('now','-1 hour','localtime') AND d.is_active = 1
+     WHERE d.last_seen >= datetime("now","-1 hour") AND d.is_active = 1
      ORDER BY d.last_seen DESC LIMIT 20"
 )->fetchAll() ?: [];
 

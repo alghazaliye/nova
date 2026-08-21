@@ -204,7 +204,7 @@ class CallController
         try {
             $this->pdo->prepare(
                 'UPDATE calls SET status = "ended", ended_at = datetime("now"),
-                        duration = (strftime('%s', 'now') - strftime('%s', created_at)) * 1000
+                        duration = (strftime("%s", "now") - strftime("%s", created_at)) * 1000
                  WHERE status IN ("calling", "ringing")
                    AND created_at < datetime("now", "-60 seconds")'
             )->execute();
@@ -213,7 +213,7 @@ class CallController
             // لدى المستخدمين عند كل دخول.
             $this->pdo->prepare(
                 'UPDATE calls SET status = "ended", ended_at = COALESCE(ended_at, datetime("now")),
-                        duration = COALESCE(duration, (strftime('%s', 'now') - strftime('%s', started_at)) * 1000)
+                        duration = COALESCE(duration, (strftime("%s", "now") - strftime("%s", started_at)) * 1000)
                  WHERE status IN ("answered", "accepted")
                    AND ended_at IS NULL
                    AND created_at < datetime("now", "-300 seconds")'
@@ -250,7 +250,7 @@ class CallController
         try {
             $this->pdo->prepare(
                 'UPDATE calls SET status = "ended", ended_at = datetime("now"),
-                        duration = COALESCE(duration, (strftime('%s', 'now') - strftime('%s', started_at)) * 1000)
+                        duration = COALESCE(duration, (strftime("%s", "now") - strftime("%s", started_at)) * 1000)
                  WHERE status IN ("answered", "accepted")
                    AND ended_at IS NULL
                    AND created_at < datetime("now", "-300 seconds")'
