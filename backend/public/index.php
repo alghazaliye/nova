@@ -630,9 +630,10 @@ if ($uri === '/heartbeat/offline' && $method === 'POST') {
 if ($uri === '/settings' && $method === 'GET') {
     (new UserController())->appSettings();
 }
-if ($uri === '/privacy' && $method === 'GET') {
-    (new UserController())->privacyGet();
-}
+    if ($uri === '/privacy' && $method === 'GET') {
+        // We use the controller directly, but the controller calls authenticate() internally.
+        (new UserController())->privacyGet();
+    }
 if ($uri === '/privacy' && $method === 'PUT') {
     (new UserController())->privacyUpdate();
 }
