@@ -60,7 +60,7 @@ class ConversationController
                     'SELECT t.user_id, u.name, u.avatar
                      FROM typing_status t
                      JOIN users u ON u.id = t.user_id
-                     WHERE t.conversation_id = ? AND t.expires_at > datetime('now')'
+                     WHERE t.conversation_id = ? AND t.expires_at > datetime("now")'
                 );
                 $tp->execute([(int)$conv['id']]);
                 $conv['typing_users'] = array_map(function ($r) {
@@ -141,7 +141,7 @@ class ConversationController
             try {
                 $uuid = UuidHelper::generate();
                 $this->pdo->prepare(
-                    'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime('now'), datetime('now'))'
+                    'INSERT INTO conversations (uuid, type, created_by, created_at, updated_at) VALUES (?, "private", ?, datetime("now"), datetime("now"))'
                 )->execute([$uuid, $userId]);
                 $convId = (int)$this->pdo->lastInsertId();
 
@@ -168,20 +168,20 @@ class ConversationController
             try {
                 $uuid = UuidHelper::generate();
                 $this->pdo->prepare(
-                    'INSERT INTO conversations (uuid, type, title, created_by, created_at, updated_at) VALUES (?, "group", ?, ?, datetime('now'), datetime('now'))'
+                    'INSERT INTO conversations (uuid, type, title, created_by, created_at, updated_at) VALUES (?, "group", ?, ?, datetime("now"), datetime("now"))'
                 )->execute([$uuid, $title, $userId]);
                 $convId = (int)$this->pdo->lastInsertId();
 
                 // Create group record
                 $groupUuid = UuidHelper::generate();
                 $this->pdo->prepare(
-                    'INSERT INTO groups (conversation_id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))'
+                    'INSERT INTO groups (conversation_id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, datetime("now"), datetime("now"))'
                 )->execute([$convId, $title, $userId]);
                 $groupId = (int)$this->pdo->lastInsertId();
 
                 // Default group settings
                 $this->pdo->prepare(
-                    'INSERT INTO group_settings (group_id, created_at, updated_at) VALUES (?, datetime('now'), datetime('now'))'
+                    'INSERT INTO group_settings (group_id, created_at, updated_at) VALUES (?, datetime("now"), datetime("now"))'
                 )->execute([$groupId]);
 
                 // Add creator as owner

@@ -112,7 +112,7 @@ class EmailAuthController
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT expires_at FROM email_verification_codes
-                 WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > datetime("now"))
+                 WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > datetime('now'))
                  ORDER BY id DESC LIMIT 1"
             );
             $stmt->execute([$email]);
