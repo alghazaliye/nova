@@ -174,6 +174,7 @@ if (preg_match('#^/media/(.+)$#', $uri, $mediaMatch) || preg_match('#^/nova/back
 // =====================================================
 
 // Auth Routes
+if ($uri === "/heartbeat" && $method === "GET") { (new UserController())->heartbeat(); }
 if ($uri === '/auth/register' && $method === 'POST') {
     (new AuthController())->register();
 }
