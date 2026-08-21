@@ -75,7 +75,7 @@ class GroupsController
         // Members with roles
         $stmt = $this->pdo->prepare(
             'SELECT cm.user_id, cm.role, cm.joined_at,
-                    u.name, u.avatar, u.username, u.phone, u.last_seen
+                    u.name, u.avatar, u.username, u.phone, u.last_seen, u.is_verified
              FROM conversation_members cm
              JOIN users u ON u.id = cm.user_id
              WHERE cm.conversation_id = ? AND cm.left_at IS NULL

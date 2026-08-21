@@ -62,17 +62,18 @@ class _WebFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb) return child;
+    final isDark = Provider.of<ThemeProvider>(context).isDark;
     return Container(
-      color: const Color(0xFF0B0F1A),
+      color: isDark ? const Color(0xFF020408) : const Color(0xFFF0F2F5),
       child: Center(
         child: Container(
           width: 480,
           decoration: BoxDecoration(
-            color: NovaColors.dark.surface,
+            color: isDark ? NovaColors.dark.surface : NovaColors.light.surface,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.6),
-                blurRadius: 40,
+                color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.08),
+                blurRadius: isDark ? 40 : 20,
               ),
             ],
           ),

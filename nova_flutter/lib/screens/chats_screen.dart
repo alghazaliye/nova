@@ -1248,7 +1248,7 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                                         size: 54,
                                         radius: 18,
                                         imageUrl: conv.avatar,
-                                        online: conv.isVerified),
+                                        online: conv.isOnline),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
@@ -1294,10 +1294,12 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                                                     ],
                                                   ),
                                                 ),
-                                              if (conv.isVerified)
+                                              if (conv.isVerified) ...[
+                                                const SizedBox(width: 4),
                                                 const Icon(Icons.verified,
                                                     color: Colors.blue,
                                                     size: 16),
+                                              ],
                                             ],
                                           ),
                                           const SizedBox(height: 4),
@@ -1768,17 +1770,20 @@ class _ContactsTabState extends State<ContactsTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      Expanded(
+                      Flexible(
                         child: Text(displayName,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                                 fontSize: 15.5,
                                 fontWeight: FontWeight.w800,
                                 color: c.text)),
                       ),
-                      if ((user['is_verified'] ?? 0) == 1)
+                      if ((user['is_verified'] ?? 0) == 1) ...[
+                        const SizedBox(width: 4),
                         const Icon(Icons.verified,
                             color: Colors.blue, size: 16),
+                      ],
                     ]),
                     const SizedBox(height: 3),
                     Text(

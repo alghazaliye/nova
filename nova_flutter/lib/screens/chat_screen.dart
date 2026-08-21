@@ -80,7 +80,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _ctrl.addListener(() {
       final has = _ctrl.text.trim().isNotEmpty;
       if (has != _hasText) setState(() => _hasText = has);
-      // مؤشر الكتابة: إرسال حالة writing عند الكتابة، وcancel بعد توقف 2.5 ثانية
+      // مؤشر الكتابة: إرسال حالة writing عند الكتابة
       _notifyTyping(has);
     });
     _load();
@@ -272,29 +272,27 @@ class _ChatScreenState extends State<ChatScreen> {
   /// - يُلغي الحالة فقط عند: إفراغ الحقل (توقف الكتابة) أو إرسال الرسالة أو مغادرة الشاشة.
   void _notifyTyping(bool isTyping) {
     if (isTyping) {
-      // يُرسل مرة واحدة فقط عند بداية الكتابة
+      // Debouncing: إرسال حالة الكتابة مرة واحدة كل 3 ثوانٍ أثناء استمرار الكتابة
+      // لضمان بقاء الحالة نشطة في الخادم دون إغراق الشبكة بالطلبات.
       if (!_lastTypingSent) {
         _lastTypingSent = true;
         ApiService.post('/conversations/${widget.conv.id}/typing',
             body: {'typing': true}).catchError((_) => <String, dynamic>{'success': false, 'message': 'تعذر الاتصال'});
-      }
-      // لا إعادة إرسال أثناء الاستمرار — الخادم يُنهي الحالة بعد 4 ثوانٍ تلقائيًا.
-      // إذا فُرّغ الحقل (توقف عن الكتابة) نُلغي الحالة فورًا بعد ثانية واحدة.
-      _typingTimer?.cancel();
-      if (_ctrl.text.trim().isEmpty) {
-        _typingTimer = Timer(const Duration(seconds: 1), () {
-          if (!mounted) return;
-          _typingTimer = null;
-          if (_ctrl.text.trim().isEmpty) _sendTypingCancel();
-          _lastTypingSent = false;
+        
+        // إعادة التعيين بعد 3 ثوانٍ للسماح بإرسال طلب آخر إذا استمر المستخدم في الكتابة
+        _typingTimer?.cancel();
+        _typingTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) _lastTypingSent = false;
         });
       }
     } else {
-      // الحقل فُرّغ: إلغاء فوري بدل انتظار انتهاء صلاحية الخادم
+      // الحقل فُرّغ: إلغاء فوري
       _typingTimer?.cancel();
       _typingTimer = null;
-      if (_lastTypingSent) _sendTypingCancel();
-      _lastTypingSent = false;
+      if (_lastTypingSent) {
+        _sendTypingCancel();
+        _lastTypingSent = false;
+      }
     }
   }
 
@@ -316,7 +314,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _refreshTyping() async {
     final now = DateTime.now();
     final lt = _lastTypingRefresh;
-    if (lt != null && now.difference(lt).inSeconds < 15) return;
+    // تحديث كل 3 ثوانٍ ليكون مؤشر "يكتب الآن" مستجيباً للواقع
+    if (lt != null && now.difference(lt).inSeconds < 3) return;
     _lastTypingRefresh = now;
     try {
       final res = await ApiService.get('/conversations/${widget.conv.id}/typing');
@@ -1639,7 +1638,17 @@ class _ChatScreenState extends State<ChatScreen> {
         final c = NovaColors.of(ctx);
         return AlertDialog(
           backgroundColor: c.surface,
-          title: Text(widget.conv.name, style: TextStyle(color: c.text)),
+          title: Row(
+            children: [
+              Flexible(
+                  child: Text(widget.conv.name,
+                      style: TextStyle(color: c.text))),
+              if (widget.conv.isVerified) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.verified, color: Colors.blue, size: 18),
+              ],
+            ],
+          ),
           content: Text(
               'جهة اتصال Nova Messenger\\n${widget.conv.isOnline ? 'متصل الآن' : formatLastSeen(widget.conv.lastSeen, utcOffsetMinutes: Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes)}',
               style: TextStyle(color: c.text, height: 1.7)),

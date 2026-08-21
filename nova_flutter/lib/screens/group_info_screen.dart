@@ -523,6 +523,12 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                                                       color: c.text),
                                                 ),
                                               ),
+                                              if ((m['is_verified'] ?? 0) == 1) ...[
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.verified,
+                                                    color: Colors.blue,
+                                                    size: 15),
+                                              ],
                                               if (roleLabel.isNotEmpty) ...[
                                                 const SizedBox(width: 6),
                                                 Container(
@@ -532,7 +538,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                                                           vertical: 2),
                                                   decoration: BoxDecoration(
                                                     color: roleColor
-                                                        .withOpacity(0.12),
+                                                        .withValues(alpha: 0.12),
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                             10),

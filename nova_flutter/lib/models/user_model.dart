@@ -115,7 +115,7 @@ class Conversation {
                 .map((e) => NovaUser.fromJson(Map<String, dynamic>.from(e)))
                 .toList()
             : [],
-        isVerified: (j['is_verified'] ?? 0) == 1,
+        isVerified: _otherIsVerified(j),
         phone: _memberPhone(j),
         otherUserId: _otherUserId(j),
         isOnline: _otherIsOnline(j),
@@ -166,6 +166,17 @@ class Conversation {
       }
     } catch (_) {}
     return 0;
+  }
+
+  static bool _otherIsVerified(Map<String, dynamic> j) {
+    try {
+      // 1. تحقق من الحقل المباشر (للمجموعات أو البحث)
+      if ((j['is_verified'] ?? 0) == 1) return true;
+      // 2. تحقق من المستخدم الآخر (للمحادثات الخاصة)
+      final ou = j['other_user'];
+      if (ou is Map) return (ou['is_verified'] ?? 0) == 1;
+    } catch (_) {}
+    return false;
   }
 }
 
