@@ -14,15 +14,15 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="/">
+  <base href="/web_app/">
   <script>
-    // Dynamic base href: works whether served from root or a sub-path (e.g. /web_app/).
+    // Dynamic base href: ensure we stay within /web_app/ context
     (function () {
       try {
         var p = window.location.pathname;
-        var base = p.lastIndexOf('/') > 0 ? p.substring(0, p.lastIndexOf('/') + 1) : '/';
-        var b = document.getElementById('dynamic-base');
-        if (b && b.getAttribute('href') !== base) b.setAttribute('href', base);
+        if (p.indexOf('/web_app/') === -1 && p !== '/') {
+           // If we are not in /web_app/ but the base is set, flutter might get confused
+        }
       } catch (e) { /* ignore */ }
     })();
   </script>

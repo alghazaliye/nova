@@ -639,14 +639,26 @@ class UserController
         };
     }
 
-    private static function _defaultPrivacyRow(): array
+        private static function _defaultPrivacyRow(): array
     {
         return [
-            'show_last_seen' => 1, 'show_online_status' => 1, 'show_read_receipts' => 1,
-            'show_phone' => 2, 'show_email' => 2, 'show_avatar' => 1, 'show_status_text' => 1,
-            'messages_from' => 1, 'calls_from' => 1, 'groups_from' => 1,
-            'find_by_phone' => 1, 'find_by_email' => 1, 'find_by_username' => 1,
-            'display_identity' => 'name_username', 'story_privacy' => 1, 'allow_by_phone' => 1,
+            'show_last_seen'     => 1,
+            'show_online_status' => 1,
+            'show_read_receipts' => 1,
+            'show_phone'         => 2,
+            'show_email'         => 2,
+            'show_avatar'        => 1,
+            'show_status_text'   => 1,
+            'messages_from'      => 1,
+            'calls_from'         => 1,
+            'groups_from'        => 1,
+            'find_by_phone'      => 1,
+            'find_by_email'      => 1,
+            'find_by_username'   => 1,
+            'display_identity'   => 'name_username',
+            'story_privacy'      => 1,
+            'allow_by_phone'     => 1,
+            'email_visibility'   => 2
         ];
     }
 
