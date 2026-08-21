@@ -110,8 +110,9 @@ ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, u
 
 -- =====================================================
 -- Sample Test Users (Development Only)
--- Password for all: Test@1234
+-- DISABLED: fake users appeared in real search results and confused
+-- new users (they showed up as "previous users" that never deliver messages).
 -- =====================================================
-INSERT OR IGNORE INTO users (uuid, phone, password_hash, email_verified, phone_verified, name, username, bio, is_verified, is_blocked) VALUES
-  ('a1001111-1111-4111-8111-111111111111', '+966501234567', '$2b$10$N/jFhyztLc.n.t.qV16fB.wxI6ZDtFtwDF0WSpCTMFl7Bp/BO4VLe', 1, 1, 'أحمد الغزالي', 'ahmed', 'مطور برمجيات', 1, 0),
-  ('a1002222-2222-4222-8222-222222222222', '+966502345678', '$2b$10$N/jFhyztLc.n.t.qV16fB.wxI6ZDtFtwDF0WSpCTMFl7Bp/BO4VLe', 1, 1, 'سارة العمري', 'sara', 'مصممة UX', 1, 0);
+-- INSERT OR IGNORE INTO users (uuid, phone, password_hash, email_verified, phone_verified, name, username, bio, is_verified, is_blocked) VALUES
+--   ('a1001111-1111-4111-8111-111111111111', '+966501234567', '$2b$10$N/jFhyztLc.n.t.qV16fB.wxI6ZDtFtwDF0WSpCTMFl7Bp/BO4VLe', 1, 1, 'أحمد الغزالي', 'ahmed', 'مطور برمجيات', 1, 0),
+--   ('a1002222-2222-4222-8222-222222222222', '+966502345678', '$2b$10$N/jFhyztLc.n.t.qV16fB.wxI6ZDtFtwDF0WSpCTMFl7Bp/BO4VLe', 1, 1, 'سارة العمري', 'sara', 'مصممة UX', 1, 0);

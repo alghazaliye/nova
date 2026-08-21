@@ -16,12 +16,25 @@ class AdminController
         $this->pdo = Database::getInstance();
 
         // Only admins can call these endpoints.
-        $adminSession = AuthMiddleware::authenticate();
+        // Support both session-bound user JWTs (via AuthMiddleware) and
+        // standalone admin JWTs (role=admin in payload, used by the admin panel).
+        $authHeader = nova_get_auth_header() ?? '';
+        $token = str_starts_with($authHeader, 'Bearer ') ? substr($authHeader, 7) : '';
+        $payload = $token !== '' ? JwtHelper::verify($token) : null;
+        $isStandaloneAdminJwt = $payload !== null
+            && isset($payload['role']) && $payload['role'] === 'admin'
+            && isset($payload['exp']) && (int)$payload['exp'] > time();
+        if ($isStandaloneAdminJwt) {
+            $adminId = (int)($payload['user_id'] ?? 0);
+        } else {
+            $adminSession = AuthMiddleware::authenticate();
+            $adminId = (int)$adminSession['user_id'];
+        }
 
         $stmt = $this->pdo->prepare(
             'SELECT a.id, a.role_id FROM admins a WHERE a.id = ? AND a.is_active = 1 LIMIT 1'
         );
-        $stmt->execute([(int)$adminSession['user_id']]);
+        $stmt->execute([$adminId]);
         if (!$stmt->fetch()) {
             Response::forbidden('هذه العمليات متاحة للمشرفين فقط');
         }
@@ -395,6 +408,57 @@ class AdminController
         $user['max_devices_allowed'] = $maxDevices;
 
         Response::success($user);
+    }
+
+    // DELETE /api/v1/admin/users/{id}
+    public function userDelete(int $id): void
+    {
+        // Support both session-bound user JWTs and standalone admin JWTs
+        $authHeader = nova_get_auth_header() ?? '';
+        $token = str_starts_with($authHeader, 'Bearer ') ? substr($authHeader, 7) : '';
+        if ($token === '') {
+            Response::unauthorized('يجب تسجيل الدخول أولاً');
+        }
+        $payload = JwtHelper::verify($token);
+        if ($payload === null) {
+            Response::unauthorized('الجلسة منتهية أو غير صالحة، يرجى تسجيل الدخول مجدداً');
+        }
+        $adminId = (int)($payload['user_id'] ?? 0);
+        $isStandaloneAdminJwt = isset($payload['role']) && $payload['role'] === 'admin';
+        if (!$isStandaloneAdminJwt) {
+            // Session-bound JWT: verify the session record exists (user JWT)
+            $user = AuthMiddleware::authenticate();
+            $adminId = (int)$user['user_id'];
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT a.id, r.name AS role_name
+             FROM admins a JOIN roles r ON r.id = a.role_id
+             WHERE a.id = ? AND a.is_active = 1 LIMIT 1'
+        );
+        $stmt->execute([$adminId]);
+        $adminRow = $stmt->fetch();
+        if (!$adminRow || stripos($adminRow['role_name'] ?? '', 'admin') === false) {
+            Response::forbidden('غير مصرح لك بهذا الإجراء');
+        }
+
+        $stmt = $this->pdo->prepare('SELECT id, phone, name FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $user = $stmt->fetch();
+        if (!$user) {
+            Response::notFound('المستخدم غير موجود');
+        }
+
+        // Hard-delete rows not covered by ON DELETE CASCADE
+        $this->pdo->prepare('DELETE FROM conversations WHERE created_by = ?')->execute([$id]);
+        $this->pdo->prepare('DELETE FROM calls WHERE caller_id = ?')->execute([$id]);
+        $this->pdo->prepare('DELETE FROM messages WHERE sender_id = ?')->execute([$id]);
+        $this->pdo->prepare('DELETE FROM attachments WHERE uploader_id = ?')->execute([$id]);
+        // Cascaded tables (blocks, call_participants, contacts, conv_members,
+        // message_reactions, message_reads, notifications, reports, sessions,
+        // stories, story_views, devices, call_signals, user_bans, user_subscriptions)
+        $this->pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+
+        Response::success(['id' => $id, 'phone' => $user['phone'], 'name' => $user['name']], 'تم حذف المستخدم');
     }
 
     // Private helpers

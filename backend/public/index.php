@@ -585,6 +585,9 @@ if (preg_match('#^/admin/devices/(\d+)$#', $uri, $m) && $method === 'DELETE') {
 if (preg_match('#^/admin/users/(\d+)/devices/(\d+)$#', $uri, $m) && $method === 'POST') {
     (new AdminController())->deactivateDevice((int)$m[1], (int)$m[2]);
 }
+if (preg_match('#^/admin/users/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    (new AdminController())->userDelete((int)$m[1]);
+}
 
 // Device Routes (authenticated users)
 if ($uri === '/devices/register' && $method === 'POST') {

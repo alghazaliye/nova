@@ -133,6 +133,75 @@ if (strpos($uri, '/admin') === 0) {
     return true;
 }
 
+// ---------- 2.4b) Flutter package assets at root (/assets/packages/...)
+// Flutter web resolves package fonts/assets from the site root regardless of
+// the app base path. Serve them from web_app/assets/packages/ so icon fonts
+// (CupertinoIcons, intl_phone_field, record_web, ...) never 404.
+$webAppAssetsDir = PROJECT_ROOT . '/web_app/assets';
+$pkgPrefix = '/assets/packages/';
+if (strpos($uri, $pkgPrefix) === 0) {
+    $pkgFile = substr($uri, strlen($pkgPrefix));
+    if ($pkgFile !== '' && strpos($pkgFile, '..') === false) {
+        $realPath = realpath($webAppAssetsDir . '/packages/' . $pkgFile);
+        if ($realPath !== false && is_file($realPath) && strpos($realPath, $webAppAssetsDir) === 0) {
+            $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+            $mimeTypes = [
+                'js'   => 'application/javascript; charset=utf-8',
+                'mjs'  => 'application/javascript; charset=utf-8',
+                'wasm' => 'application/wasm',
+                'json' => 'application/json; charset=utf-8',
+                'ttf'  => 'font/ttf',
+                'otf'  => 'font/otf',
+                'woff' => 'font/woff',
+                'woff2' => 'font/woff2',
+                'png'  => 'image/png',
+                'svg'  => 'image/svg+xml',
+            ];
+            header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
+            header('Cross-Origin-Resource-Policy: cross-origin');
+            header('Access-Control-Allow-Origin: *');
+            header('Content-Length: ' . filesize($realPath));
+            readfile($realPath);
+            return true;
+        }
+    }
+    http_response_code(404);
+    echo 'Asset not found';
+    return true;
+}
+
+// ---------- 2.4c) Flutter build assets at root (/assets/...)
+// Flutter web resolves fonts/shaders from the site root (/assets/fonts/...,
+// /assets/shaders/...) regardless of the app base path.
+if (strpos($uri, '/assets/') === 0 && strpos($uri, '/assets/packages/') !== 0) {
+    $assetFile = substr($uri, 8);
+    if ($assetFile !== '' && strpos($assetFile, '..') === false) {
+        $realPath = realpath($webAppAssetsDir . '/' . $assetFile);
+        if ($realPath !== false && is_file($realPath) && strpos($realPath, $webAppAssetsDir) === 0) {
+            $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+            $mimeTypes = [
+                'json' => 'application/json; charset=utf-8',
+                'ttf'  => 'font/ttf',
+                'otf'  => 'font/otf',
+                'woff' => 'font/woff',
+                'woff2' => 'font/woff2',
+                'png'  => 'image/png',
+                'svg'  => 'image/svg+xml',
+                'frag' => 'text/plain; charset=utf-8',
+            ];
+            header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
+            header('Cross-Origin-Resource-Policy: cross-origin');
+            header('Access-Control-Allow-Origin: *');
+            header('Content-Length: ' . filesize($realPath));
+            readfile($realPath);
+            return true;
+        }
+    }
+    http_response_code(404);
+    echo 'Asset not found';
+    return true;
+}
+
 // ---------- 2.5) Web app bare path -> redirect to /web_app/ ----------
 if ($uri === '/web_app') {
     header('Location: /web_app/', true, 302);
