@@ -120,8 +120,9 @@ class Database
         $migrations = [
             'conversation_members' => ['disappear_after' => 'INTEGER DEFAULT NULL'],
             'messages'             => [
-                'disappear_after' => 'INTEGER DEFAULT NULL',
-                'deleted_by'      => 'INTEGER DEFAULT NULL',
+                'disappear_after'    => 'INTEGER DEFAULT NULL',
+                'deleted_by'         => 'INTEGER DEFAULT NULL',
+                'reply_to_status_id' => 'INTEGER DEFAULT NULL',
             ],
             'privacy_settings' => [
                 'show_phone'         => 'INTEGER NOT NULL DEFAULT 2',
@@ -141,6 +142,7 @@ class Database
             'reports' => [
                 'reason_code' => "TEXT DEFAULT NULL",
                 'priority'    => "TEXT NOT NULL DEFAULT 'medium'",
+                'story_id'    => 'INTEGER DEFAULT NULL',
             ],
             'plans' => [
                 'plan_type'                 => "TEXT NOT NULL DEFAULT 'free'",
@@ -153,12 +155,6 @@ class Database
             'stories' => [
                 'deleted_by'  => 'INTEGER DEFAULT NULL',
                 'views_count' => 'INTEGER NOT NULL DEFAULT 0',
-            ],
-            'messages' => [
-                'reply_to_status_id' => 'INTEGER DEFAULT NULL',
-            ],
-            'reports' => [
-                'story_id' => 'INTEGER DEFAULT NULL',
             ],
             'payment_requests' => [
                 'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
