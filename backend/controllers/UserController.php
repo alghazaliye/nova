@@ -239,13 +239,13 @@ class UserController
         // تنظيف جماعي: أي مستخدم لم يُحدَّث آخر ظهور خلال 5 دقائق يُعتبر offline فعليًا
         try {
             $this->pdo->prepare(
-                'UPDATE users SET is_online = 0 WHERE is_online = 1 AND last_seen < NOW() - INTERVAL 5 MINUTE'
+                'UPDATE users SET is_online = 0 WHERE is_online = 1 AND last_seen < datetime("now", "-5 minutes")'
             )->execute();
         } catch (\Throwable $e) {
             // تجاهل — غير حرج
         }
         $this->pdo->prepare(
-            'UPDATE users SET is_online = 1, last_seen = NOW(), updated_at = NOW() WHERE id = ?'
+            'UPDATE users SET is_online = 1, last_seen = datetime("now"), updated_at = datetime("now") WHERE id = ?'
         )->execute([$userId]);
         Response::success(null, 'ok');
     }
@@ -256,7 +256,7 @@ class UserController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
         $this->pdo->prepare(
-            'UPDATE users SET is_online = 0, last_seen = NOW(), updated_at = NOW() WHERE id = ?'
+            'UPDATE users SET is_online = 0, last_seen = datetime("now"), updated_at = datetime("now") WHERE id = ?'
         )->execute([$userId]);
         Response::success(null, 'ok');
     }

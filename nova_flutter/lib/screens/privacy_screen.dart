@@ -240,6 +240,39 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     }
   }
 
+  Future<void> _scanQr() async {
+    final TextEditingController uuidCtrl = TextEditingController();
+    final uuid = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ربط جهاز جديد'),
+        content: TextField(
+          controller: uuidCtrl,
+          decoration: const InputDecoration(hintText: 'أدخل رمز UUID المعروض في الجهاز الآخر'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(ctx, uuidCtrl.text.trim()), child: const Text('ربط')),
+        ],
+      ),
+    );
+
+    if (uuid == null || uuid.isEmpty) return;
+
+    try {
+      final res = await ApiService.post('/devices/link/authorize', body: {'session_uuid': uuid});
+      if (mounted) {
+        if (res['success'] == true) {
+          showToast(context, 'تم ربط الجهاز بنجاح');
+        } else {
+          showToast(context, res['message'] ?? 'فشل ربط الجهاز');
+        }
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'تعذر الاتصال بالخادم');
+    }
+  }
+
   Widget _visibilityRow({
     required IconData icon,
     required String title,
@@ -365,6 +398,28 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                           title: 'البريد الإلكتروني',
                           subtitle: 'من يمكنه رؤية بريدك الإلكتروني',
                           key: 'email_visibility',
+                        ),
+                      ],
+                    ),
+                  ),
+                  _sectionTitle('ربط الأجهزة'),
+                  NovaCard(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      children: [
+                        RowItem(
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: NovaColors.of(context).surface2,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Icon(Icons.qr_code_scanner, size: 20, color: NovaColors.of(context).text),
+                          ),
+                          title: 'ربط جهاز جديد (QR)',
+                          subtitle: 'الموافقة على فتح حسابك في متصفح أو جهاز آخر',
+                          onTap: _scanQr,
                         ),
                       ],
                     ),

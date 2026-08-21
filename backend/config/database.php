@@ -53,6 +53,7 @@ class Database
                 self::connectCompat($dsn, $options);
                 self::migrateMissingColumns();
                 self::migrateMissingTables();
+                self::migrateLinkSessionsTable();
                 self::applyConfiguredTimezone();
 
                 // Pragmas for SQLite performance and reliability
@@ -353,4 +354,35 @@ SQL,
     // Prevent cloning and unserialization
     private function __clone() {}
     public function __wakeup() { throw new \Exception('Cannot unserialize singleton.'); }
+
+    private static function migrateLinkSessionsTable(): void
+    {
+        $ddl = <<<'SQL'
+CREATE TABLE IF NOT EXISTS `link_sessions` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `session_uuid` varchar(190) NOT NULL,
+  `user_id` integer DEFAULT NULL,
+  `device_name` varchar(200) DEFAULT NULL,
+  `platform` varchar(50) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'pending', -- pending, authorized, completed, expired
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  `expires_at` datetime NOT NULL,
+  UNIQUE (`session_uuid`)
+)
+SQL;
+        try {
+            self::$instance->exec($ddl);
+            // إضافة أعمدة مفقودة لـ device_registrations إذا لزم الأمر
+            // نستخدم try-catch لكل ALTER TABLE لأن العمود قد يكون موجوداً بالفعل
+            try {
+                self::$instance->exec("ALTER TABLE device_registrations ADD COLUMN device_fingerprint varchar(200) DEFAULT NULL");
+            } catch (\Exception $e) {}
+            
+            try {
+                self::$instance->exec("ALTER TABLE device_registrations ADD COLUMN device_uuid varchar(200) DEFAULT NULL");
+            } catch (\Exception $e) {}
+        } catch (PDOException $e) {
+            error_log('Link sessions migration skipped: ' . $e->getMessage());
+        }
+    }
 }

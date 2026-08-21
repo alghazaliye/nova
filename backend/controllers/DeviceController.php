@@ -3,6 +3,7 @@
  * NOVA Messenger - Device Registration Controller
  * Captures device details (model, OS, fingerprint) on every login/setup and
  * enforces the per-user device limit defined by the active subscription plan.
+ * Also handles QR-based linked device flow.
  */
 
 declare(strict_types=1);
@@ -14,11 +15,9 @@ class DeviceController
     public function __construct()
     {
         $this->pdo = Database::getInstance();
-        AuthMiddleware::authenticate();
     }
 
     // POST /api/v1/devices/register
-    // Body: device_model, os_name, os_version, app_version, platform, device_fingerprint
     public function register(): void
     {
         $user  = AuthMiddleware::authenticate();
@@ -36,54 +35,31 @@ class DeviceController
         $appVersion= isset($body['app_version']) ? trim((string)$v->sanitizeString('app_version')) : null;
         $platform  = isset($body['platform']) ? trim((string)$v->sanitizeString('platform')) : null;
 
-        // Upsert the device
-        // الجهاز الفريد يُحدَّد ببصمة الجهاز (fingerprint) كمعرف uuid
         $stmt = $this->pdo->prepare(
             'INSERT INTO device_registrations
                 (user_id, device_uuid, device_name, os, app_version, is_active, last_seen)
-             VALUES (?, ?, ?, ?, ?, 1, NOW())
+             VALUES (?, ?, ?, ?, ?, 1, datetime("now"))
              ON DUPLICATE KEY UPDATE
                 device_name = VALUES(device_name), os = VALUES(os), app_version = VALUES(app_version),
-                is_active = 1, last_seen = NOW()'
+                is_active = 1, last_seen = datetime("now")'
         );
         $stmt->execute([$userId, $fingerprint, ($model ?? '') . ' (' . ($osName ?? 'unknown') . ')', $osName, $appVersion]);
 
         $deviceId = (int)$this->pdo->lastInsertId() ?: $this->getDeviceId($userId, $fingerprint);
-
-        // Enforce device limit based on active subscription plan
         $maxAllowed = $this->getMaxDevicesAllowed($userId);
-        $stmt = $this->pdo->prepare(
-            'SELECT COUNT(*) FROM device_registrations WHERE user_id = ? AND is_active = 1'
-        );
-        $stmt->execute([$userId]);
-        $activeCount = (int)$stmt->fetchColumn();
+        $activeCount = $this->getActiveDeviceCount($userId);
 
-        $overLimit = false;
         if ($activeCount > $maxAllowed) {
-            $overLimit = true;
-            // Strict enforcement: REJECT the new device registration (user must deactivate an existing one first)
-            $stmt = $this->pdo->prepare(
-                'UPDATE device_registrations SET is_active = 0 WHERE user_id = ? AND id = ?'
-            );
+            $stmt = $this->pdo->prepare('UPDATE device_registrations SET is_active = 0 WHERE user_id = ? AND id = ?');
             $stmt->execute([$userId, $deviceId]);
-            $oldest = $this->pdo->prepare(
-                'SELECT id, device_model, platform FROM device_registrations WHERE user_id = ? AND is_active = 1 ORDER BY last_seen ASC LIMIT 1'
-            );
-            $oldest->execute([$userId]);
-            $old = $oldest->fetch();
-            $oldInfo = $old ? (string)$old['device_model'] . ' (' . (string)$old['platform'] . ')' : '';
-            Response::forbidden(
-                "تجاوزت حد الأجهزة المسموح به للباقة ({$maxAllowed} جهاز)" .
-                ($oldInfo ? " — آخر جهاز نشط: {$oldInfo}." : '') .
-                ' يرجى ترقية الباقة أو إلغاء جهاز من لوحة الإعدادات ثم إعادة المحاولة'
-            );
+            Response::forbidden("تجاوزت حد الأجهزة المسموح به للباقة ({$maxAllowed} جهاز).");
         }
 
         Response::success([
             'device_id' => $deviceId,
-            'active_devices' => $this->getActiveDeviceCount($userId),
+            'active_devices' => $activeCount,
             'max_devices_allowed' => $maxAllowed,
-        ], 'تم تسجيل تفاصيل الجهاز بنجاح');
+        ], 'تم تسجيل الجهاز بنجاح');
     }
 
     // GET /api/v1/devices
@@ -99,7 +75,6 @@ class DeviceController
         $stmt->execute([$userId]);
         $devices = $stmt->fetchAll();
 
-        // The device matching the current session's fingerprint is the current device
         $currentId = $this->getDeviceIdByFingerprint($userId);
         $devices = array_map(
             fn (array $d) => array_merge($d, ['is_current' => (int)$d['id'] === $currentId ? 1 : 0]),
@@ -118,7 +93,7 @@ class DeviceController
         ]);
     }
 
-    // POST /api/v1/devices/{id}/toggle — تفعيل/إلغاء ارتباط جهاز owned by this user
+    // POST /api/v1/devices/{id}/toggle
     public function toggleDevice(int $deviceId): void
     {
         $user = AuthMiddleware::authenticate();
@@ -127,77 +102,115 @@ class DeviceController
         $stmt = $this->pdo->prepare('SELECT id, is_active FROM device_registrations WHERE id = ? AND user_id = ? LIMIT 1');
         $stmt->execute([$deviceId, $userId]);
         $row = $stmt->fetch();
-        if (!$row) {
-            Response::error('الجهاز غير موجود', 'NOT_FOUND', 404);
-        }
+        if (!$row) Response::notFound('الجهاز غير موجود');
 
         $currentlyActive = (int)$row['is_active'] === 1;
         if ($currentlyActive) {
-            // Protect the current device from being deactivated via toggle (must use logout instead)
-            $currentId = $this->getDeviceIdByFingerprint($userId);
-            if ((int)$row['id'] === $currentId) {
-                Response::error('لا يمكن إلغاء ارتباط الجهاز الحالي — استخدم تسجيل الخروج', 'CANNOT_TOGGLE_CURRENT', 422);
+            if ((int)$row['id'] === $this->getDeviceIdByFingerprint($userId)) {
+                Response::error('لا يمكن إلغاء ارتباط الجهاز الحالي', 'CANNOT_TOGGLE_CURRENT', 422);
             }
             $this->pdo->prepare('UPDATE device_registrations SET is_active = 0 WHERE id = ?')->execute([$deviceId]);
             Response::success(['device_id' => $deviceId, 'is_active' => 0], 'تم إلغاء ارتباط الجهاز');
         }
 
-        // Re-activating a device is subject to the plan limit
-        $maxAllowed = $this->getMaxDevicesAllowed($userId);
-        $activeCount = $this->getActiveDeviceCount($userId);
-        if ($activeCount >= $maxAllowed) {
-            Response::forbidden(
-                "تجاوزت حد الأجهزة المسموح به للباقة ({$maxAllowed} جهاز) — ألغِ ارتباط جهاز آخر أولًا"
-            );
+        if ($this->getActiveDeviceCount($userId) >= $this->getMaxDevicesAllowed($userId)) {
+            Response::forbidden("تجاوزت حد الأجهزة المسموح به للباقة.");
         }
 
         $this->pdo->prepare('UPDATE device_registrations SET is_active = 1 WHERE id = ?')->execute([$deviceId]);
         Response::success(['device_id' => $deviceId, 'is_active' => 1], 'تم تفعيل الجهاز');
     }
 
-    // POST /api/v1/devices/fcm-token — حفظ رمز FCM للجهاز الحالي
-    public function saveFcmToken(): void
+    // --- QR LINKING SYSTEM ---
+
+    // POST /api/v1/devices/link/init (New Device)
+    public function createLinkSession(): void
     {
-        $user = AuthMiddleware::authenticate();
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $uuid = bin2hex(random_bytes(16));
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO link_sessions (session_uuid, device_name, platform, status, expires_at)
+             VALUES (?, ?, ?, "pending", datetime("now", "+5 minutes"))'
+        );
+        $stmt->execute([
+            $uuid,
+            $body['device_name'] ?? 'Unknown Device',
+            $body['platform'] ?? 'web'
+        ]);
+        Response::success(['session_uuid' => $uuid, 'expires_in' => 300]);
+    }
 
-        $token = trim((string)($body['fcm_token'] ?? ''));
-        if (empty($token)) {
-            Response::error('يجب إرسال رمز الجهاز', 'MISSING_TOKEN', 400);
-        }
+    // GET /api/v1/devices/link/{uuid} (New Device Polling)
+    public function getLinkSessionStatus(string $uuid): void
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM link_sessions WHERE session_uuid = ? AND expires_at > datetime("now") LIMIT 1'
+        );
+        $stmt->execute([$uuid]);
+        $session = $stmt->fetch();
 
-        // Register device if not exists (minimal record from fingerprint)
-        $fingerprint = trim((string)($body['device_fingerprint'] ?? ''));
-        if (!empty($fingerprint)) {
+        if (!$session) Response::error('الرمز منتهي الصلاحية أو غير صالح', 'EXPIRED', 404);
+
+        if ($session['status'] === 'authorized' && $session['user_id']) {
+            // Generate real session for this device
+            $userStmt = $this->pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+            $userStmt->execute([$session['user_id']]);
+            $user = $userStmt->fetch();
+            
+            $token = JwtHelper::generate(['sub' => $user['id'], 'iat' => time(), 'exp' => time() + (30 * 86400), 'jti' => bin2hex(random_bytes(8))]);
             $this->pdo->prepare(
-                'INSERT INTO device_registrations
-                    (user_id, device_uuid, device_name, os, app_version, is_active, last_seen)
-                 VALUES (?, ?, ?, ?, ?, 1, NOW())
-                 ON DUPLICATE KEY UPDATE last_seen = NOW()'
+                'INSERT INTO sessions (user_id, token_hash, device_name, platform, expires_at)
+                 VALUES (?, ?, ?, ?, datetime("now", "+30 days"))'
             )->execute([
-                (int)$user['user_id'],
-                $fingerprint,
-                $body['device_name'] ?? ($body['device_model'] ?? 'web'),
-                $body['platform'] ?? 'web',
-                $body['app_version'] ?? null,
+                $user['id'],
+                hash('sha256', $token),
+                $session['device_name'],
+                $session['platform']
+            ]);
+
+            $this->pdo->prepare('UPDATE link_sessions SET status = "completed" WHERE id = ?')->execute([$session['id']]);
+            
+            Response::success([
+                'status' => 'completed',
+                'token' => $token,
+                'user' => [
+                    'id' => $user['id'],
+                    'name' => $user['name'],
+                    'phone' => $user['phone'],
+                    'avatar' => $user['avatar']
+                ]
             ]);
         }
 
-        // حفظ رمز FCM على الجهاز النشط الأخير في user_devices
-        $this->pdo->prepare(
-            'UPDATE device_registrations SET is_active = 1 WHERE user_id = ? AND device_uuid = ?'
-        )->execute([(int)$user['user_id'], $fingerprint]);
-
-        $this->pdo->prepare(
-            'INSERT INTO user_devices (user_id, device_uuid, platform, fcm_token, last_active_at)
-             VALUES (?, ?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE fcm_token = ?, last_active_at = NOW()'
-        )->execute([(int)$user['user_id'], $fingerprint ?: 'web-' . substr(md5($token), 0, 12), $body['platform'] ?? 'android', $token, $token]);
-
-        Response::success(null, 'تم تسجيل رمز الإشعارات');
+        Response::success(['status' => $session['status']]);
     }
 
-    // Private helpers
+    // POST /api/v1/devices/link/authorize (Primary Device)
+    public function authorizeLinkSession(): void
+    {
+        $auth = AuthMiddleware::authenticate();
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $uuid = $body['session_uuid'] ?? '';
+
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM link_sessions WHERE session_uuid = ? AND status = "pending" AND expires_at > datetime("now") LIMIT 1'
+        );
+        $stmt->execute([$uuid]);
+        $session = $stmt->fetch();
+
+        if (!$session) Response::error('الرمز غير صالح أو منتهي', 'INVALID', 400);
+
+        // Check device limit
+        if ($this->getActiveDeviceCount((int)$auth['user_id']) >= $this->getMaxDevicesAllowed((int)$auth['user_id'])) {
+            Response::forbidden("تجاوزت حد الأجهزة المسموح به للباقة.");
+        }
+
+        $this->pdo->prepare(
+            'UPDATE link_sessions SET user_id = ?, status = "authorized" WHERE id = ?'
+        )->execute([$auth['user_id'], $session['id']]);
+
+        Response::success(null, 'تمت الموافقة على ربط الجهاز');
+    }
 
     private function getDeviceId(int $userId, string $fingerprint): int
     {
@@ -208,7 +221,6 @@ class DeviceController
 
     private function getDeviceIdByFingerprint(int $userId): int
     {
-        // Match current session device: sessions store ip/user_agent; here we use the most recent active device
         $stmt = $this->pdo->prepare(
             'SELECT id FROM device_registrations WHERE user_id = ? AND is_active = 1 ORDER BY last_seen DESC LIMIT 1'
         );
@@ -218,16 +230,13 @@ class DeviceController
 
     private function getActiveDeviceCount(int $userId): int
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT COUNT(*) FROM device_registrations WHERE user_id = ? AND is_active = 1'
-        );
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM device_registrations WHERE user_id = ? AND is_active = 1');
         $stmt->execute([$userId]);
         return (int)$stmt->fetchColumn();
     }
 
     private function getMaxDevicesAllowed(int $userId): int
     {
-        // Latest active subscription plan defines the device cap
         $stmt = $this->pdo->prepare(
             'SELECT p.max_devices FROM user_subscriptions us
              JOIN plans p ON p.id = us.plan_id

@@ -184,7 +184,7 @@ class GroupsController
 
                     if ($canAdd) {
                         $this->pdo->prepare(
-                            'INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", NOW())'
+                            'INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", datetime("now"))'
                         )->execute([$convId, $mid]);
                         $added++;
                     }
@@ -219,7 +219,7 @@ class GroupsController
         }
 
         $this->pdo->prepare(
-            'UPDATE conversation_members SET left_at = NOW() WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL'
+            'UPDATE conversation_members SET left_at = datetime("now") WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL'
         )->execute([(int)$access['group']['conversation_id'], $uid]);
 
         Response::success(null, 'تمت إزالة العضو من المجموعة');
@@ -274,7 +274,7 @@ class GroupsController
 
         $params[] = $id;
         $this->pdo->prepare(
-            'UPDATE group_settings SET ' . implode(', ', $updates) . ', updated_at = NOW() WHERE group_id = ?'
+            'UPDATE group_settings SET ' . implode(', ', $updates) . ', updated_at = datetime("now") WHERE group_id = ?'
         )->execute($params);
 
         Response::success(null, 'تم تحديث إعدادات المجموعة');
@@ -296,7 +296,7 @@ class GroupsController
         $convId = (int)$access['group']['conversation_id'];
         $this->pdo->prepare(
             'UPDATE groups g JOIN conversations c ON c.id = g.conversation_id
-             SET g.name = ?, c.title = ?, g.updated_at = NOW(), c.updated_at = NOW()
+             SET g.name = ?, c.title = ?, g.updated_at = datetime("now"), c.updated_at = datetime("now")
              WHERE g.id = ?'
         )->execute([$title, $title, $id]);
 
@@ -336,7 +336,7 @@ class GroupsController
         }
 
         $url = '/media/avatars/' . $name;
-        $this->pdo->prepare('UPDATE groups SET avatar = ?, updated_at = NOW() WHERE id = ?')->execute([$url, $id]);
+        $this->pdo->prepare('UPDATE groups SET avatar = ?, updated_at = datetime("now") WHERE id = ?')->execute([$url, $id]);
 
         Response::success(['avatar' => $url], 'تم تحديث صورة المجموعة');
     }
@@ -369,7 +369,7 @@ class GroupsController
         }
 
         $this->pdo->prepare(
-            'UPDATE conversation_members SET left_at = NOW() WHERE conversation_id = ? AND user_id = ?'
+            'UPDATE conversation_members SET left_at = datetime("now") WHERE conversation_id = ? AND user_id = ?'
         )->execute([$convId, $userId]);
 
         Response::success(null, 'تمت مغادرة المجموعة');

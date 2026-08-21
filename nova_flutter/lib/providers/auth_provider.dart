@@ -557,6 +557,21 @@ class AuthProvider extends ChangeNotifier {
   String? get forcedLogoutReason => _forcedLogoutReason;
   void clearForcedLogoutReason() => _forcedLogoutReason = null;
 
+  Future<void> loginWithToken(String token) async {
+    await saveToken(token);
+    final ok = await fetchMe();
+    if (ok && _user != null) {
+      // حفظ معرف المستخدم يدوياً للتوافق مع SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('flutter.user_id', _user!.id);
+      
+      // تسجيل هذا الجهاز الجديد في قائمة الأجهزة
+      await registerCurrentDevice();
+    }
+    await fetchAppSettings();
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     try {
       await ApiService.post('/auth/logout');

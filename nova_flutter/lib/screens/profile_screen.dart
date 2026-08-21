@@ -73,11 +73,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: ClipOval(
                         child: _webImage != null
                             ? Image.memory(_webImage!, fit: BoxFit.cover)
-                            : _imageFile != null
-                                ? Image.network(_imageFile!.path, fit: BoxFit.cover)
-                                : auth.user?.avatar != null
-                                    ? Image.network(auth.user!.avatar!, fit: BoxFit.cover)
-                                    : Icon(Icons.person, color: c.muted, size: 64),
+                            : auth.user?.avatar != null
+                                ? Image.network(auth.user!.avatar!, fit: BoxFit.cover)
+                                : Icon(Icons.person, color: c.muted, size: 64),
                       ),
                     ),
                     Positioned(

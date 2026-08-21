@@ -633,9 +633,18 @@ if ($uri === '/privacy' && $method === 'GET') {
 if ($uri === '/privacy' && $method === 'PUT') {
     (new UserController())->privacyUpdate();
 }
-if (preg_match('#^/devices/(\d+)/toggle$#', $uri, $m) && $method === 'POST') {
-    (new DeviceController())->toggleDevice((int)$m[1]);
-}
+	if (preg_match('#^/devices/(\d+)/toggle$#', $uri, $m) && $method === 'POST') {
+	    (new DeviceController())->toggleDevice((int)$m[1]);
+	}
+	if ($uri === '/devices/link/init' && $method === 'POST') {
+	    (new DeviceController())->createLinkSession();
+	}
+	if (preg_match('#^/devices/link/([^/]+)$#', $uri, $m) && $method === 'GET') {
+	    (new DeviceController())->getLinkSessionStatus((string)$m[1]);
+	}
+	if ($uri === '/devices/link/authorize' && $method === 'POST') {
+	    (new DeviceController())->authorizeLinkSession();
+	}
 
 // Public plans list (for app pricing screen)
 if ($uri === '/plans' && $method === 'GET') {
