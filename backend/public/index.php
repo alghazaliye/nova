@@ -7,7 +7,8 @@
 
 declare(strict_types=1);
 
-// Production-safe global exception handler: convert uncaught exceptions to JSON 500
+// Exception handler disabled for debugging
+/*
 if (true) {
     set_exception_handler(function (\Throwable $e): void {
         error_log('[nova error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
@@ -21,6 +22,7 @@ if (true) {
         echo json_encode($payload,JSON_UNESCAPED_UNICODE);
     });
 }
+*/
 
 // Bootstrap
 require_once __DIR__ . '/../config/app.php';
