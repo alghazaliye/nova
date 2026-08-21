@@ -154,6 +154,11 @@ class Database
             'users' => [
                 'verified_until' => 'DATETIME DEFAULT NULL',
             ],
+            'otp_rate_limits' => [
+                'attempts_count' => 'INTEGER NOT NULL DEFAULT 1',
+                'resend_count'   => 'INTEGER NOT NULL DEFAULT 0',
+                'cooldown_until' => 'DATETIME DEFAULT NULL',
+            ],
             'stories' => [
                 'deleted_by'  => 'INTEGER DEFAULT NULL',
                 'views_count' => 'INTEGER NOT NULL DEFAULT 0',
