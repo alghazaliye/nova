@@ -104532,7 +104532,7 @@ n.S()
 p=4
 m=A.pO("avatar",a,null,b)
 s=7
-return A.e(A.jt("/users/me/avatar",A.b([m],t.yt),null),$async$Bk)
+return A.e(A.jt("/users/avatar",A.b([m],t.yt),null),$async$Bk)
 case 7:l=d
 n.d=!1
 s=J.c(J.Y(l,"success"),!0)?8:10

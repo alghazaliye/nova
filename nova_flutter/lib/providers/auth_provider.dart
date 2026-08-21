@@ -605,7 +605,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final file = http.MultipartFile.fromBytes('avatar', bytes, filename: fileName);
-      final res = await ApiService.uploadMultipart('/users/me/avatar', [file]);
+      final res = await ApiService.uploadMultipart('/users/avatar', [file]);
       _loading = false;
       
       if (res['success'] == true) {
