@@ -9,7 +9,7 @@ class Response
 {
     public static function success(mixed $data = null, string $message = 'تم التنفيذ بنجاح', int $code = 200): never
     {
-        http_response_code($code);
+        if (PHP_SAPI !== 'cli') http_response_code($code);
         echo json_encode([
             'success' => true,
             'message' => $message,
@@ -20,7 +20,7 @@ class Response
 
     public static function error(string $message = 'حدث خطأ', string $errorCode = 'ERROR', int $code = 400, mixed $errors = null): never
     {
-        http_response_code($code);
+        if (PHP_SAPI !== 'cli') http_response_code($code);
         $body = [
             'success'    => false,
             'message'    => $message,
