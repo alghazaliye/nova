@@ -49,8 +49,8 @@ INSERT OR IGNORE INTO permissions (id, name, description) VALUES
   (35, 'registration.view_otp',   'عرض رموز OTP للتسجيل');
 
 -- Role permissions (super_admin gets all; moderator/support limited)
-INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
-SELECT 1, id FROM permissions;
+-- ملاحظة: حُذف إدراج super_admin من هنا لأنه كان يُنفَّذ قبل الصلاحيات
+-- الجديدة (100-110) فلا يحصل عليها. انقل إلى نهاية الملف.
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT 2, id FROM permissions WHERE name IN (
   'users.view','users.block','messages.view','messages.delete',
@@ -133,3 +133,8 @@ INSERT OR IGNORE INTO permissions (id, name, description) VALUES
   (108, 'chats.admin_delete', 'الحذف الإداري للرسائل'),
   (109, 'plans.view', 'عرض الباقات'),
   (110, 'subscriptions.view', 'عرض الحسابات المميزة');
+
+-- super_admin يحصل على جميع الصلاحيات (بما فيها الجديدة أعلاه).
+-- INSERT OR IGNORE آمن: لا يضيف صفوفًا مكررة إن وُجدت.
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT 1, id FROM permissions;
