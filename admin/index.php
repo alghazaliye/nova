@@ -25,16 +25,16 @@ function statCount(PDO $pdo, string $sql, array $params = []): int {
 
 $totalUsers     = statCount($pdo, 'SELECT COUNT(*) FROM users');
 $onlineUsers    = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE is_online = 1');
-$todayMessages  = statCount($pdo, 'SELECT COUNT(*) FROM messages WHERE date(created_at) = date("now")');
-$todayCalls     = statCount($pdo, 'SELECT COUNT(*) FROM calls WHERE date(created_at) = date("now")');
+$todayMessages  = statCount($pdo, "SELECT COUNT(*) FROM messages WHERE date(created_at) = date('now')");
+$todayCalls     = statCount($pdo, "SELECT COUNT(*) FROM calls WHERE date(created_at) = date('now')");
 $verifiedUsers  = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE is_verified = 1');
 $blockedUsers   = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE is_blocked = 1');
-$newUsersToday  = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE date(created_at) = date("now")');
+$newUsersToday  = statCount($pdo, "SELECT COUNT(*) FROM users WHERE date(created_at) = date('now')");
 $totalConversations = statCount($pdo, 'SELECT COUNT(*) FROM conversations');
 $totalStories   = statCount($pdo, 'SELECT COUNT(*) FROM stories');
-$todayStories   = statCount($pdo, 'SELECT COUNT(*) FROM stories WHERE date(created_at) = date("now")');
+$todayStories   = statCount($pdo, "SELECT COUNT(*) FROM stories WHERE date(created_at) = date('now')");
 $totalErrors    = statCount($pdo, 'SELECT COUNT(*) FROM audit_logs WHERE action IN ("ERROR", "FAILED")');
-$todayErrors    = statCount($pdo, 'SELECT COUNT(*) FROM audit_logs WHERE action IN ("ERROR", "FAILED") AND date(created_at) = date("now")');
+$todayErrors    = statCount($pdo, "SELECT COUNT(*) FROM audit_logs WHERE action IN ('ERROR', 'FAILED') AND date(created_at) = date('now')");
 
 // Chart Data (Last 7 days) — SQLite-safe: use PHP dates so no MySQL functions are needed
 $sevenDaysAgo = date('Y-m-d H:i:s', time() - 7 * 86400);
