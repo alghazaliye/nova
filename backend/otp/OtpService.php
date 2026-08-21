@@ -149,61 +149,29 @@ class OtpService
 
         $hourAgo = date('Y-m-d H:i:s', time() - 3600);
 
-        $check = function (string $key, string $type, int $limit) use ($hourAgo): ?string {
-            $stmt = $this->pdo->prepare(
-                'SELECT hits FROM otp_rate_limits
-                 WHERE bucket_key = ? AND bucket_type = ? AND window_start > ?
-                 LIMIT 1'
-            );
-            $stmt->execute([$key, $type, $hourAgo]);
-            $row = $stmt->fetch();
-            $hits = (int)($row['hits'] ?? 0);
-            if ($hits >= $limit) {
-                return null; // signal limit exceeded — handled by caller
-            }
-            if ($hits === 0) {
-                $this->pdo->prepare(
-                    'INSERT INTO otp_rate_limits (bucket_key, bucket_type, hits, window_start)
-                     VALUES (?, ?, 1, datetime('now'))'
-                )->execute([$key, $type]);
-            } else {
-                $this->pdo->prepare(
-                    'UPDATE otp_rate_limits SET hits = hits + 1
-                     WHERE bucket_key = ? AND bucket_type = ? AND window_start > ?'
-                )->execute([$key, $type, $hourAgo]);
-            }
-            return null;
-        };
-
-        $phoneStmt = $this->pdo->prepare(
-            'SELECT hits FROM otp_rate_limits WHERE bucket_key = ? AND bucket_type = \'phone\' AND window_start > ? LIMIT 1'
+        // simplified check for the new schema
+        $stmt = $this->pdo->prepare(
+            'SELECT attempts_count, last_attempt_at FROM otp_rate_limits
+             WHERE phone = ? LIMIT 1'
         );
-        $phoneStmt->execute([$phone, $hourAgo]);
-        if ((int)($phoneStmt->fetch()['hits'] ?? 0) >= $perPhone) {
-            $minutesLeft = max(1, (int)ceil((strtotime($hourAgo) + 3600 - time()) / 60));
-            return "تجاوزت الحد المسموح لهذا الرقم. حاول بعد {$minutesLeft} دقيقة";
-        }
-
-        $ipStmt = $this->pdo->prepare(
-            'SELECT hits FROM otp_rate_limits WHERE bucket_key = ? AND bucket_type = \'ip\' AND window_start > ? LIMIT 1'
-        );
-        $ipStmt->execute([$ip, $hourAgo]);
-        if ((int)($ipStmt->fetch()['hits'] ?? 0) >= $perIp) {
-            $minutesLeft = max(1, (int)ceil((strtotime($hourAgo) + 3600 - time()) / 60));
-            return "تجاوزت الحد المسموح من شبكتك. حاول بعد {$minutesLeft} دقيقة";
+        $stmt->execute([$phone]);
+        $row = $stmt->fetch();
+        
+        if ($row) {
+            $hits = (int)$row['attempts_count'];
+            $last = $row['last_attempt_at'];
+            if ($hits >= $perPhone && strtotime($last) > time() - 3600) {
+                $minutesLeft = max(1, (int)ceil((strtotime($last) + 3600 - time()) / 60));
+                return "تجاوزت الحد المسموح لهذا الرقم. حاول بعد {$minutesLeft} دقيقة";
+            }
         }
 
         // increment counters
         $this->pdo->prepare(
-            'INSERT INTO otp_rate_limits (bucket_key, bucket_type, hits, window_start)
-             VALUES (?, \'phone\', 1, datetime(\'now\'))
-             ON CONFLICT(bucket_key, bucket_type) DO UPDATE SET hits = hits + 1'
+            'INSERT INTO otp_rate_limits (phone, last_attempt_at, attempts_count)
+             VALUES (?, datetime(\'now\'), 1)
+             ON CONFLICT(phone) DO UPDATE SET attempts_count = CASE WHEN last_attempt_at < datetime(\'now\', \'-1 hour\') THEN 1 ELSE attempts_count + 1 END, last_attempt_at = datetime(\'now\')'
         )->execute([$phone]);
-        $this->pdo->prepare(
-            'INSERT INTO otp_rate_limits (bucket_key, bucket_type, hits, window_start)
-             VALUES (?, \'ip\', 1, datetime(\'now\'))
-             ON CONFLICT(bucket_key, bucket_type) DO UPDATE SET hits = hits + 1'
-        )->execute([$ip]);
 
         return null;
     }
