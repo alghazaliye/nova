@@ -59,7 +59,7 @@ class OtpService
                 if (!in_array('cooldown_until', $columns)) {
                     $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN cooldown_until DATETIME DEFAULT NULL");
                 }
-                if (!in_array('phone', $columns)) {
+                if (!in_array('phone', $columns) || !in_array('last_attempt_at', $columns)) {
                     // Legacy schema (bucket_key style) — reset it
                     $this->pdo->exec("DROP TABLE otp_rate_limits");
                     $this->pdo->exec("CREATE TABLE otp_rate_limits (
