@@ -291,6 +291,36 @@ if (preg_match('#^/stories/(\d+)$#', $uri, $m) && $method === 'DELETE') {
 if (preg_match('#^/stories/(\d+)/upload$#', $uri, $m) && $method === 'POST') {
     (new StoryController())->upload((int)$m[1]);
 }
+if (preg_match('#^/stories/(\d+)/views$#', $uri, $m) && $method === 'GET') {
+    (new StoryController())->views((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)/reactions$#', $uri, $m) && $method === 'GET') {
+    (new StoryController())->reactions((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)/replies$#', $uri, $m) && $method === 'GET') {
+    (new StoryController())->replies((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)/reaction$#', $uri, $m) && $method === 'POST') {
+    (new StoryController())->react((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)/reaction$#', $uri, $m) && $method === 'DELETE') {
+    (new StoryController())->unreact((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)/reply$#', $uri, $m) && $method === 'POST') {
+    (new StoryController())->reply((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)$#', $uri, $m) && $method === 'PUT') {
+    (new StoryController())->update((int)$m[1]);
+}
+if (preg_match('#^/stories/(\d+)/report$#', $uri, $m) && $method === 'POST') {
+    (new StoryController())->report((int)$m[1]);
+}
+if (preg_match('#^/admin/stories/(\d+)/delete$#', $uri, $m) && $method === 'POST') {
+    (new StoryController())->adminDelete((int)$m[1]);
+}
+if ($uri === '/admin/stories/stats' && $method === 'GET') {
+    (new StoryController())->adminStats();
+}
 
 // Group Routes
 if ($uri === '/groups/mine' && $method === 'GET') {
@@ -562,6 +592,9 @@ if ($uri === '/devices/fcm-token' && $method === 'POST') {
 }
 if ($uri === '/heartbeat' && $method === 'POST') {
     (new UserController())->heartbeat();
+}
+if ($uri === '/heartbeat/offline' && $method === 'POST') {
+    (new UserController())->setOffline();
 }
 if ($uri === '/settings' && $method === 'GET') {
     (new UserController())->appSettings();

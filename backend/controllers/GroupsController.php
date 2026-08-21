@@ -82,7 +82,13 @@ class GroupsController
              ORDER BY FIELD(cm.role, "owner", "admin", "member"), cm.joined_at ASC'
         );
         $stmt->execute([(int)$group['conversation_id']]);
-        $group['members'] = $stmt->fetchAll();
+        $members = $stmt->fetchAll();
+        require_once __DIR__ . '/UserController.php';
+        $uc = new UserController();
+        // تطبيق خصوصية آخر الظهور والحالة المتصلة لكل عضو في المجموعة
+        $group['members'] = array_map(function ($m) use ($uc, $userId) {
+            return $uc->applyPresencePrivacy($m, $userId);
+        }, $members);
 
         // Group settings
         $stmt = $this->pdo->prepare(

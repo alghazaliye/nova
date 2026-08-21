@@ -72,7 +72,7 @@ String? webOriginFallbackImpl() {
     final JSObject loc = _window.getProperty<JSObject>('location'.toJS);
     final JSAny? o = loc['origin'];
     final s = (o is JSString) ? o.toDart : o?.dartify().toString();
-    if (s != null && s is String && s.isNotEmpty && s.startsWith('http')) return s;
+    if (s != null && s.isNotEmpty && s.startsWith('http')) return s;
   } catch (_) {}
   return null;
 }
@@ -102,6 +102,51 @@ Future<void> requestNotificationPermissionImpl() async {
   try {
     final notif = _window.getProperty<JSObject>('Notification'.toJS);
     notif.callMethod<JSAny?>('requestPermission'.toJS);
+  } catch (_) {}
+}
+
+// حضور الويب: عند فقدان التركيز (تبويب خلفية/شاشة مقفلة) يظهر offline فعليًا
+void setNovaStateTokenImpl(String? value) {
+  try {
+    if (value == null) {
+      _window.setProperty('__novaToken'.toJS, null);
+    } else {
+      _window.setProperty('__novaToken'.toJS, value.toJS);
+    }
+  } catch (_) {}
+}
+
+void enablePresenceListenersImpl() {
+  try {
+    _window.callMethod<JSAny?>(
+        'addEventListener'.toJS, 'blur'.toJS, (JSAny? event) {
+      _presenceCall('/heartbeat/offline');
+    }.toJS);
+    _window.callMethod<JSAny?>(
+        'addEventListener'.toJS, 'focus'.toJS, (JSAny? event) {
+      _presenceCall('/heartbeat');
+    }.toJS);
+    _window.callMethod<JSAny?>(
+        'addEventListener'.toJS, 'beforeunload'.toJS, (JSAny? event) {
+      _presenceCall('/heartbeat/offline');
+    }.toJS);
+  } catch (_) {}
+}
+
+void _presenceCall(String path) {
+  try {
+    final fetchFn = _globalThis.getProperty<JSFunction>('fetch'.toJS);
+    final token = _window.getProperty<JSAny?>('__novaToken'.toJS);
+    final headers = _globalThis.getProperty<JSObject>('Object'.toJS);
+    final h = headers.callMethod<JSObject>('create'.toJS, null);
+    h.setProperty('Content-Type'.toJS, 'application/json'.toJS);
+    if (token != null) h.setProperty('Authorization'.toJS, token);
+    final options = headers.callMethod<JSObject>('create'.toJS, null);
+    options
+      ..setProperty('method'.toJS, 'POST'.toJS)
+      ..setProperty('headers'.toJS, h)
+      ..setProperty('body'.toJS, (path == '/heartbeat' ? '{"status":"online"}' : '{}').toJS);
+    fetchFn.callMethod<JSAny?>('call'.toJS, fetchFn, '/api/v1$path'.toJS, options);
   } catch (_) {}
 }
 

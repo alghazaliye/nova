@@ -150,6 +150,16 @@ class Database
             'users' => [
                 'verified_until' => 'DATETIME DEFAULT NULL',
             ],
+            'stories' => [
+                'deleted_by'  => 'INTEGER DEFAULT NULL',
+                'views_count' => 'INTEGER NOT NULL DEFAULT 0',
+            ],
+            'messages' => [
+                'reply_to_status_id' => 'INTEGER DEFAULT NULL',
+            ],
+            'reports' => [
+                'story_id' => 'INTEGER DEFAULT NULL',
+            ],
             'payment_requests' => [
                 'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
                 'user_id'                => 'INTEGER NOT NULL',
@@ -164,6 +174,30 @@ class Database
         ];
         // payment_requests is a whole table, not columns — create it separately
         $tableMigrations = [
+            'story_reactions' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `story_reactions` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `story_id` integer NOT NULL,
+  `user_id` integer NOT NULL,
+  `reaction` varchar(10) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  UNIQUE (`story_id`, `user_id`),
+  CONSTRAINT `fk_story_reactions_story` FOREIGN KEY (`story_id`) REFERENCES `stories` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_story_reactions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+)
+SQL,
+            'story_replies' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `story_replies` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `story_id` integer NOT NULL,
+  `sender_id` integer NOT NULL,
+  `message_id` integer NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  CONSTRAINT `fk_story_replies_story` FOREIGN KEY (`story_id`) REFERENCES `stories` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_story_replies_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_story_replies_message` FOREIGN KEY (`message_id`) REFERENCES `messages` (`id`) ON DELETE CASCADE
+)
+SQL,
             'payment_requests' => <<<'SQL'
 CREATE TABLE IF NOT EXISTS `payment_requests` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,

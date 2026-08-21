@@ -257,7 +257,7 @@ class ChatsTab extends StatefulWidget {
   State<ChatsTab> createState() => _ChatsTabState();
 }
 
-class _ChatsTabState extends State<ChatsTab> {
+class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
   List<Conversation> _conversations = [];
   List<Conversation> _filtered = [];
   bool _loading = true;
@@ -289,16 +289,31 @@ class _ChatsTabState extends State<ChatsTab> {
       }
     }
     _load();
-    // Polling: تحديث تلقائي للمحادثات كل 5 ثوانٍ + heartbeat كل 30 ثانية
+    // حضور الويب: blur/focus/beforeunload → offline/online فعليًا
+    if (kIsWeb) enablePresenceListeners();
+    // Polling: تحديث تلقائي للمحادثات كل 5 ثوانٍ + heartbeat كل 45 ثانية
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) _refreshSilent();
     });
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 45), (_) async {
       if (!mounted) return;
       try {
         await ApiService.post('/heartbeat', body: {'status': 'online'});
       } catch (_) {}
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // حضور حقيقي: عند العودة يظهر متصلًا، وعند الخلفية أو الإغلاق offline فعليًا
+    if (state == AppLifecycleState.resumed) {
+      ApiService.post('/heartbeat', body: {'status': 'online'}).ignore();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      ApiService.post('/heartbeat/offline', body: {}).ignore();
+    }
   }
 
   Future<void> _refreshSilent() async {
@@ -339,6 +354,7 @@ class _ChatsTabState extends State<ChatsTab> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
     super.dispose();

@@ -5,6 +5,8 @@ import 'nova_web_state_stub.dart' if (dart.library.html) 'nova_web_state_web.dar
 void setNovaState(String value) => setNovaStateImpl(value);
 void setNovaChats(String value) => setNovaChatsImpl(value);
 String novaHref() => novaHrefImpl();
+void enablePresenceListeners() => enablePresenceListenersImpl();
+void setNovaStateToken(String? value) => setNovaStateTokenImpl(value);
 
 /// طبقة أخيرة: قراءة window.location.origin مباشرة عبر js_util
 /// (تعمل في dart2js وwasm) بدل الارتداد لرابط بيئة قديم
@@ -25,4 +27,5 @@ abstract class NovaWebState {
   static Future<void> requestNotificationPermission() => requestNotificationPermissionImpl();
   static void showNotification(String title, String body, {String? tag}) =>
       showNotificationImpl(title, body, tag: tag);
+  static void enablePresenceListeners() => enablePresenceListenersImpl();
 }

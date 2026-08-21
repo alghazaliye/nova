@@ -54,7 +54,8 @@ INSERT OR IGNORE INTO permissions (id, name, description) VALUES
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT 2, id FROM permissions WHERE name IN (
   'users.view','users.block','messages.view','messages.delete',
-  'groups.view','groups.manage','reports.view','reports.resolve'
+  'groups.view','groups.manage','reports.view','reports.resolve',
+  'statuses.view','statuses.stats','stories.admin'
 );
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT 3, id FROM permissions WHERE name IN ('users.view','reports.view','reports.resolve');
@@ -123,6 +124,10 @@ ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, u
 -- =====================================================
 INSERT OR IGNORE INTO permissions (id, name, description) VALUES
   (100, 'appeals.view', 'عرض الاعتراضات'),
+  (111, 'statuses.view', 'عرض الحالات'),
+  (112, 'statuses.delete', 'الحذف الإداري للحالات'),
+  (113, 'statuses.stats', 'إحصائيات الحالات'),
+  (114, 'stories.admin', 'إدارة الحالات'),
   (101, 'appeals.resolve', 'الرد على الاعتراضات'),
   (102, 'users.suspend', 'التعليق المؤقت'),
   (103, 'payment_requests.view', 'عرض طلبات الاشتراك'),

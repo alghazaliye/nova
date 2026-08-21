@@ -38,6 +38,17 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
   // على الويب نستخدم عنصر <video> الأصلي مباشرة عبر HtmlElementView
   // لأن video_player قد يفشل في بعض المتصفحات مع wasm renderer.
   bool _webVideoFailed = false;
+  // الحالات التي سُجّلت مشاهدتها (مرة واحدة لكل حالة)
+  final Set<int> _viewed = {};
+  // ردود سريعة (emoji) على الحالة الحالية
+  final List<String> _quickReactions = const ['❤️', '👍', '😂', '😮', '🔥', '🎉'];
+  String? _myReaction;
+  List<Map<String, dynamic>> _reactions = [];
+  // الرد النصي
+  final TextEditingController _replyCtrl = TextEditingController();
+  bool _replyFocused = false;
+  // مشاهدات الحالة (للصاحب فقط)
+  List<Map<String, dynamic>> _views = [];
 
   /// القصص المصنّفة حسب المستخدم (مجموعات متتالية لكل مستخدم)
   List<List<Map<String, dynamic>>> _userGroups = [];
@@ -78,6 +89,93 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
     _progress.addStatusListener(_onProgressDone);
     _progress.forward();
     _loadVideoIfNeeded();
+    final myId = (context.read<AuthProvider>().user?.id ?? -1).toString();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _disposed) return;
+      _recordView();
+      _loadReactions();
+      if (_current['user_id'].toString() == myId) _loadViews();
+    });
+  }
+
+  /// تسجيل مشاهدة الحالة (مرة واحدة فقط) — يُستدعى عند كل حالة جديدة
+  Future<void> _recordView() async {
+    final story = _current;
+    final id = story['id'];
+    final auth = context.read<AuthProvider>();
+    final myId = (auth.user?.id ?? -1).toString();
+    if (story['user_id'].toString() == myId) return;
+    if (id == null || _viewed.contains(id.hashCode)) return;
+    _viewed.add(id.hashCode);
+    try {
+      await ApiService.post('/stories/$id/view').catchError((_) => {});
+    } catch (_) {}
+  }
+
+  Future<void> _loadReactions() async {
+    try {
+      final id = _current['id']?.toString();
+      if (id == null) return;
+      final res = await ApiService.get('/stories/$id/reactions');
+      if (!mounted) return;
+      final list = List<Map<String, dynamic>>.from((res['data']?['reactions'] as List?) ?? []);
+      final myId = (context.read<AuthProvider>().user?.id ?? -1).toString();
+      // تفاعلات الحالة الحالية فقط (قد تكون الحالة تغيرت أثناء الطلب)
+      final currentId = _current['id']?.toString();
+      if (currentId != id) return;
+      final my = list.where((r) => r['user_id'].toString() == myId);
+      if (mounted) setState(() {
+        _reactions = list;
+        _myReaction = my.isNotEmpty ? my.first['reaction']?.toString() : null;
+      });
+    } catch (_) {}
+  }
+
+  /// إرسال رد سريع (emoji) — إزالة إذا كان هو نفسه مسبقًا
+  Future<void> _react(String emoji) async {
+    try {
+      final id = _current['id']?.toString();
+      if (id == null) return;
+      if (_myReaction == emoji) {
+        await ApiService.delete('/stories/$id/reaction').catchError((_) => {});
+        _myReaction = null;
+      } else {
+        await ApiService.post('/stories/$id/reactions', body: {'reaction': emoji});
+        _myReaction = emoji;
+      }
+      _loadReactions();
+    } catch (_) {}
+  }
+
+  /// إرسال رد نصي على الحالة — ينشئ/يفتح محادثة مع صاحب الحالة
+  Future<void> _sendReply() async {
+    final body = _replyCtrl.text.trim();
+    if (body.isEmpty) return;
+    final id = _current['id']?.toString();
+    if (id == null) return;
+    try {
+      final res = await ApiService.post('/stories/$id/replies', body: {'body': body});
+      if (res['success'] == true && mounted) {
+        _replyCtrl.clear();
+        showToast(context, 'تم إرسال الرد');
+      } else if (mounted) {
+        showToast(context, res['message'] ?? 'فشل إرسال الرد');
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'فشل إرسال الرد');
+    }
+  }
+
+  Future<void> _loadViews() async {
+    try {
+      final id = _current['id']?.toString();
+      if (id == null) return;
+      final res = await ApiService.get('/stories/$id/views');
+      if (!mounted) return;
+      setState(() {
+        _views = List<Map<String, dynamic>>.from((res['data']?['views'] as List?) ?? []);
+      });
+    } catch (_) {}
   }
 
   void _buildGroups() {
@@ -189,10 +287,18 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
   }
 
   void _restart() {
+    _myReaction = null;
+    _reactions = [];
+    _views = [];
     _progress.reset();
     _progress.duration = _durationFor(_current);
     _progress.forward();
     _loadVideoIfNeeded();
+    _recordView();
+    _loadReactions();
+    final auth = context.read<AuthProvider>();
+    final myId = (auth.user?.id ?? -1).toString();
+    if (_current['user_id'].toString() == myId) _loadViews();
   }
 
   void _togglePause() {
@@ -256,8 +362,10 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
     _disposed = true;
     _video?.dispose();
     _progress.dispose();
+    _replyCtrl.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -421,6 +529,136 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
               ),
             ),
           ),
+          // شريط التفاعلات السفلي: ردود سريعة + رد نصي + مشاهدات (للصاحب)
+          if (!_replyFocused)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: true,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black54],
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // مشاهدات الحالة لصاحبها
+                      if (isMine && _views.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.remove_red_eye_outlined,
+                                  size: 14, color: Colors.white70),
+                              const SizedBox(width: 4),
+                              Text('${_views.length} مشاهدة',
+                                  style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12.5,
+                                      fontFamily: 'Cairo')),
+                            ],
+                          ),
+                        ),
+                      // ردود سريعة
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          for (final emoji in _quickReactions)
+                            GestureDetector(
+                              onTap: () => _react(emoji),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: _myReaction == emoji
+                                      ? Colors.white.withOpacity(0.28)
+                                      : Colors.white12,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(emoji,
+                                    style: const TextStyle(fontSize: 18)),
+                              ),
+                            ),
+                          // زر الرد النصي
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _replyFocused = true);
+                              _replyCtrl.clear();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white12,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.reply_rounded,
+                                  size: 17, color: Colors.white70),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // واجهة الرد النصي
+          if (_replyFocused)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 8, 4, 10),
+                color: Colors.black87,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _replyCtrl,
+                        autofocus: true,
+                        style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+                        decoration: InputDecoration(
+                          hintText: 'اكتب ردًا...',
+                          hintStyle: const TextStyle(
+                              color: Colors.white54, fontFamily: 'Cairo'),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: Colors.white12,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onSubmitted: (_) => _sendReply(),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      onPressed: () {
+                        _replyCtrl.clear();
+                        FocusScope.of(context).unfocus();
+                        setState(() => _replyFocused = false);
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      onPressed: _sendReply,
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

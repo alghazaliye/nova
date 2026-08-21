@@ -335,6 +335,11 @@ class ConversationController
              LIMIT 1'
         );
         $stmt->execute([$convId, $myId]);
-        return $stmt->fetch() ?: null;
+        $row = $stmt->fetch() ?: null;
+        if ($row) {
+            require_once __DIR__ . '/UserController.php';
+            $row = (new UserController())->applyPresencePrivacy($row, $myId);
+        }
+        return $row;
     }
 }

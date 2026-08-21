@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
+import '../utils/nova_web_state.dart';
 
 /// إعدادات طرق المصادقة (من GET /auth/config) — تحكم ديناميكي في شاشات
 /// التسجيل والدخول (هاتف/بريد/اسم مستخدم ON/OFF من لوحة الإدارة).
@@ -205,6 +206,7 @@ class AuthProvider extends ChangeNotifier {
   static Future<void> saveToken(String token, {int? userId}) async {
     ApiService.token = token;
     if (userId != null) ApiService.userId = userId;
+    if (kIsWeb) setNovaStateToken('Bearer $token');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', token);
     if (userId != null) await prefs.setInt('user_id', userId);
@@ -215,11 +217,13 @@ class AuthProvider extends ChangeNotifier {
     final token = prefs.getString('token');
     if (token != null) ApiService.token = token;
     ApiService.userId = prefs.getInt('user_id') ?? 0;
+    if (kIsWeb) setNovaStateToken(token != null ? 'Bearer $token' : null);
     return token;
   }
 
   static Future<void> clearToken() async {
     ApiService.token = null;
+    if (kIsWeb) setNovaStateToken(null);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
   }

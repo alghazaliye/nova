@@ -8,3 +8,5 @@ String? webOriginFallbackImpl() => null;
 Future<bool> isNotificationGrantedImpl() async => false;
 Future<void> requestNotificationPermissionImpl() async {}
 void showNotificationImpl(String title, String body, {String? tag}) {}
+void enablePresenceListenersImpl() {}
+void setNovaStateTokenImpl(String? value) {}

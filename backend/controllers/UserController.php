@@ -186,7 +186,7 @@ class UserController
             $q->execute([$ownerId]);
             $r['display_identity'] = $q->fetchColumn() ?: 'name_username';
             $r['display_name'] = $displayName ?: self::_displayNameForIdentity($r);
-            $r['is_online'] = (bool)($r['is_online'] ?? false);
+            $r = $this->applyPresencePrivacy($r, $auth['user_id']);
             $filtered[] = $r;
         }
         Response::success($filtered);
@@ -197,11 +197,28 @@ class UserController
     {
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
-
+        // تنظيف جماعي: أي مستخدم لم يُحدَّث آخر ظهور خلال 5 دقائق يُعتبر offline فعليًا
+        try {
+            $this->pdo->prepare(
+                'UPDATE users SET is_online = 0 WHERE is_online = 1 AND last_seen < NOW() - INTERVAL 5 MINUTE'
+            )->execute();
+        } catch (\Throwable $e) {
+            // تجاهل — غير حرج
+        }
         $this->pdo->prepare(
             'UPDATE users SET is_online = 1, last_seen = NOW(), updated_at = NOW() WHERE id = ?'
         )->execute([$userId]);
+        Response::success(null, 'ok');
+    }
 
+    // POST /api/v1/heartbeat/offline — آخر ظهور فعلي عند الخلفية/فقدان الاتصال/إغلاق التطبيق
+    public function setOffline(): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $this->pdo->prepare(
+            'UPDATE users SET is_online = 0, last_seen = NOW(), updated_at = NOW() WHERE id = ?'
+        )->execute([$userId]);
         Response::success(null, 'ok');
     }
 
@@ -500,6 +517,45 @@ class UserController
         return $row ? ((int)($row['show_read_receipts'] ?? 1)) !== 0 : true;
     }
 
+    /**
+     * تطبيق خصوصية آخر الظهور والحالة المتصلة على صف مستخدم (مصفوفة) أمام $viewerId.
+     * is_online يصبح false إذا لم يُسمح برؤيته أو انقضت مهلة الحضور (5 دقائق بدون نبضات).
+     * last_seen يُخفى (null) إذا لم يُسمح برؤيته.
+     */
+    public function applyPresencePrivacy(array $row, int $viewerId): array
+    {
+        $ownerId = (int)($row['id'] ?? 0);
+        if ($viewerId === $ownerId || $ownerId <= 0) {
+            return $row; // صاحبه يرى كل شيء
+        }
+        // مهلة الحضور: إذا لم يُحدَّث آخر ظهور خلال 5 دقائق → غير متصل فعليًا
+        $rawOnline = (bool)($row['is_online'] ?? false);
+        $lastSeen  = $row['last_seen'] ?? null;
+        if ($rawOnline && $lastSeen) {
+            try {
+                $ls = new \DateTime((string)$lastSeen);
+                $now = new \DateTime();
+                if ($now->getTimestamp() - $ls->getTimestamp() > 300) {
+                    $rawOnline = false;
+                }
+            } catch (\Throwable $e) {
+                $rawOnline = false;
+            }
+        }
+        if (!$this->canSeeOnline($viewerId, $ownerId)) {
+            $row['is_online'] = false;
+            if (!$this->canSeeLastSeen($viewerId, $ownerId)) {
+                $row['last_seen'] = null;
+            }
+        } elseif (!$this->canSeeLastSeen($viewerId, $ownerId)) {
+            $row['is_online'] = false; // خيار «لا أحد» يخفي «متصل» أيضًا
+            $row['last_seen']   = null;
+        } else {
+            $row['is_online'] = $rawOnline;
+        }
+        return $row;
+    }
+
     // last_seen_visibility value → int: everybody=2 contacts=1 nobody=0
     private static function _visibilityToInt(string $v): int
     {
@@ -690,6 +746,8 @@ class UserController
         if (!$profile || $viewerId === null) {
             return $profile;
         }
+        // خصوصية آخر الظهور والحالة المتصلة (تشمل مهلة الحضور 5 دقائق)
+        $profile = $this->applyPresencePrivacy($profile, $viewerId);
         return $this->filterProfile($profile, $viewerId, $id);
     }
 }
