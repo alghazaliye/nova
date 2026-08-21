@@ -317,6 +317,7 @@ class AuthController
         $responseData = [
             'message' => 'تم إرسال رمز التحقق',
             'delivery_mode' => $res['delivery_mode'],
+            'otp_debug' => $res['otp_debug'] ?? null,
             'cooldown' => $res['cooldown'],
             'expires_at' => $this->activeOtpExpiry($phone),
         ];
