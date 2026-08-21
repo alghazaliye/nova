@@ -67,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $days = (int)$_POST['sub_days'];
         $ends = $days > 0 ? date('Y-m-d H:i:s', strtotime("+{$days} days")) : null;
         $stmt = $pdo->prepare(
-            'INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
-             VALUES (?, ?, "active", datetime('now'), ?)'
+            "INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
+             VALUES (?, ?, 'active', datetime('now'), ?)"
         );
         $stmt->execute([$userId, $planId, $ends]);
         $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);

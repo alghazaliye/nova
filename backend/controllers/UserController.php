@@ -102,7 +102,7 @@ class UserController
         }
 
         $params[] = $auth['user_id'];
-        $sql      = 'UPDATE users SET ' . implode(', ', $updates) . ', updated_at = datetime('now') WHERE id = ?';
+        $sql      = "UPDATE users SET " . implode(', ', $updates) . ", updated_at = datetime('now') WHERE id = ?";
         $this->pdo->prepare($sql)->execute($params);
 
         Response::success($this->getUserById((int)$auth['user_id']), 'تم تحديث الملف الشخصي بنجاح');
@@ -149,7 +149,7 @@ class UserController
 
         $avatarUrl = rtrim($_ENV['STORAGE_URL'] ?? '', '/') . '/avatars/' . $fileName;
 
-        $this->pdo->prepare('UPDATE users SET avatar = ?, updated_at = datetime('now') WHERE id = ?')
+        $this->pdo->prepare("UPDATE users SET avatar = ?, updated_at = datetime('now') WHERE id = ?")
                   ->execute([$avatarUrl, $auth['user_id']]);
 
         $user = $this->getUserById((int)$auth['user_id']);
@@ -239,13 +239,13 @@ class UserController
         // تنظيف جماعي: أي مستخدم لم يُحدَّث آخر ظهور خلال 5 دقائق يُعتبر offline فعليًا
         try {
             $this->pdo->prepare(
-                'UPDATE users SET is_online = 0 WHERE is_online = 1 AND last_seen < datetime('now', '-5 minutes')'
+                "UPDATE users SET is_online = 0 WHERE is_online = 1 AND last_seen < datetime('now', '-5 minutes')"
             )->execute();
         } catch (\Throwable $e) {
             // تجاهل — غير حرج
         }
         $this->pdo->prepare(
-            'UPDATE users SET is_online = 1, last_seen = datetime('now'), updated_at = datetime('now') WHERE id = ?'
+            "UPDATE users SET is_online = 1, last_seen = datetime('now'), updated_at = datetime('now') WHERE id = ?"
         )->execute([$userId]);
         Response::success(null, 'ok');
     }
@@ -256,7 +256,7 @@ class UserController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
         $this->pdo->prepare(
-            'UPDATE users SET is_online = 0, last_seen = datetime('now'), updated_at = datetime('now') WHERE id = ?'
+            "UPDATE users SET is_online = 0, last_seen = datetime('now'), updated_at = datetime('now') WHERE id = ?"
         )->execute([$userId]);
         Response::success(null, 'ok');
     }
@@ -407,7 +407,7 @@ class UserController
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, datetime('now'))'
+            "INSERT OR IGNORE INTO blocks (user_id, blocked_user_id, created_at) VALUES (?, ?, datetime('now'))"
         );
         $stmt->execute([$myId, $targetId]);
 

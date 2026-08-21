@@ -316,20 +316,20 @@ CREATE TABLE IF NOT EXISTS `typing_status` (
   `conversation_id` integer NOT NULL,
   `user_id` integer NOT NULL,
   `expires_at` datetime NOT NULL,
-	  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
-	  PRIMARY KEY (conversation_id, user_id)
-	)
-	SQL,
-	            'otp_rate_limits' => <<<'SQL'
-	CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
-	  `phone` varchar(50) NOT NULL PRIMARY KEY,
-	  `last_attempt_at` datetime NOT NULL,
-	  `attempts_count` integer NOT NULL DEFAULT 1,
-	  `resend_count` integer NOT NULL DEFAULT 0,
-	  `cooldown_until` datetime DEFAULT NULL
-	)
-	SQL,
-	        ];
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
+  PRIMARY KEY (conversation_id, user_id)
+)
+SQL,
+            'otp_rate_limits' => <<<'SQL'
+CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
+  `phone` varchar(50) NOT NULL PRIMARY KEY,
+  `last_attempt_at` datetime NOT NULL,
+  `attempts_count` integer NOT NULL DEFAULT 1,
+  `resend_count` integer NOT NULL DEFAULT 0,
+  `cooldown_until` datetime DEFAULT NULL
+)
+SQL,
+        ];
         foreach ($tables as $table => $ddl) {
             try {
                 self::$instance->exec($ddl);

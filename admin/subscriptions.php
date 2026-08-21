@@ -20,8 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->prepare('UPDATE user_subscriptions SET status = "cancelled" WHERE user_id = ? AND status = "active"')->execute([$userId]);
             $pdo->prepare(
-                'INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
-                 VALUES (?, ?, "active", datetime('now'), ?)'
+                "INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
+                 VALUES (?, ?, 'active', datetime('now'), ?)"
             )->execute([$userId, $planId, $ends]);
             $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
             logAudit($admin, 'SUBSCRIPTION_ACTIVATE', 'user', $userId, "تفعيل اشتراك على الباقة #{$planId} — حساب مميز");

@@ -404,12 +404,12 @@ class OtpService
             return ['success' => false, 'message' => 'تجاوزت الحد الأقصى لإعادة الإرسال. حاول لاحقًا', 'error_code' => 'OTP_MAX_RESENDS'];
         }
 
-        $this->pdo->prepare('UPDATE otp_verifications SET resends = resends + 1, updated_at = datetime('now') WHERE id = ?')
+        $this->pdo->prepare("UPDATE otp_verifications SET resends = resends + 1, updated_at = datetime('now') WHERE id = ?")
                  ->execute([$otpId]);
 
         // Invalidate the old pending otp and create a new one
         $this->pdo->prepare(
-            'UPDATE otp_verifications SET status = \'cancelled\', updated_at = datetime('now') WHERE id = ?'
+            "UPDATE otp_verifications SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?"
         )->execute([$otpId]);
 
         $res = $this->createAndSend($otp['phone_number'], $otp['name'], $ip, $ua, $devCode);
@@ -448,18 +448,18 @@ class OtpService
         }
 
         if ($otp['expires_at'] !== null && $this->toUnixTs($otp['expires_at']) < time()) {
-            $this->pdo->prepare('UPDATE otp_verifications SET status = \'expired\', updated_at = datetime('now') WHERE id = ?')
+            $this->pdo->prepare("UPDATE otp_verifications SET status = 'expired', updated_at = datetime('now') WHERE id = ?")
                      ->execute([(int)$otp['id']]);
             return ['verified' => false, 'error_code' => 'OTP_EXPIRED', 'message' => 'انتهت صلاحية الرمز. اطلب رمزًا جديدًا'];
         }
 
         if ((int)$otp['attempts'] >= (int)$otp['max_attempts']) {
-            $this->pdo->prepare('UPDATE otp_verifications SET status = \'blocked\', updated_at = datetime('now') WHERE id = ?')
+            $this->pdo->prepare("UPDATE otp_verifications SET status = 'blocked', updated_at = datetime('now') WHERE id = ?")
                      ->execute([(int)$otp['id']]);
             return ['verified' => false, 'error_code' => 'OTP_BLOCKED', 'message' => 'تجاوزت الحد الأقصى للمحاولات. اطلب رمزًا جديدًا'];
         }
 
-        $this->pdo->prepare('UPDATE otp_verifications SET attempts = attempts + 1, updated_at = datetime('now') WHERE id = ?')
+        $this->pdo->prepare("UPDATE otp_verifications SET attempts = attempts + 1, updated_at = datetime('now') WHERE id = ?")
                  ->execute([(int)$otp['id']]);
 
         $valid = password_verify(trim($code), $otp['otp_hash']);
