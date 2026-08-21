@@ -288,8 +288,7 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp
 )
 SQL,
-            'privacy_settings' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `privacy_settings` (
+            'privacy_settings' => "CREATE TABLE IF NOT EXISTS `privacy_settings` (
   `user_id` integer NOT NULL PRIMARY KEY,
   `show_last_seen` integer DEFAULT 1,
   `show_online_status` integer DEFAULT 1,
@@ -309,26 +308,21 @@ CREATE TABLE IF NOT EXISTS `privacy_settings` (
   `allow_by_phone` integer DEFAULT 1,
   `created_at` datetime NOT NULL DEFAULT current_timestamp,
   `updated_at` datetime NOT NULL DEFAULT current_timestamp
-)
-SQL,
-            'typing_status' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `typing_status` (
+)",
+            'typing_status' => "CREATE TABLE IF NOT EXISTS `typing_status` (
   `conversation_id` integer NOT NULL,
   `user_id` integer NOT NULL,
   `expires_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL DEFAULT current_timestamp,
   PRIMARY KEY (conversation_id, user_id)
-)
-SQL,
-            'otp_rate_limits' => <<<'SQL'
-CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
+)",
+            'otp_rate_limits' => "CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
   `phone` varchar(50) NOT NULL PRIMARY KEY,
   `last_attempt_at` datetime NOT NULL,
   `attempts_count` integer NOT NULL DEFAULT 1,
   `resend_count` integer NOT NULL DEFAULT 0,
   `cooldown_until` datetime DEFAULT NULL
-)
-SQL,
+)",
         ];
         foreach ($tables as $table => $ddl) {
             try {
