@@ -25,7 +25,7 @@ if (file_exists($envFile)) {
 
 // Error reporting based on environment
 $appEnv = $_ENV['APP_ENV'] ?? 'production';
-if ($appEnv === 'development') {
+if ($appEnv === 'development' || true) {
     ini_set('display_errors', '1');
     error_reporting(E_ALL);
 } else {
