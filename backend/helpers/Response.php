@@ -36,9 +36,9 @@ class Response
         exit;
     }
 
-    public static function unauthorized(string $message = 'غير مصرح لك بالوصول'): never
+    public static function unauthorized(string $message = 'غير مصرح لك بالوصول', string $errorCode = 'UNAUTHORIZED', mixed $errors = null): never
     {
-        self::error($message, 'UNAUTHORIZED', 401);
+        self::error($message, $errorCode, 401, $errors);
     }
 
     public static function forbidden(string $message = 'ليس لديك صلاحية لتنفيذ هذا الإجراء'): never
