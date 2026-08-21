@@ -157,13 +157,37 @@ class GroupsController
         $this->pdo->beginTransaction();
         try {
             $added = 0;
-            $stmtInsert = $this->pdo->prepare(
-                'INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", NOW()) ON DUPLICATE KEY UPDATE left_at = NULL, role = "member", joined_at = NOW()'
-            );
+            $userCtrl = new UserController();
             foreach ($memberIds as $mid) {
                 if (!in_array($mid, $existing, true)) {
-                    $stmtInsert->execute([$convId, $mid]);
-                    $added++;
+                    // فرض الخصوصية: هل يسمح المستخدم بالإضافة للمجموعات؟
+                    $targetPrivacy = $this->pdo->prepare('SELECT groups_from FROM privacy_settings WHERE user_id = ? LIMIT 1');
+                    $targetPrivacy->execute([$mid]);
+                    $tp = $targetPrivacy->fetch();
+                    $groupsFrom = (int)($tp['groups_from'] ?? 2); // 2=الجميع، 1=جهات الاتصال، 0=لا أحد
+
+                    $canAdd = true;
+                    if ($groupsFrom === 0) {
+                        $canAdd = false;
+                    } elseif ($groupsFrom === 1) {
+                        $isContact = $this->pdo->prepare('SELECT id FROM contacts WHERE user_id = ? AND contact_user_id = ? LIMIT 1');
+                        $isContact->execute([$mid, $userId]);
+                        if (!$isContact->fetch()) {
+                            $canAdd = false;
+                        }
+                    }
+
+                    // فحص الحظر
+                    if ($userCtrl->isBlockedEither($userId, $mid)) {
+                        $canAdd = false;
+                    }
+
+                    if ($canAdd) {
+                        $this->pdo->prepare(
+                            'INSERT INTO conversation_members (conversation_id, user_id, role, joined_at) VALUES (?, ?, "member", NOW())'
+                        )->execute([$convId, $mid]);
+                        $added++;
+                    }
                 }
             }
             $this->pdo->commit();

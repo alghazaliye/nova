@@ -1631,35 +1631,115 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _showContactDetails() {
-    showDialog<void>(
+  void _showContactDetails() async {
+    final otherId = widget.conv.otherUserId;
+    if (otherId == null) return;
+
+    showDialog(
       context: context,
-      builder: (ctx) {
-        final c = NovaColors.of(ctx);
-        return AlertDialog(
-          backgroundColor: c.surface,
-          title: Row(
-            children: [
-              Flexible(
-                  child: Text(widget.conv.name,
-                      style: TextStyle(color: c.text))),
-              if (widget.conv.isVerified) ...[
-                const SizedBox(width: 6),
-                const Icon(Icons.verified, color: Colors.blue, size: 18),
-              ],
-            ],
-          ),
-          content: Text(
-              'جهة اتصال Nova Messenger\\n${widget.conv.isOnline ? 'متصل الآن' : formatLastSeen(widget.conv.lastSeen, utcOffsetMinutes: Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes)}',
-              style: TextStyle(color: c.text, height: 1.7)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('إغلاق', style: TextStyle(color: c.accent)))
-          ],
-        );
-      },
+      barrierDismissible: false,
+      builder: (c) => const Center(child: CircularProgressIndicator()),
     );
+
+    try {
+      final res = await ApiService.get('/users/$otherId');
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      if (res['success'] == true) {
+        final data = res['data'];
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) {
+            final c = NovaColors.of(ctx);
+            final tz = Provider.of<AuthProvider>(context, listen: false).timezoneOffsetMinutes;
+            return AlertDialog(
+              backgroundColor: c.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('معلومات الملف الشخصي', textAlign: TextAlign.center),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  NovaAvatar(
+                    imageUrl: data['avatar'],
+                    letter: data['display_name'] ?? data['name'] ?? '؟',
+                    size: 80,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          data['display_name'] ?? data['name'] ?? '؟',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: c.text),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (data['is_verified'] == true) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.verified, color: Colors.blue, size: 18),
+                      ],
+                    ],
+                  ),
+                  if (data['username'] != null)
+                    Text('@${data['username']}', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  if (data['phone'] != null)
+                    ListTile(
+                      leading: Icon(Icons.phone, size: 20, color: c.accent),
+                      title: const Text('رقم الهاتف', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      subtitle: Text(data['phone'], style: TextStyle(fontSize: 14, color: c.text)),
+                      dense: true,
+                    ),
+                  if (data['email'] != null)
+                    ListTile(
+                      leading: Icon(Icons.email, size: 20, color: c.accent),
+                      title: const Text('البريد الإلكتروني', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      subtitle: Text(data['email'], style: TextStyle(fontSize: 14, color: c.text)),
+                      dense: true,
+                    ),
+                  if (data['bio'] != null && data['bio'].toString().isNotEmpty)
+                    ListTile(
+                      leading: Icon(Icons.info_outline, size: 20, color: c.accent),
+                      title: const Text('الوصف', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      subtitle: Text(data['bio'], style: TextStyle(color: c.text)),
+                      dense: true,
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    data['is_online'] == true
+                        ? 'متصل الآن'
+                        : (data['last_seen'] != null
+                            ? 'آخر ظهور: ${formatLastSeen(data['last_seen'], utcOffsetMinutes: tz)}'
+                            : 'غير متصل'),
+                    style: TextStyle(
+                      color: data['is_online'] == true ? Colors.green : Colors.grey,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('إغلاق', style: TextStyle(color: c.accent)),
+                ),
+              ],
+            );
+          },
+        );
+      } else {
+        showToast(context, 'تعذر جلب بيانات الملف الشخصي');
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        showToast(context, 'خطأ: $e');
+      }
+    }
   }
 
   Future<void> _showChatTheme() async {
@@ -1807,6 +1887,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final auth = context.read<AuthProvider>();
     return Scaffold(
       backgroundColor: c.bg,
+      resizeToAvoidBottomInset: false, // نمنع Scaffold من تغيير حجمه عند ظهور لوحة المفاتيح
       body: Stack(
         children: [
           Column(

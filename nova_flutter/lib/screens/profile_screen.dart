@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../providers/auth_provider.dart';
 import '../utils/nova_ui.dart';
 import 'chats_screen.dart';
@@ -18,12 +20,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _emailCtrl = TextEditingController();
   bool _busy = false;
   XFile? _imageFile;
+  Uint8List? _webImage;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, maxHeight: 800);
     if (image != null) {
-      setState(() => _imageFile = image);
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _imageFile = image;
+          _webImage = bytes;
+        });
+      } else {
+        setState(() => _imageFile = image);
+      }
     }
   }
 
@@ -33,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final c = NovaColors.of(context);
     
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: c.bg,
       appBar: AppBar(
         title: const Text('إعداد الملف الشخصي', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -59,11 +71,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         border: Border.all(color: c.accent, width: 2),
                       ),
                       child: ClipOval(
-                        child: _imageFile != null
-                            ? Image.network(_imageFile!.path, fit: BoxFit.cover)
-                            : auth.user?.avatar != null
-                                ? Image.network(auth.user!.avatar!, fit: BoxFit.cover)
-                                : Icon(Icons.person, color: c.muted, size: 64),
+                        child: _webImage != null
+                            ? Image.memory(_webImage!, fit: BoxFit.cover)
+                            : _imageFile != null
+                                ? Image.network(_imageFile!.path, fit: BoxFit.cover)
+                                : auth.user?.avatar != null
+                                    ? Image.network(auth.user!.avatar!, fit: BoxFit.cover)
+                                    : Icon(Icons.person, color: c.muted, size: 64),
                       ),
                     ),
                     Positioned(
@@ -132,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     
                     // 1. رفع الصورة إذا تم اختيارها
                     if (_imageFile != null) {
-                      final bytes = await _imageFile!.readAsBytes();
+                      final bytes = _webImage ?? await _imageFile!.readAsBytes();
                       await auth.uploadAvatar(bytes, _imageFile!.name);
                     }
                     
@@ -173,5 +187,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
-
-

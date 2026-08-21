@@ -140,7 +140,7 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
         await ApiService.delete('/stories/$id/reaction').catchError((_) => {});
         _myReaction = null;
       } else {
-        await ApiService.post('/stories/$id/reactions', body: {'reaction': emoji});
+        await ApiService.post('/stories/$id/reaction', body: {'reaction': emoji});
         _myReaction = emoji;
       }
       _loadReactions();
@@ -154,7 +154,7 @@ class _NovaStoryViewerState extends State<NovaStoryViewer>
     final id = _current['id']?.toString();
     if (id == null) return;
     try {
-      final res = await ApiService.post('/stories/$id/replies', body: {'body': body});
+      final res = await ApiService.post('/stories/$id/reply', body: {'body': body});
       if (res['success'] == true && mounted) {
         _replyCtrl.clear();
         showToast(context, 'تم إرسال الرد');

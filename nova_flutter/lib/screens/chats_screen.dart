@@ -189,6 +189,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false, // نمنع Scaffold من تغيير حجمه عند ظهور لوحة المفاتيح لتجنب المساحات البيضاء
       body: Stack(
         children: [
           Positioned.fill(

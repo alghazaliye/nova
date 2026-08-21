@@ -26,8 +26,31 @@ class CallController
         $calleeId = (int)($body['callee_id'] ?? 0);
         $callType = in_array($body['call_type'] ?? '', ['voice', 'video']) ? $body['call_type'] : 'voice';
 
-        if (!$calleeId) {
-            Response::error('يجب تحديد المستخدم المراد الاتصال به', 'MISSING_CALLEE', 400);
+        if (!$calleeId || $calleeId === $callerId) {
+            Response::error('يجب تحديد مستخدم صحيح للاتصال به', 'MISSING_CALLEE', 400);
+        }
+
+        // فرض الخصوصية: هل يسمح المستخدم المستهدف باستقبال مكالمات من هذا المستخدم؟
+        $userCtrl = new UserController();
+        $targetPrivacy = $this->pdo->prepare('SELECT calls_from FROM privacy_settings WHERE user_id = ? LIMIT 1');
+        $targetPrivacy->execute([$calleeId]);
+        $tp = $targetPrivacy->fetch();
+        $callsFrom = (int)($tp['calls_from'] ?? 2); // 2=الجميع، 1=جهات الاتصال، 0=لا أحد
+
+        if ($callsFrom === 0) {
+            Response::forbidden('هذا المستخدم لا يسمح باستقبال مكالمات جديدة');
+        }
+        if ($callsFrom === 1) {
+            $isContact = $this->pdo->prepare('SELECT id FROM contacts WHERE user_id = ? AND contact_user_id = ? LIMIT 1');
+            $isContact->execute([$calleeId, $callerId]);
+            if (!$isContact->fetch()) {
+                Response::forbidden('هذا المستخدم يسمح باستقبال مكالمات من جهات اتصاله فقط');
+            }
+        }
+
+        // فحص الحظر
+        if ($userCtrl->isBlockedEither($callerId, $calleeId)) {
+            Response::forbidden('لا يمكنك الاتصال بهذا المستخدم');
         }
 
         $uuid = UuidHelper::generate();

@@ -33,18 +33,18 @@ class StoryController
         $blockedStmt->execute([$userId, $userId]);
         $blockedIds = array_column($blockedStmt->fetchAll(), 'blocked_user_id');
         $blockedIds[] = $userId; // لا يرى المستخدم قصته ضمن قائمة "الآخرين" هنا (حالته لها شاشة منفصلة)
-        $blockedIn = implode(',', array_map('intval', $blockedIds)) ?: '0'; // 0 = معرف غير صالح يضمن عدم تطابق صف
+        $blockedIn = implode(',', array_map('intval', $blockedIds)) ?: '0';
 
         $stmt = $this->pdo->prepare(
             'SELECT s.id, s.uuid, s.user_id, s.type, s.text, s.file_id, s.privacy,
                     s.created_at, s.expires_at, s.views_count,
                     u.name AS user_name, u.avatar AS user_avatar,
-                    u.username AS user_username,
+                    u.username AS user_username, u.is_verified AS user_is_verified,
                     (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS view_count,
                     (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id AND sv.viewer_id = ?) AS viewed_by_me
              FROM stories s
              JOIN users u ON u.id = s.user_id
-             WHERE s.expires_at > NOW() AND s.deleted_at IS NULL AND s.deleted_by IS NULL
+             WHERE s.expires_at > datetime(\'now\', \'localtime\') AND s.deleted_at IS NULL AND s.deleted_by IS NULL
                AND s.user_id NOT IN (' . $blockedIn . ')
              ORDER BY s.created_at DESC'
         );
@@ -54,37 +54,35 @@ class StoryController
         // فلترة الخصوصية بعد الجلب (story_privacy: 0=لا أحد، 1=جهات اتصال، 2=الجميع)
         $filtered = [];
         $contactOwnerIds = [];
+        $userCtrl = new UserController();
         foreach ($rows as $r) {
             $ownerId = (int)$r['user_id'];
             if ($ownerId === $userId) {
-                $filtered[] = $r; // صاحبها يرى حالته
+                $filtered[] = $r;
                 continue;
             }
-            // خصوصية الحالة نفسها (per-story): none/contacts/all
             $sp = (string)($r['privacy'] ?? 'contacts');
-            if ($sp === 'none') {
-                continue; // لا أحد يرى هذه الحالة
-            }
+            if ($sp === 'none') continue;
+            
             if ($sp === 'contacts') {
                 $contactOwnerIds[$ownerId] = true;
                 $r['_pending_contact'] = true;
                 $filtered[] = $r;
                 continue;
             }
-            // s.privacy == 'all': نطبق إعدادات owner العامة (story_privacy)
+            
             $pl = $this->storyPrivacyLevel($ownerId);
-            if ($pl['level'] === 0) {
-                continue; // لا أحد
-            }
+            if ($pl['level'] === 0) continue;
             if ($pl['level'] === 2) {
-                $filtered[] = $r; // الجميع
+                $filtered[] = $r;
                 continue;
             }
-            // جهات الاتصال: نجمع owners ثم نفحص دفعة واحدة أدناه
+            
             $contactOwnerIds[$ownerId] = true;
             $r['_pending_contact'] = true;
             $filtered[] = $r;
         }
+
         if ($contactOwnerIds !== []) {
             $ids = implode(',', array_map('intval', array_keys($contactOwnerIds)));
             $chk = $this->pdo->query(
@@ -100,30 +98,60 @@ class StoryController
                 if (!empty($fr['_pending_contact'])) {
                     unset($fr['_pending_contact']);
                     $ownerId = (int)$fr['user_id'];
-                    if (!isset($contactPairs[$ownerId])) {
-                        continue; // ليس جهة اتصال → يُستبعد
-                    }
+                    if (!isset($contactPairs[$ownerId])) continue;
                 }
                 $stillFiltered[] = $fr;
             }
             $filtered = $stillFiltered;
         }
-        foreach ($filtered as &$row) {
+
+        $grouped = [];
+        foreach ($filtered as $row) {
+            $uid = (int)$row['user_id'];
+            if (!isset($grouped[$uid])) {
+                $uProfile = $userCtrl->filterProfile([
+                    'id' => $uid,
+                    'name' => $row['user_name'],
+                    'avatar' => $row['user_avatar'],
+                    'is_verified' => $row['user_is_verified']
+                ], $userId, $uid);
+
+                $grouped[$uid] = [
+                    'user_id' => $uid,
+                    'user_name' => $uProfile['display_name'] ?? 'مستخدم نوفا',
+                    'user_avatar' => $uProfile['avatar'],
+                    'user_is_verified' => (bool)$uProfile['is_verified'],
+                    'stories' => []
+                ];
+            }
+            
+            $s = [
+                'id' => (int)$row['id'],
+                'uuid' => $row['uuid'],
+                'user_id' => $uid,
+                'type' => $row['type'],
+                'text' => $row['text'],
+                'created_at' => $row['created_at'],
+                'expires_at' => $row['expires_at'],
+                'views_count' => (int)$row['view_count'],
+                'is_viewed' => (bool)$row['viewed_by_me'],
+                'is_mine' => ($uid === $userId)
+            ];
+
             if (!empty($row['file_id'])) {
-                $att = $this->pdo->prepare(
-                    'SELECT file_name, mime_type FROM attachments WHERE id = ? LIMIT 1'
-                );
+                $att = $this->pdo->prepare('SELECT file_name, mime_type FROM attachments WHERE id = ? LIMIT 1');
                 $att->execute([(int)$row['file_id']]);
                 $a = $att->fetch();
                 if ($a) {
-                    $row['file_url']  = '/media/attachments/' . $a['file_name'];
-                    $row['file_mime'] = $a['mime_type'];
+                    $s['file_url']  = '/media/attachments/' . $a['file_name'];
+                    $s['file_mime'] = $a['mime_type'];
                 }
             }
-            $row['is_owner'] = ((int)$row['user_id'] === $userId);
+            
+            $grouped[$uid]['stories'][] = $s;
         }
-        unset($row);
-        Response::success($filtered);
+
+        Response::success(array_values($grouped));
     }
 
     // ============================================================
@@ -164,7 +192,9 @@ class StoryController
         $text    = htmlspecialchars(strip_tags(trim($_POST['text'] ?? '')), ENT_QUOTES, 'UTF-8');
         $privacy = $this->normalizePrivacy($_POST['privacy'] ?? '');
 
-        $storyId = $this->insertStory($userId, $type, $text, $privacy, $this->attachmentInsert($uuid, $userId, $type, $file), $file['size'], $fileName, $mime, $file['name']);
+        $uuid = UuidHelper::generate();
+        $attachmentId = $this->attachmentInsert($uuid, $userId, $type, $file, $fileName, $mime);
+        $storyId = $this->insertStory($userId, $type, $text, $privacy, $attachmentId);
 
         if ($storyId) {
             $this->sendStoryNotifications($userId, $storyId, $privacy);
@@ -326,8 +356,15 @@ class StoryController
         if (!$story) {
             Response::notFound('الحالة غير موجودة أو انتهت صلاحيتها');
         }
-        if ((int)$story['user_id'] === $userId) {
+        $authorId = (int)$story['user_id'];
+        if ($authorId === $userId) {
             Response::error('لا يمكن التفاعل مع حالتك الخاصة', 'SELF_REACTION', 400);
+        }
+
+        // فحص الحظر
+        $userCtrl = new UserController();
+        if ($userCtrl->isBlockedEither($userId, $authorId)) {
+            Response::forbidden('لا يمكنك التفاعل مع حالة هذا المستخدم');
         }
 
         $this->pdo->beginTransaction();
@@ -381,6 +418,12 @@ class StoryController
         $authorId = (int)$story['user_id'];
         if ($authorId === $userId) {
             Response::error('لا يمكنك الرد على حالتك الخاصة', 'SELF_REPLY', 400);
+        }
+
+        // فحص الحظر
+        $userCtrl = new UserController();
+        if ($userCtrl->isBlockedEither($userId, $authorId)) {
+            Response::forbidden('لا يمكنك الرد على حالة هذا المستخدم');
         }
 
         // البحث عن محادثة خاصة موجودة أو إنشاء واحدة
@@ -792,7 +835,7 @@ class StoryController
         return (bool)$stmt->fetch();
     }
 
-    private function insertStory(int $userId, string $type, string $text, string $privacy, ?int $fileId, ?int $fileSize = null, ?string $fileName = null, ?string $mime = null, ?string $originalName = null): ?int
+    private function insertStory(int $userId, string $type, string $text, string $privacy, ?int $fileId): ?int
     {
         $durationHrs = (int)SettingsHelper::getSetting($this->pdo, 'story_duration_hrs', '24');
         if ($durationHrs <= 0) {
@@ -801,34 +844,21 @@ class StoryController
         $expiresAt = date('Y-m-d H:i:s', time() + (int)($durationHrs * 3600));
         $uuid      = UuidHelper::generate();
 
-        $attachmentId = null;
-        if ($fileId === null && $fileName !== null) {
-            // insert attachment inline (upload path)
-            $this->pdo->prepare(
-                'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, duration, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime(\'now\',\'localtime\'))'
-            )->execute([$uuid, $userId, $type, $originalName ?? $fileName, $fileName, $mime ?? 'application/octet-stream', (int)($fileSize ?? 0), 'attachments/' . $fileName]);
-            $attachmentId = (int)$this->pdo->lastInsertId();
-        } elseif ($fileId !== null) {
-            $attachmentId = $fileId;
-        }
-
         $this->pdo->prepare(
             'INSERT INTO stories (uuid, user_id, type, text, file_id, privacy, created_at, expires_at)
              VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\',\'localtime\'), ?)'
-        )->execute([$uuid, $userId, $type, $text, $attachmentId, $privacy, $expiresAt]);
+        )->execute([$uuid, $userId, $type, $text, $fileId, $privacy, $expiresAt]);
 
         return (int)$this->pdo->lastInsertId() ?: null;
     }
 
     /** إدراج attachment للرفع وتفعيل uuid */
-    private function attachmentInsert(string &$uuid, int $userId, string $type, array $file): int
+    private function attachmentInsert(string $uuid, int $userId, string $type, array $file, string $fileName, string $mime): int
     {
-        $uuid = UuidHelper::generate();
         $this->pdo->prepare(
             'INSERT INTO attachments (uuid, uploader_id, type, original_name, file_name, mime_type, file_size, storage_path, duration, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime(\'now\',\'localtime\'))'
-        )->execute([$uuid, $userId, $type, $file['name'], '', 'application/octet-stream', (int)$file['size'], 'attachments/', null]);
+        )->execute([$uuid, $userId, $type, $file['name'], $fileName, $mime, (int)$file['size'], 'attachments/' . $fileName]);
         return (int)$this->pdo->lastInsertId();
     }
 

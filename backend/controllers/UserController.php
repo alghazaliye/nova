@@ -14,6 +14,55 @@ class UserController
         $this->pdo = Database::getInstance();
     }
 
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية الوصول لملف وسائط معين.
+     * يدعم التحقق من الصور الشخصية (العامة) والمرفقات (للمشاركين في المحادثة).
+     */
+    public function canAccessMedia(int $userId, string $relPath): bool
+    {
+        // 1. الصور الشخصية: عامة حالياً (يتم فلترتها في API الملف الشخصي)
+        if (strpos($relPath, 'avatars/') === 0) {
+            return true;
+        }
+
+        $fileName = basename($relPath);
+        
+        // جلب بيانات المرفق
+        $stmt = $this->pdo->prepare('SELECT id, uploader_id, type FROM attachments WHERE file_name = ? LIMIT 1');
+        $stmt->execute([$fileName]);
+        $attachment = $stmt->fetch();
+        
+        if (!$attachment) return false;
+        if ((int)$attachment['uploader_id'] === $userId) return true;
+
+        $uploaderId = (int)$attachment['uploader_id'];
+
+        // 2. الحالات (Stories)
+        if (strpos($relPath, 'stories/') === 0 || $attachment['type'] === 'story') {
+            $sStmt = $this->pdo->prepare('SELECT privacy FROM stories WHERE file_id = ? LIMIT 1');
+            $sStmt->execute([$attachment['id']]);
+            $story = $sStmt->fetch();
+            if ($story) {
+                $privacy = $story['privacy'] ?? 'everyone';
+                if ($privacy === 'everyone') return !$this->isBlockedEither($userId, $uploaderId);
+                if ($privacy === 'contacts') return $this->isContactOf($userId, $uploaderId) && !$this->isBlockedEither($userId, $uploaderId);
+                return false;
+            }
+        }
+
+        // 3. المرفقات والرسائل الصوتية
+        $mStmt = $this->pdo->prepare('SELECT conversation_id FROM messages WHERE file_id = ? LIMIT 1');
+        $mStmt->execute([$attachment['id']]);
+        $msg = $mStmt->fetch();
+        if ($msg) {
+            $cStmt = $this->pdo->prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1');
+            $cStmt->execute([(int)$msg['conversation_id'], $userId]);
+            return (bool)$cStmt->fetch();
+        }
+
+        return false;
+    }
+
     // GET /api/v1/users/me
     public function me(): void
     {
@@ -103,7 +152,8 @@ class UserController
         $this->pdo->prepare('UPDATE users SET avatar = ?, updated_at = NOW() WHERE id = ?')
                   ->execute([$avatarUrl, $auth['user_id']]);
 
-        Response::success(['avatar' => $avatarUrl], 'تم تحديث الصورة الشخصية بنجاح');
+        $user = $this->getUserById((int)$auth['user_id']);
+        Response::success($user, 'تم تحديث الصورة الشخصية بنجاح');
     }
 
     // GET /api/v1/users/{id}
@@ -161,32 +211,21 @@ class UserController
         $stmt->execute([$like, $like, $auth['user_id'], $auth['user_id'], $auth['user_id']]);
         $rows = $stmt->fetchAll();
 
-        // فلترة find_by_* لكل مستخدم في النتائج
+        // فلترة find_by_* لكل مستخدم في النتائج وفرض الخصوصية
+        $viewerId = (int)$auth['user_id'];
         $filtered = [];
         foreach ($rows as $r) {
             $ownerId = (int)$r['id'];
             $p = $this->pdo->prepare('SELECT find_by_phone, find_by_email, find_by_username FROM privacy_settings WHERE user_id = ? LIMIT 1');
             $p->execute([$ownerId]);
             $ps = $p->fetch() ?: ['find_by_phone' => 1, 'find_by_email' => 1, 'find_by_username' => 1];
-            if ($isNumeric && ((int)($ps['find_by_phone'] ?? 1)) === 0) {
-                continue;
-            }
-            if ($isEmail && ((int)($ps['find_by_email'] ?? 1)) === 0) {
-                continue;
-            }
-            if (!$isNumeric && !$isEmail && ((int)($ps['find_by_username'] ?? 1)) === 0) {
-                continue;
-            }
-            $displayName = self::_displayNameForIdentity($r); // يبني من name قبل حذفه
-            unset($r['name']); // لا كشف الاسم الخام في نتائج البحث
-            $r['phone'] = null;
-            $r['email'] = null;
-            // display_name وفق إعدادات صاحب الحساب
-            $q = $this->pdo->prepare('SELECT display_identity FROM privacy_settings WHERE user_id = ? LIMIT 1');
-            $q->execute([$ownerId]);
-            $r['display_identity'] = $q->fetchColumn() ?: 'name_username';
-            $r['display_name'] = $displayName ?: self::_displayNameForIdentity($r);
-            $r = $this->applyPresencePrivacy($r, $auth['user_id']);
+            
+            if ($isNumeric && ((int)($ps['find_by_phone'] ?? 1)) === 0) continue;
+            if ($isEmail && ((int)($ps['find_by_email'] ?? 1)) === 0) continue;
+            if (!$isNumeric && !$isEmail && ((int)($ps['find_by_username'] ?? 1)) === 0) continue;
+
+            $r = $this->applyPresencePrivacy($r, $viewerId);
+            $r = $this->filterProfile($r, $viewerId, $ownerId);
             $filtered[] = $r;
         }
         Response::success($filtered);
@@ -587,7 +626,7 @@ class UserController
     }
 
     /** هل الحظر متبادل بين $a و$b؟ (blocks اتجاه واحد يكفي لأن الحظر يمنع الطرف الآخر أيضًا) */
-    private function isBlockedEither(int $a, int $b): bool
+    public function isBlockedEither(int $a, int $b): bool
     {
         $stmt = $this->pdo->prepare(
             'SELECT id FROM blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1'
@@ -597,7 +636,7 @@ class UserController
     }
 
     /** هل $a جهة اتصال لـ$b أو العكس؟ (علاقة جهة اتصال واحدة الاتجاه تكفي) */
-    private function isContactOf(int $a, int $b): bool
+    public function isContactOf(int $a, int $b): bool
     {
         $stmt = $this->pdo->prepare(
             'SELECT id FROM contacts WHERE (user_id = ? AND contact_user_id = ?) OR (user_id = ? AND contact_user_id = ?) LIMIT 1'

@@ -62,22 +62,28 @@ class _WebFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb) return child;
-    final isDark = Provider.of<ThemeProvider>(context).isDark;
+    final theme = Provider.of<ThemeProvider>(context);
+    final isDark = theme.isDark;
+    final c = isDark ? NovaColors.dark : NovaColors.light;
+    
+    // حل مشكلة المساحة البيضاء: نستخدم MediaQuery للتأكد من أن الحاوية تملأ الارتفاع المتاح
+    // ونستخدم LayoutBuilder للتعامل مع تغيرات الحجم عند ظهور لوحة المفاتيح
     return Container(
       color: isDark ? const Color(0xFF020408) : const Color(0xFFF0F2F5),
       child: Center(
         child: Container(
           width: 480,
+          height: double.infinity,
           decoration: BoxDecoration(
-            color: isDark ? NovaColors.dark.surface : NovaColors.light.surface,
+            color: c.bg,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.08),
+                color: Colors.black.withOpacity(isDark ? 0.6 : 0.08),
                 blurRadius: isDark ? 40 : 20,
               ),
             ],
           ),
-          child: child,
+          child: ClipRect(child: child),
         ),
       ),
     );

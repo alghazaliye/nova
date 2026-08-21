@@ -81,6 +81,22 @@ if (preg_match('#^/media/(.+)$#', $uri, $mediaMatch) || preg_match('#^/nova/back
         echo json_encode(['success' => false, 'message' => 'نوع ملف غير مسموح', 'error_code' => 'INVALID_EXT']);
         exit;
     }
+    // Security: Enforce authentication for media access (except avatars which might be public)
+    // We allow avatars to be public for now to avoid breaking UI previews, but attachments MUST be private.
+    $isAvatar = strpos($rel, 'avatars/') === 0;
+    $userId = null;
+    if (!$isAvatar) {
+        try {
+            $auth = AuthMiddleware::authenticate();
+            $userId = (int)$auth['user_id'];
+        } catch (Exception $e) {
+            http_response_code(401);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'message' => 'غير مصرح لك بالوصول للملف', 'error_code' => 'UNAUTHORIZED']);
+            exit;
+        }
+    }
+
     $storageBase = $_ENV['STORAGE_PATH'] ?? dirname(__DIR__) . '/storage';
     $file = rtrim($storageBase, '/') . '/' . $rel;
     if (!is_file($file)) {
@@ -89,6 +105,18 @@ if (preg_match('#^/media/(.+)$#', $uri, $mediaMatch) || preg_match('#^/nova/back
         echo json_encode(['success' => false, 'message' => 'الملف غير موجود', 'error_code' => 'NOT_FOUND']);
         exit;
     }
+
+    // Security: Check ownership/permission if not public avatar
+    if (!$isAvatar && $userId) {
+        $userCtrl = new UserController();
+        if (!$userCtrl->canAccessMedia($userId, $rel)) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'message' => 'ليس لديك صلاحية للوصول لهذا الملف', 'error_code' => 'FORBIDDEN']);
+            exit;
+        }
+    }
+
     header('Access-Control-Allow-Origin: *');
     header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
     header('Access-Control-Allow-Headers: Range, Content-Type');
@@ -288,8 +316,8 @@ if (preg_match('#^/stories/(\d+)/view$#', $uri, $m) && $method === 'POST') {
 if (preg_match('#^/stories/(\d+)$#', $uri, $m) && $method === 'DELETE') {
     (new StoryController())->delete((int)$m[1]);
 }
-if (preg_match('#^/stories/(\d+)/upload$#', $uri, $m) && $method === 'POST') {
-    (new StoryController())->upload((int)$m[1]);
+if ($uri === '/stories/upload' && $method === 'POST') {
+    (new StoryController())->upload();
 }
 if (preg_match('#^/stories/(\d+)/views$#', $uri, $m) && $method === 'GET') {
     (new StoryController())->views((int)$m[1]);

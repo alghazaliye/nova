@@ -112,6 +112,13 @@ class ApiService {
     return '$base/media$clean';
   }
 
+  /// جلب رابط الوسائط مع التوكن (للوسائط التي تتطلب مصادقة مثل المرفقات)
+  static Map<String, String> mediaHeaders() {
+    return {
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
   /// مسح مسار نسبي إلى رابط كامل (نفس mediaUrl)
   static String getMediaUrl(String? path) => mediaUrl(path);
 

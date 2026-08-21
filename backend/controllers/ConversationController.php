@@ -94,8 +94,31 @@ class ConversationController
 
         if ($type === 'private') {
             $targetId = (int)($body['user_id'] ?? 0);
-            if (!$targetId) {
-                Response::error('يجب تحديد المستخدم', 'MISSING_USER_ID', 400);
+            if (!$targetId || $targetId === $userId) {
+                Response::error('يجب تحديد مستخدم صحيح', 'MISSING_USER_ID', 400);
+            }
+
+            // فرض الخصوصية: هل يسمح المستخدم المستهدف باستقبال رسائل من هذا المستخدم؟
+            $userCtrl = new UserController();
+            $targetPrivacy = $this->pdo->prepare('SELECT messages_from FROM privacy_settings WHERE user_id = ? LIMIT 1');
+            $targetPrivacy->execute([$targetId]);
+            $tp = $targetPrivacy->fetch();
+            $messagesFrom = (int)($tp['messages_from'] ?? 2); // 2=الجميع، 1=جهات الاتصال، 0=لا أحد
+
+            if ($messagesFrom === 0) {
+                Response::forbidden('هذا المستخدم لا يسمح باستقبال رسائل جديدة');
+            }
+            if ($messagesFrom === 1) {
+                $isContact = $this->pdo->prepare('SELECT id FROM contacts WHERE user_id = ? AND contact_user_id = ? LIMIT 1');
+                $isContact->execute([$targetId, $userId]);
+                if (!$isContact->fetch()) {
+                    Response::forbidden('هذا المستخدم يسمح باستقبال رسائل من جهات اتصاله فقط');
+                }
+            }
+
+            // فحص الحظر
+            if ($userCtrl->isBlockedEither($userId, $targetId)) {
+                Response::forbidden('لا يمكنك بدء محادثة مع هذا المستخدم');
             }
 
             // Check if private conversation already exists
@@ -338,7 +361,9 @@ class ConversationController
         $row = $stmt->fetch() ?: null;
         if ($row) {
             require_once __DIR__ . '/UserController.php';
-            $row = (new UserController())->applyPresencePrivacy($row, $myId);
+            $userCtrl = new UserController();
+            $row = $userCtrl->applyPresencePrivacy($row, $myId);
+            $row = $userCtrl->filterProfile($row, $myId, (int)$row['id']);
         }
         return $row;
     }

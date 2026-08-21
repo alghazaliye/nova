@@ -60,11 +60,16 @@ class _StoriesScreenState extends State<StoriesScreen> {
           TextButton(
               onPressed: () => Navigator.pop(c, 'cancel'),
               child: const Text('إلغاء')),
-          TextButton(
+            TextButton(
               onPressed: () => Navigator.pop(c, 'photo'),
               child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [Icon(Icons.image, size: 18), SizedBox(width: 6), Text('نشر صورة')])),
+          TextButton(
+              onPressed: () => Navigator.pop(c, 'video'),
+              child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [Icon(Icons.videocam, size: 18), SizedBox(width: 6), Text('نشر فيديو')])),
           TextButton(
               onPressed: () => Navigator.pop(c, 'text'),
               child: const Row(
@@ -75,21 +80,26 @@ class _StoriesScreenState extends State<StoriesScreen> {
     );
     if (!mounted || choice == null || choice == 'cancel') return;
 
-    if (choice == 'photo') {
+    if (choice == 'photo' || choice == 'video') {
       try {
         final picker = ImagePicker();
-        final XFile? img = await picker.pickImage(
-          source: ImageSource.gallery,
-          imageQuality: 85,
-          maxWidth: 1600,
-          maxHeight: 1600,
-        );
-        if (img == null || !mounted) return;
-        await _uploadStoryMedia(img);
+        XFile? file;
+        if (choice == 'photo') {
+          file = await picker.pickImage(
+            source: ImageSource.gallery,
+            imageQuality: 85,
+            maxWidth: 1600,
+            maxHeight: 1600,
+          );
+        } else {
+          file = await picker.pickVideo(source: ImageSource.gallery);
+        }
+        if (file == null || !mounted) return;
+        await _uploadStoryMedia(file);
       } catch (e) {
-        if (mounted) showToast(context, 'تعذر اختيار الصورة: $e');
+        if (mounted) showToast(context, 'تعذر اختيار الوسائط: $e');
       }
-    } else {
+    } else if (choice == 'text') {
       final ctrl = TextEditingController();
       final text = await showDialog<String>(
         context: context,
@@ -140,7 +150,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
             filename: file.name);
       }
       final res = await ApiService.uploadMultipart(
-          '/stories/${meId}/upload', [mf], fields: {'privacy': 'all'});
+          '/stories/upload', [mf], fields: {'privacy': 'all'});
       if (!mounted) return;
       if (res['success'] == true) {
         _load();

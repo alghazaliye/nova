@@ -345,6 +345,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
     final stopped = cfg != null && !cfg.loginEnabled && !cfg.registrationEnabled;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Container(
           decoration: BoxDecoration(gradient: LinearGradient(
