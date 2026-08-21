@@ -231,7 +231,7 @@ class OtpService
 
     public function resendCooldown(string $phone): int
     {
-        $cooldown = (int)$this->getSetting('otp_resend_cooldown_seconds', '60');
+        $cooldown = 0; // (int)$this->getSetting('otp_resend_cooldown_seconds', '60');
         if ($cooldown <= 0) return 0;
         $stmt = $this->pdo->prepare(
             'SELECT MAX(created_at) AS last_req FROM otp_verifications
