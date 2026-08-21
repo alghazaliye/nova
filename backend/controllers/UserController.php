@@ -533,8 +533,9 @@ class UserController
         $lastSeen  = $row['last_seen'] ?? null;
         if ($rawOnline && $lastSeen) {
             try {
-                $ls = new \DateTime((string)$lastSeen);
-                $now = new \DateTime();
+                // DB يخزن last_seen بـUTC (SQLite datetime('now'))، لذا تُفسَّر القيم بـUTC دائمًا
+                $ls = new \DateTime((string)$lastSeen . ' UTC');
+                $now = new \DateTime('now UTC');
                 if ($now->getTimestamp() - $ls->getTimestamp() > 300) {
                     $rawOnline = false;
                 }
