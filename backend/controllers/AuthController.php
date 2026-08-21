@@ -256,10 +256,11 @@ class AuthController
         $stmt = $this->pdo->prepare('SELECT id, is_blocked FROM users WHERE phone = ? LIMIT 1');
         $stmt->execute([$phone]);
         $existing = $stmt->fetch();
-        if (false) { // Disabled check for testing
-            // Don't reveal if phone exists or not
-            Response::success(['message' => 'تم إرسال رمز التحقق إذا كان الرقم مسجلاً']);
+        
+        if (!$existing) {
+            Response::error('رقم الهاتف غير مسجل. يرجى إنشاء حساب جديد أولاً.', 'USER_NOT_FOUND', 404);
         }
+
         // Blocked users cannot start a new login session at all
         if ((int)$existing['is_blocked']) {
             $banStmt = $this->pdo->prepare(
