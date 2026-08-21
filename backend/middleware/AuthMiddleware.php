@@ -56,7 +56,12 @@ class AuthMiddleware
         $session = $stmt->fetch();
 
         if (!$session) {
-            Response::unauthorized('الجلسة غير موجودة أو منتهية');
+            $debugInfo = [
+                'token_hash' => hash('sha256', $token),
+                'now' => date('Y-m-d H:i:s'),
+                'token_sub' => $payload['sub'] ?? 'none'
+            ];
+            Response::unauthorized('الجلسة غير موجودة أو منتهية', 'UNAUTHORIZED', $debugInfo);
         }
 
         if ($session['revoked_at'] !== null) {
