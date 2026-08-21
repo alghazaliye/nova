@@ -229,7 +229,7 @@ class MessageController
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
             error_log('Send message error: ' . $e->getMessage());
-            Response::error('فشل في إرسال الرسالة', 'SEND_FAILED', 500);
+            Response::error('فشل في إرسال الرسالة: ' . substr($e->getMessage(), 0, 120), 'SEND_FAILED', 500);
         }
     }
 
