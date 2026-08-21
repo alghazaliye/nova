@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
 import 'web_login_screen.dart';
@@ -296,6 +297,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 title: 'تغيير الصورة الشخصية',
                                 subtitle: 'اضغط لاختيار صورة من الجهاز',
                                 onTap: () => NovaAvatarPicker.pick(context),
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.dark_mode_outlined),
+                                title: 'الوضع الليلي',
+                                subtitle: 'جعل خلفية التطبيق داكنة',
+                                trailing: Consumer<ThemeProvider>(
+                                  builder: (context, theme, _) => NovaSwitch(
+                                    value: theme.isDark,
+                                    onChanged: (_) => theme.toggle(),
+                                  ),
+                                ),
+                                onTap: () => context.read<ThemeProvider>().toggle(),
                               ),
                               RowItem(
                                 leading: _iconBox(icon: Icons.lock_outline),

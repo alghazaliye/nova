@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/theme_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'utils/nova_ui.dart';
 import 'screens/phone_screen.dart';
@@ -25,19 +26,29 @@ class NovaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseTheme = buildNovaTheme(Brightness.light, NovaColors.light);
-    return ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
-      child: MaterialApp(
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, theme, _) {
+          final baseTheme = buildNovaTheme(Brightness.light, NovaColors.light);
+          final darkTheme = buildNovaTheme(Brightness.dark, NovaColors.dark);
+          return MaterialApp(
         title: 'NOVA Messenger',
         debugShowCheckedModeBanner: false,
         theme: baseTheme,
+        darkTheme: darkTheme,
+        themeMode: theme.isDark ? ThemeMode.dark : ThemeMode.light,
         // RTL إجباري: المحادثات أولًا يمين، الإعدادات آخر يسار (مثل واتساب)
         builder: (context, child) => Directionality(
           textDirection: TextDirection.rtl,
           child: _WebFrame(child: child ?? const SizedBox.shrink()),
         ),
         home: const AppRouter(),
+          );
+        },
       ),
     );
   }
