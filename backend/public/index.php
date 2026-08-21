@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 // Production-safe global exception handler: convert uncaught exceptions to JSON 500
-if (PHP_SAPI !== 'cli') {
+if (true) {
     set_exception_handler(function (\Throwable $e): void {
         error_log('[nova error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
         if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
