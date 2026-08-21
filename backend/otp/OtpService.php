@@ -36,20 +36,52 @@ class OtpService
         static $done = false;
         if ($done) return;
         $done = true;
+        
+        // 1) otp_verifications columns
         try {
-            $this->pdo->exec(
-                'ALTER TABLE otp_verifications ADD COLUMN manual_code_hash VARCHAR(255) NULL
-                 AFTER otp_hash'
-            );
-        } catch (Throwable $e) {
-            // column already exists — ignore
-        }
+            $this->pdo->exec("ALTER TABLE otp_verifications ADD COLUMN manual_code_hash VARCHAR(255) NULL");
+        } catch (Throwable $e) {}
         try {
-            $this->pdo->exec(
-                'ALTER TABLE otp_verifications ADD COLUMN manual_code VARCHAR(16) NULL'
-            );
+            $this->pdo->exec("ALTER TABLE otp_verifications ADD COLUMN manual_code VARCHAR(16) NULL");
+        } catch (Throwable $e) {}
+
+        // 2) otp_rate_limits columns (Fix for Render schema drift)
+        try {
+            $stmt = $this->pdo->query("PRAGMA table_info(otp_rate_limits)");
+            $columns = $stmt->fetchAll(PDO::FETCH_COLUMN, 1);
+            if (!empty($columns)) {
+                if (!in_array('attempts_count', $columns)) {
+                    $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN attempts_count INTEGER NOT NULL DEFAULT 1");
+                }
+                if (!in_array('resend_count', $columns)) {
+                    $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN resend_count INTEGER NOT NULL DEFAULT 0");
+                }
+                if (!in_array('cooldown_until', $columns)) {
+                    $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN cooldown_until DATETIME DEFAULT NULL");
+                }
+                if (!in_array('phone', $columns)) {
+                    // Legacy schema (bucket_key style) — reset it
+                    $this->pdo->exec("DROP TABLE otp_rate_limits");
+                    $this->pdo->exec("CREATE TABLE otp_rate_limits (
+                        phone TEXT PRIMARY KEY,
+                        last_attempt_at DATETIME NOT NULL,
+                        attempts_count INTEGER NOT NULL DEFAULT 1,
+                        resend_count INTEGER NOT NULL DEFAULT 0,
+                        cooldown_until DATETIME DEFAULT NULL
+                    )");
+                }
+            } else {
+                // Table doesn't exist — create it
+                $this->pdo->exec("CREATE TABLE IF NOT EXISTS otp_rate_limits (
+                    phone TEXT PRIMARY KEY,
+                    last_attempt_at DATETIME NOT NULL,
+                    attempts_count INTEGER NOT NULL DEFAULT 1,
+                    resend_count INTEGER NOT NULL DEFAULT 0,
+                    cooldown_until DATETIME DEFAULT NULL
+                )");
+            }
         } catch (Throwable $e) {
-            // column already exists — ignore
+            error_log("OTP Schema Migration failed: " . $e->getMessage());
         }
     }
 
