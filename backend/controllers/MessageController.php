@@ -72,9 +72,9 @@ class MessageController
         if (!empty($messages)) {
             $lastId = end($messages)['id'];
             $this->pdo->prepare(
-                'UPDATE conversation_members SET last_read_message_id = MAX(COALESCE(last_read_message_id, 0), ?)
-                 WHERE conversation_id = ? AND user_id = ?'
-            )->execute([$lastId, $convId, $userId]);
+'UPDATE conversation_members SET last_read_message_id = (SELECT CASE WHEN COALESCE(last_read_message_id, 0) > ? THEN last_read_message_id ELSE ? END FROM conversation_members WHERE conversation_id = ? AND user_id = ?)
+	                 WHERE conversation_id = ? AND user_id = ?'
+            )->execute([$lastId, $lastId, $convId, $userId, $convId, $userId]);
         }
 
         // Disappearing messages: expirations
