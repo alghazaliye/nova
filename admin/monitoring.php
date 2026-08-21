@@ -97,7 +97,7 @@ $connected_devices = $pdo->query(
             d.app_version, d.last_seen, u.name as user_name
      FROM device_registrations d
      JOIN users u ON u.id = d.user_id
-     WHERE d.last_seen >= datetime("now",'-1 hour') AND d.is_active = 1
+     WHERE d.last_seen >= datetime('now','-1 hour') AND d.is_active = 1
      ORDER BY d.last_seen DESC LIMIT 20"
 )->fetchAll() ?: [];
 
