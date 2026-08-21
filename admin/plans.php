@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ends = $days > 0 ? date('Y-m-d H:i:s', strtotime("+{$days} days")) : null;
         $stmt = $pdo->prepare(
             'INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
-             VALUES (?, ?, "active", datetime("now"), ?)'
+             VALUES (?, ?, "active", datetime('now'), ?)'
         );
         $stmt->execute([$userId, $planId, $ends]);
         $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Expire overdue
 try {
-    $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < datetime("now")");
+    $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < datetime('now')");
 } catch (\Throwable $e) {}
 
 $plans = $pdo->query('SELECT * FROM plans ORDER BY id ASC')->fetchAll();

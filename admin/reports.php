@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasPermission($admin, 'reports.reso
 
     if ($report && in_array($action, ['reviewing', 'resolved', 'rejected', 'closed'], true)) {
         $pdo->prepare(
-            "UPDATE reports SET status = ?, reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?"
+            "UPDATE reports SET status = ?, reviewed_by = ?, reviewed_at = datetime("now",'localtime') WHERE id = ?"
         )->execute([$action, $admin['id'], $reportId]);
         logAudit($admin, 'REPORT_' . strtoupper($action), 'report', $reportId);
         $message = 'تم تحديث حالة البلاغ';
@@ -30,15 +30,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasPermission($admin, 'reports.reso
         // حظر نهائي للمستخدم المُبلَّغ عنه
         $pdo->prepare(
             "INSERT INTO user_bans (user_id, reason, banned_by, banned_at)
-             VALUES (?, ?, ?, datetime('now','localtime'))"
+             VALUES (?, ?, ?, datetime("now",'localtime'))"
         )->execute([(int)$report['reported_user_id'], 'بلاغ رقم ' . $reportId . ' — ' . ($report['description'] ?: $report['reason']), $admin['id']]);
         $pdo->prepare(
-            "UPDATE users SET is_blocked = 1, blocked_at = datetime('now','localtime') WHERE id = ?"
+            "UPDATE users SET is_blocked = 1, blocked_at = datetime("now",'localtime') WHERE id = ?"
         )->execute([(int)$report['reported_user_id']]);
         // إلغاء الجلسات النشطة للمستخدم المحظور
         $pdo->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([(int)$report['reported_user_id']]);
         $pdo->prepare(
-            "UPDATE reports SET status = 'resolved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?"
+            "UPDATE reports SET status = 'resolved', reviewed_by = ?, reviewed_at = datetime("now",'localtime') WHERE id = ?"
         )->execute([$admin['id'], $reportId]);
         logAudit($admin, 'REPORT_BAN_USER', 'user', (int)$report['reported_user_id'], 'حظر نهائي من بلاغ رقم ' . $reportId);
         $message = 'تم حظر المستخدم نهائيًا وتم حل البلاغ';
@@ -46,14 +46,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasPermission($admin, 'reports.reso
         $hours = max(1, min(720, (int)($_POST['hours'] ?? 24)));
         $pdo->prepare(
             "INSERT INTO user_bans (user_id, reason, banned_by, banned_at, suspend_until)
-             VALUES (?, ?, ?, datetime('now','localtime'), datetime('now','localtime','+" . $hours . " hours'))"
+             VALUES (?, ?, ?, datetime("now",'localtime'), datetime("now",'localtime','+" . $hours . " hours'))"
         )->execute([(int)$report['reported_user_id'], 'تعليق مؤقت من بلاغ رقم ' . $reportId, $admin['id']]);
         $pdo->prepare(
-            "UPDATE users SET is_blocked = 1, blocked_at = datetime('now','localtime') WHERE id = ?"
+            "UPDATE users SET is_blocked = 1, blocked_at = datetime("now",'localtime') WHERE id = ?"
         )->execute([(int)$report['reported_user_id']]);
         $pdo->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([(int)$report['reported_user_id']]);
         $pdo->prepare(
-            "UPDATE reports SET status = 'action_taken', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?"
+            "UPDATE reports SET status = 'action_taken', reviewed_by = ?, reviewed_at = datetime("now",'localtime') WHERE id = ?"
         )->execute([$admin['id'], $reportId]);
         logAudit($admin, 'REPORT_SUSPEND_USER', 'user', (int)$report['reported_user_id'], 'تعليق مؤقت ' . $hours . ' ساعة من بلاغ رقم ' . $reportId);
         $message = "تم تعليق المستخدم مؤقتًا لمدة {$hours} ساعة";

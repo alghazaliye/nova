@@ -44,9 +44,9 @@ try {
     $stats['today_answered'] = (int)$r;
     $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE('now','localtime') AND status = 'missed'")->fetchColumn();
     $stats['today_missed'] = (int)$r;
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE created_at >= datetime('now','-7 days','localtime')")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE created_at >= datetime("now",'-7 days','localtime')")->fetchColumn();
     $stats['week'] = (int)$r;
-    $r = $pdo->query("SELECT AVG(duration) FROM calls WHERE duration IS NOT NULL AND created_at >= datetime('now','-7 days','localtime')")->fetchColumn();
+    $r = $pdo->query("SELECT AVG(duration) FROM calls WHERE duration IS NOT NULL AND created_at >= datetime("now",'-7 days','localtime')")->fetchColumn();
     if ($r !== null && $r !== false) {
         $avg = (int)$r;
         $stats['avg_duration'] = gmdate('H:i:s', $avg);

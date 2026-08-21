@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('UPDATE user_subscriptions SET status = "cancelled" WHERE user_id = ? AND status = "active"')->execute([$userId]);
             $pdo->prepare(
                 'INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
-                 VALUES (?, ?, "active", datetime("now"), ?)'
+                 VALUES (?, ?, "active", datetime('now'), ?)'
             )->execute([$userId, $planId, $ends]);
             $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
             logAudit($admin, 'SUBSCRIPTION_ACTIVATE', 'user', $userId, "تفعيل اشتراك على الباقة #{$planId} — حساب مميز");
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Expire overdue
-try { $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < datetime("now")"); } catch (\Throwable $e) {}
+try { $pdo->exec("UPDATE user_subscriptions SET status = 'expired' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < datetime('now')"); } catch (\Throwable $e) {}
 
 $search = trim($_GET['q'] ?? '');
 $where = $search !== '' ? 'WHERE u.name LIKE ? OR u.phone LIKE ?' : '';
