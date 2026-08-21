@@ -308,13 +308,12 @@ class MessageController
                 'UPDATE messages SET status = "deleted", deleted_at = NOW(), body = NULL, updated_at = NOW() WHERE id = ?'
             )->execute([$id]);
         } else {
-            // Delete for self only: update per-user read state, keep message visible to others
+            // Delete for self only: record per-user deletion (keeps the message visible to others)
             $this->pdo->prepare(
-                'UPDATE conversation_members SET last_read_message_id = 0, left_at = left_at WHERE conversation_id = ? AND user_id = ?'
-            )->execute([(int)$msg['conversation_id'], $userId]);
-            $this->pdo->prepare(
-                'INSERT INTO message_reads (message_id, user_id, read_at, deleted_for_me) VALUES (?, ?, NOW(), 1) ON DUPLICATE KEY UPDATE deleted_for_me = 1'
-            )->execute([$id, $userId]);
+                'INSERT INTO message_deletions (message_id, conversation_id, deleted_by, original_body, original_type, scope_type, deleted_at)
+                 VALUES (?, ?, ?, ?, ?, \'self\', NOW())
+                 ON DUPLICATE KEY UPDATE deleted_at = NOW()'
+            )->execute([$id, (int)$msg['conversation_id'], $userId, $msg['body'] ?? '', $msg['type'] ?? 'text']);
         }
 
         // Notify other members to sync deletion on their devices
@@ -472,9 +471,11 @@ class MessageController
                  WHERE m.conversation_id = ? AND m.disappear_after = -1 AND m.deleted_at IS NULL
                    AND NOT EXISTS (
                        SELECT 1 FROM conversation_members cm2
-                       LEFT JOIN message_reads mr ON mr.message_id = m.id AND mr.user_id = cm2.user_id AND mr.deleted_for_me = 0
                        WHERE cm2.conversation_id = m.conversation_id AND cm2.left_at IS NULL AND cm2.user_id != m.sender_id
-                         AND mr.message_id IS NULL
+                         AND NOT EXISTS (
+                             SELECT 1 FROM message_reads mr
+                             WHERE mr.message_id = m.id AND mr.user_id = cm2.user_id
+                         )
                    )'
             )->execute([$convId]);
         } catch (\Throwable $e) {

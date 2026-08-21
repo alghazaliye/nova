@@ -133,6 +133,7 @@ class ConversationController
                 Response::error('فشل في إنشاء المحادثة', 'CREATE_FAILED', 500);
             }
         } elseif ($type === 'group') {
+            SettingsHelper::enforceFeature($this->pdo, 'allow_groups', 'المجموعات');
             $title   = htmlspecialchars(strip_tags(trim($body['title'] ?? '')), ENT_QUOTES, 'UTF-8');
             $members = $body['members'] ?? [];
 

@@ -276,7 +276,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!_lastTypingSent) {
         _lastTypingSent = true;
         ApiService.post('/conversations/${widget.conv.id}/typing',
-            body: {'typing': true}).catchError((_) {});
+            body: {'typing': true}).catchError((_) => <String, dynamic>{'success': false, 'message': 'تعذر الاتصال'});
       }
       // لا إعادة إرسال أثناء الاستمرار — الخادم يُنهي الحالة بعد 4 ثوانٍ تلقائيًا.
       // إذا فُرّغ الحقل (توقف عن الكتابة) نُلغي الحالة فورًا بعد ثانية واحدة.
@@ -300,7 +300,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendTypingCancel() {
     ApiService.post('/conversations/${widget.conv.id}/typing',
-        body: {'typing': false}).catchError((_) {});
+        body: {'typing': false}).catchError((_) => <String, dynamic>{'success': false, 'message': 'تعذر الاتصال'});
   }
 
   bool _listsEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
@@ -1487,15 +1487,131 @@ class _ChatScreenState extends State<ChatScreen> {
         showToast(context, 'تم مسح محتوى المحادثة من هذا الجهاز');
         break;
       case 'report':
-        showToast(context, 'تم تسجيل البلاغ للمراجعة');
+        await _reportUser();
         break;
       case 'block':
-        showToast(context, 'تم تحديث حالة الحظر');
+        await _confirmBlock();
         break;
       case 'more':
       case 'move':
         showToast(context, 'الخيار متاح من إعدادات المحادثة');
         break;
+    }
+  }
+
+  Future<void> _reportUser() async {
+    // الإبلاغ الفعلي إلى POST /api/v1/reports مع اختيار السبب
+    final reasons = [
+      'إساءة أو تحرش',
+      'محتوى مخالف',
+      'انتحال شخصية',
+      'بريد مزعج',
+      'سبب آخر',
+    ];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.42),
+      builder: (ctx) {
+        final cl = NovaColors.of(ctx);
+        return Container(
+          decoration: BoxDecoration(
+            color: cl.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(ctx).bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: cl.line, borderRadius: BorderRadius.circular(5))),
+              ),
+              const SizedBox(height: 15),
+              Text('لماذا تُبلّغ عن ${widget.conv.name}؟',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cl.text)),
+              const SizedBox(height: 10),
+              ...reasons.map((r) => PressScale(
+                    onTap: () => Navigator.pop(ctx, r),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(children: [
+                        const Icon(Icons.flag_outlined, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(r,
+                              style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
+                        ),
+                      ]),
+                    ),
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || selected == null) return;
+    try {
+      final res = await ApiService.post('/reports', body: {
+        'reported_user_id': widget.conv.otherUserId ?? 0,
+        'conversation_id': widget.conv.id,
+        'reason': selected,
+      }).timeout(const Duration(seconds: 15)).then((r) => r);
+      if (mounted) {
+        if (res['success'] == true) {
+          showToast(context, 'تم تسجيل البلاغ وسيتم مراجعته من قبل الإدارة');
+        } else {
+          showToast(context, res['message'] ?? 'فشل تسجيل البلاغ');
+        }
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'تعذر تسجيل البلاغ. تحقق من اتصالك.');
+    }
+  }
+
+  Future<void> _confirmBlock() async {
+    // الحظر الفعلي: POST /users/{id}/block مع نافذة تأكيد
+    final targetId = widget.conv.otherUserId;
+    if (targetId == null) {
+      if (mounted) showToast(context, 'المستخدم غير محدد');
+      return;
+    }
+    final c = NovaColors.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: NovaColors.of(ctx).surface,
+        title: Text('حظر ${widget.conv.name}', style: TextStyle(color: c.text)),
+        content: Text(
+            'لن يتمكن هذا المستخدم من مراسلتك أو الاتصال بك. يمكنك فك الحظر لاحقًا من إعدادات الخصوصية.',
+            style: TextStyle(color: c.text, fontSize: 14)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('إلغاء', style: TextStyle(color: c.muted))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('حظر', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    if (!mounted || confirm != true) return;
+    try {
+      final res = await ApiService.post('/users/$targetId/block', body: {})?.timeout(const Duration(seconds: 15)) ?? {'success': false, 'message': 'تعذر الاتصال'};
+      if (mounted) {
+        if ((res['success'] ?? false) == true) {
+          showToast(context, 'تم حظر ${widget.conv.name}');
+          if (mounted) Navigator.pop(context);
+        } else {
+          showToast(context, (res['message'] as String?) ?? 'فشل حظر المستخدم');
+        }
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'تعذر حظر المستخدم. تحقق من اتصالك.');
     }
   }
 

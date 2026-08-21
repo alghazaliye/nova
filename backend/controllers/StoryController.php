@@ -57,6 +57,7 @@ class StoryController
     // POST /api/v1/stories/upload (multipart: file + text + privacy)
     public function upload(): void
     {
+        SettingsHelper::enforceFeature($this->pdo, 'allow_stories', 'الحالات');
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
 
@@ -88,7 +89,10 @@ class StoryController
         $text    = htmlspecialchars(strip_tags(trim($_POST['text'] ?? '')), ENT_QUOTES, 'UTF-8');
         $privacy = in_array($_POST['privacy'] ?? '', ['all', 'contacts', 'close_friends']) ? $_POST['privacy'] : 'contacts';
 
-        $durationHrs = (int)($_ENV['STORY_DURATION_HRS'] ?? 24);
+        $durationHrs = (int)SettingsHelper::getSetting($this->pdo, 'story_duration_hrs', '24');
+        if ($durationHrs <= 0) {
+            $durationHrs = 24;
+        }
         $expiresAt   = date('Y-m-d H:i:s', strtotime("+{$durationHrs} hours"));
         $uuid        = UuidHelper::generate();
 
@@ -125,6 +129,7 @@ class StoryController
     // POST /api/v1/stories
     public function create(): void
     {
+        SettingsHelper::enforceFeature($this->pdo, 'allow_stories', 'الحالات');
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -138,7 +143,10 @@ class StoryController
             Response::error('نص الحالة لا يمكن أن يكون فارغاً', 'EMPTY_STORY', 400);
         }
 
-        $durationHrs = (int)($_ENV['STORY_DURATION_HRS'] ?? 24);
+        $durationHrs = (int)SettingsHelper::getSetting($this->pdo, 'story_duration_hrs', '24');
+        if ($durationHrs <= 0) {
+            $durationHrs = 24;
+        }
         $expiresAt   = date('Y-m-d H:i:s', strtotime("+{$durationHrs} hours"));
         $uuid        = UuidHelper::generate();
 

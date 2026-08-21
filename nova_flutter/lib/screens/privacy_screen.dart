@@ -13,6 +13,7 @@ class PrivacyScreen extends StatefulWidget {
 
 class _PrivacyScreenState extends State<PrivacyScreen> {
   bool _loading = true;
+  String? _error;
   Map<String, dynamic> _settings = {};
   int? _readReceipts;
 
@@ -29,17 +30,36 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final res = await ApiService.get('/privacy');
-      if (mounted && res['success'] == true && res['data'] != null) {
+      final res = await ApiService.get('/privacy').timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      if (res is Map && res['success'] == true && res['data'] is Map) {
         setState(() {
           _settings = Map<String, dynamic>.from(res['data'] as Map<String, dynamic>);
-          _readReceipts = int.tryParse((_settings['read_receipts'] ?? 1).toString());
+          // API returns read_receipts as bool; keep int semantics for the toggle
+          final rr = _settings['read_receipts'];
+          _readReceipts = (rr == false || rr == 0) ? 0 : 1;
           _loading = false;
+          _error = null;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = (res is Map) ? (res['message'] ?? 'فشل في تحميل إعدادات الخصوصية') : 'فشل في تحميل إعدادات الخصوصية';
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'تعذر تحميل إعدادات الخصوصية. تحقق من اتصالك وحاول مجددًا.';
+        });
+      }
     }
   }
 
@@ -172,7 +192,29 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.error_outline, size: 44, color: c.muted),
+                        const SizedBox(height: 12),
+                        Text(_error!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14, color: c.muted)),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('إعادة المحاولة'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -159,7 +159,7 @@ class UserController
         $userId = (int)$auth['user_id'];
 
         $stmt = $this->pdo->prepare(
-            'SELECT last_seen_visibility, photo_visibility, status_visibility, read_receipts
+            'SELECT show_last_seen, show_online_status, show_read_receipts
              FROM privacy_settings WHERE user_id = ? LIMIT 1'
         );
         $stmt->execute([$userId]);
@@ -168,9 +168,15 @@ class UserController
             $this->pdo->prepare(
                 'INSERT INTO privacy_settings (user_id) VALUES (?)'
             )->execute([$userId]);
-            $row = ['last_seen_visibility' => 'contacts', 'photo_visibility' => 'contacts', 'status_visibility' => 'contacts', 'read_receipts' => 1];
+            $row = ['show_last_seen' => 1, 'show_online_status' => 1, 'show_read_receipts' => 1];
         }
-        Response::success($row);
+        Response::success([
+            'last_seen_visibility' => self::_visibilityForInt((int)($row['show_last_seen'] ?? 1)),
+            'online_status'        => ((int)($row['show_online_status'] ?? 1)) === 1,
+            'photo_visibility'     => 'contacts',
+            'status_visibility'    => 'contacts',
+            'read_receipts'        => ((int)($row['show_read_receipts'] ?? 1)) === 1,
+        ]);
     }
 
     // PUT /api/v1/privacy
@@ -180,19 +186,24 @@ class UserController
         $userId = (int)$auth['user_id'];
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        $allowed = ['last_seen_visibility', 'photo_visibility', 'status_visibility', 'read_receipts'];
         $sets = []; $params = [];
-        foreach ($allowed as $field) {
-            if (array_key_exists($field, $body)) {
-                if ($field === 'read_receipts') {
-                    $val = filter_var($body[$field], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
-                } else {
-                    $val = in_array($body[$field], ['everybody', 'contacts', 'nobody'], true) ? $body[$field] : null;
-                    if ($val === null) continue;
-                }
-                $sets[] = "{$field} = ?";
-                $params[] = $val;
+        // last_seen_visibility: everybody|contacts|nobody → show_last_seen (2|1|0)
+        if (array_key_exists('last_seen_visibility', $body)) {
+            $val = in_array($body['last_seen_visibility'], ['everybody', 'contacts', 'nobody'], true) ? $body['last_seen_visibility'] : null;
+            if ($val !== null) {
+                $sets[] = 'show_last_seen = ?';
+                $params[] = self::_visibilityToInt($val);
             }
+        }
+        // online_status: bool → show_online_status (1|0)
+        if (array_key_exists('online_status', $body)) {
+            $sets[] = 'show_online_status = ?';
+            $params[] = filter_var($body['online_status'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
+        // read_receipts: bool/int → show_read_receipts
+        if (array_key_exists('read_receipts', $body)) {
+            $sets[] = 'show_read_receipts = ?';
+            $params[] = filter_var($body['read_receipts'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
         }
         if (empty($sets)) {
             Response::error('لا توجد بيانات للتحديث', 'NO_DATA', 400);
@@ -315,12 +326,66 @@ class UserController
             'max_video_size_mb'  => (int)($settings['max_video_size_mb'] ?? 100),
             'story_duration_hrs' => (int)($settings['story_duration_hrs'] ?? 24),
             'fcm_enabled'     => ($settings['fcm_enabled'] ?? '1') === '1',
+            'edit_time_limit_minutes'   => (int)($settings['edit_time_limit_minutes'] ?? 0),
+            'delete_time_limit_minutes' => (int)($settings['delete_time_limit_minutes'] ?? 0),
+            'message_type_default'      => $settings['message_type_default'] ?? 'chat',
+            'disappearing_default_seconds' => (int)($settings['disappearing_default_seconds'] ?? 0),
         ]);
     }
 
     // =====================================================
     // Private Helpers
     // =====================================================
+
+    // Privacy helpers: هل يُسمح لـ$viewer برؤية last_seen لـ$target؟ (nobody→لا يُعرض حتى «متصل»)
+    public function canSeeLastSeen(int $viewerId, int $targetId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT show_last_seen FROM privacy_settings WHERE user_id = ? LIMIT 1');
+        $stmt->execute([$targetId]);
+        $row = $stmt->fetch();
+        $mode = $row ? (int)($row['show_last_seen'] ?? 1) : 1; // 2: الجميع، 1: جهات الاتصال، 0: لا أحد
+        if ($mode === 2) return true;
+        if ($mode === 0) return false;
+        $chk = $this->pdo->prepare(
+            'SELECT id FROM contacts WHERE (user_id = ? AND contact_user_id = ?) OR (user_id = ? AND contact_user_id = ?) LIMIT 1'
+        );
+        $chk->execute([$viewerId, $targetId, $targetId, $viewerId]);
+        return (bool)$chk->fetch();
+    }
+    // هل يُسمح بعرض is_online لـ$target أمام $viewer؟
+    public function canSeeOnline(int $viewerId, int $targetId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT show_online_status FROM privacy_settings WHERE user_id = ? LIMIT 1');
+        $stmt->execute([$targetId]);
+        $row = $stmt->fetch();
+        return $row ? ((int)($row['show_online_status'] ?? 1)) !== 0 : true;
+    }
+    // هل يُسمح بعرض read receipt؟ (show_read_receipts لـأحد الطرفين)
+    public function canSeeReadReceipt(int $viewerId, int $otherId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT show_read_receipts FROM privacy_settings WHERE user_id = ? LIMIT 1');
+        $stmt->execute([$otherId]);
+        $row = $stmt->fetch();
+        return $row ? ((int)($row['show_read_receipts'] ?? 1)) !== 0 : true;
+    }
+
+    // last_seen_visibility value → int: everybody=2 contacts=1 nobody=0
+    private static function _visibilityToInt(string $v): int
+    {
+        return match ($v) {
+            'everybody' => 2,
+            'nobody'    => 0,
+            default     => 1,
+        };
+    }
+    private static function _visibilityForInt(int $v): string
+    {
+        return match ($v) {
+            2 => 'everybody',
+            0 => 'nobody',
+            default => 'contacts',
+        };
+    }
 
     private function getUserById(int $id): ?array
     {

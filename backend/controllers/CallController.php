@@ -18,6 +18,7 @@ class CallController
     // POST /api/v1/calls
     public function initiate(): void
     {
+        SettingsHelper::enforceFeature($this->pdo, 'allow_calls', 'المكالمات');
         $auth     = AuthMiddleware::authenticate();
         $callerId = (int)$auth['user_id'];
         $body     = json_decode(file_get_contents('php://input'), true) ?? [];

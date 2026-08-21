@@ -36,6 +36,8 @@ require_once __DIR__ . '/../controllers/AdminAuthController.php';
 require_once __DIR__ . '/../controllers/EmailAuthController.php';
 require_once __DIR__ . '/../controllers/DeviceController.php';
 require_once __DIR__ . '/../controllers/GroupsController.php';
+require_once __DIR__ . '/../helpers/SettingsHelper.php';
+require_once __DIR__ . '/../controllers/ReportsController.php';
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -137,98 +139,6 @@ if (preg_match('#^/media/(.+)$#', $uri, $mediaMatch) || preg_match('#^/nova/back
 // =====================================================
 // Router
 // =====================================================
-
-// TEMPORARY diagnostic endpoint — remove after debugging
-require_once __DIR__ . '/../helpers/OtpEncryption.php';
-require_once __DIR__ . '/../otp/EmailOtpService.php';
-
-if ($uri === '/_diag' && $method === 'GET') {
-    $diagKey = (string)($_ENV['NOVA_DIAG_KEY'] ?? getenv('NOVA_DIAG_KEY') ?? '');
-    if (($_GET['key'] ?? '') !== $diagKey || $diagKey === '') {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'message' => 'forbidden', 'error_code' => 'FORBIDDEN']);
-        exit;
-    }
-    header('Content-Type: application/json; charset=utf-8');
-    $diagOut = [];
-    // TEMPORARY: inspect incoming auth headers to debug the 401 issue
-    $diagOut['incoming_auth_headers'] = [];
-    foreach ($_SERVER as $k => $v) {
-        if (is_string($v) && stripos($k, 'AUTH') !== false) {
-            $diagOut['incoming_auth_headers'][$k] = $v;
-        }
-    }
-    if (function_exists('getallheaders')) {
-        foreach (getallheaders() as $n => $v) {
-            if (stripos($n, 'auth') !== false || stripos($n, 'authorization') !== false) {
-                $diagOut['incoming_auth_headers']['header:' . $n] = $v;
-            }
-        }
-    }
-    $diagOut['env'] = [
-        'DB_TYPE'             => (string)getenv('DB_TYPE'),
-        'APP_ENV'             => (string)getenv('APP_ENV'),
-        'GMAIL_SMTP_USERNAME' => (string)getenv('GMAIL_SMTP_USERNAME'),
-        'GMAIL_SMTP_PASSWORD' => getenv('GMAIL_SMTP_PASSWORD') !== false ? (strlen((string)getenv('GMAIL_SMTP_PASSWORD')) ? 'SET(len=' . strlen((string)getenv('GMAIL_SMTP_PASSWORD')) . ')' : 'EMPTY') : 'NOT SET',
-        'OTP_ENCRYPTION_KEY'  => getenv('OTP_ENCRYPTION_KEY') !== false ? (strlen((string)getenv('OTP_ENCRYPTION_KEY')) ? 'SET(len=' . strlen((string)getenv('OTP_ENCRYPTION_KEY')) . ')' : 'EMPTY') : 'NOT SET',
-        'ENCRYPTION_KEY'      => getenv('ENCRYPTION_KEY') !== false ? (strlen((string)getenv('ENCRYPTION_KEY')) ? 'SET(len=' . strlen((string)getenv('ENCRYPTION_KEY')) . ')' : 'EMPTY') : 'NOT SET',
-    ];
-    $dbPath = getenv('DB_PATH') ?: __DIR__ . '/../config/nova.sqlite';
-    $dPdo = new PDO('sqlite:' . $dbPath);
-    $dPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $diagOut['providers'] = [];
-    foreach ($dPdo->query('SELECT id, name, type, status, priority, host, port, encryption, username, from_email, length(password) AS pw_len FROM email_providers ORDER BY id') as $r) {
-        $diagOut['providers'][] = ['id' => (int)$r['id'], 'name' => $r['name'], 'type' => $r['type'], 'status' => $r['status'], 'priority' => (int)$r['priority'], 'host' => $r['host'], 'port' => $r['port'] ? (int)$r['port'] : null, 'encryption' => $r['encryption'], 'username' => $r['username'], 'from_email' => $r['from_email'], 'pw_len' => $r['pw_len'] ? (int)$r['pw_len'] : null];
-    }
-    $st2 = $dPdo->prepare('SELECT password FROM email_providers WHERE id=1');
-    $st2->execute();
-    $encPwd = (string)$st2->fetchColumn();
-    $decPwd = '';
-    try { $decPwd = OtpEncryption::decrypt($encPwd); } catch (Throwable $e) { $decPwd = 'DECRYPT_ERROR: ' . substr($e->getMessage(), 0, 80); }
-    $diagOut['gmail'] = [
-        'encrypted_len'  => strlen($encPwd),
-        'decrypted_len'  => strlen($decPwd),
-        'decrypted_ok'   => ($decPwd !== '' && strpos($decPwd, 'DECRYPT_ERROR') !== 0),
-        'decrypted_note' => ($decPwd === '' ? 'EMPTY (SMTP auth will fail)' : (strpos($decPwd, 'DECRYPT_ERROR') === 0 ? substr($decPwd, 0, 60) : 'len=' . strlen($decPwd))),
-    ];
-    // Inspect columns of provider-related tables to spot missing columns
-    $diagOut['table_info'] = [
-        'email_providers' => array_map(fn ($r) => $r['name'], (array)$dPdo->query('PRAGMA table_info(email_providers)')->fetchAll(PDO::FETCH_ASSOC)),
-        'email_delivery_logs' => array_map(fn ($r) => $r['name'], (array)$dPdo->query('PRAGMA table_info(email_delivery_logs)')->fetchAll(PDO::FETCH_ASSOC)),
-    ];
-    $diagOut['last_delivery_error'] = null;
-    try {
-        $r = $dPdo->query('SELECT error_message, status, http_code FROM email_delivery_logs ORDER BY id DESC LIMIT 5')->fetchAll(PDO::FETCH_ASSOC);
-        $diagOut['last_delivery_errors'] = $r ?: null;
-    } catch (Throwable $e) {
-        $diagOut['delivery_logs_error'] = substr($e->getMessage(), 0, 150);
-    }
-    // Direct SMTP test (shows the raw SMTP failure reason)
-    $svc = new EmailOtpService();
-    try {
-        $row = $dPdo->query('SELECT * FROM email_providers WHERE id=1 AND status=\'enabled\' LIMIT 1')->fetch(PDO::FETCH_ASSOC);
-        if ($row) {
-            $cfg = [
-                'type' => 'smtp', 'host' => $row['host'], 'port' => (int)$row['port'],
-                'encryption' => $row['encryption'], 'username' => $row['username'],
-                'password' => OtpEncryption::decrypt((string)$row['password']),
-                'from_email' => $row['from_email'], 'from_name' => $row['from_name'],
-            ];
-            $diagOut['direct_smtp'] = $svc->sendSmtp($cfg, 'mahumad7733@gmail.com', '[NOVA] اختبار تشخيصي', 'هذا اختبار SMTP من لوحة التشخيص. توقيت الإرسال: ' . date('Y-m-d H:i:s'));
-        } else {
-            $diagOut['direct_smtp'] = ['success' => false, 'message' => 'لا يوجد مزود enabled id=1'];
-        }
-    } catch (Throwable $e) {
-        $diagOut['direct_smtp'] = ['success' => false, 'message' => 'ERROR: ' . substr($e->getMessage(), 0, 150)];
-    }
-    try {
-        $diagOut['live_send_test'] = $svc->createAndSend('mahumad7733@gmail.com', 'diag', 'test', '127.0.0.1', 'mahumad7733@gmail.com');
-    } catch (Throwable $e) {
-        $diagOut['live_send_test'] = ['error' => substr($e->getMessage(), 0, 200)];
-    }
-    echo json_encode($diagOut, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    exit;
-}
 
 // Auth Routes
 if ($uri === '/auth/register' && $method === 'POST') {
@@ -415,6 +325,13 @@ if ($uri === '/contacts' && $method === 'POST') {
 }
 if (preg_match('#^/contacts/(\d+)$#', $uri, $m) && $method === 'DELETE') {
     (new UserController())->removeContact((int)$m[1]);
+}
+// Report Routes
+if ($uri === '/reports' && $method === 'POST') {
+    (new ReportsController())->create();
+}
+if ($uri === '/reports' && $method === 'GET') {
+    (new ReportsController())->index();
 }
 
 // Call Routes

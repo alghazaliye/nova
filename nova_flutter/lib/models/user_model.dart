@@ -239,6 +239,23 @@ class NovaMessage {
 }
 
 /// تنسيق "آخر ظهور" بالعربية
+/// تصريف الوحدة الزمنية بالعربية حسب العدد (مفرد / مثنى / جمع)
+String _arabicCountedUnit(int count, String singular, String dual, String plural) {
+  final word = count == 1 ? singular : (count == 2 ? dual : plural);
+  return 'منذ $count $word';
+}
+
+/// تنسيق التاريخ بالعربية: «20 أغسطس، 10:35 م»
+String _formatArabicDate(DateTime dt) {
+  const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  final hour24 = dt.hour;
+  final period = hour24 >= 12 ? 'م' : 'ص';
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  final time = '${hour12.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $period';
+  return '${dt.day} ${months[dt.month - 1]}، $time';
+}
+
 String formatLastSeen(String? lastSeen, {bool isOnline = false, int? utcOffsetMinutes}) {
   if (isOnline) return 'متصل الآن';
   if (lastSeen == null || lastSeen.isEmpty) return 'آخر ظهور: مؤخراً';
@@ -254,13 +271,13 @@ String formatLastSeen(String? lastSeen, {bool isOnline = false, int? utcOffsetMi
     if (diff.inSeconds < 60) {
       label = 'منذ لحظات';
     } else if (diff.inMinutes < 60) {
-      label = 'منذ ${diff.inMinutes} دقيقة';
+      label = _arabicCountedUnit(diff.inMinutes, 'دقيقة', 'دقيقتين', 'دقائق');
     } else if (diff.inHours < 24) {
-      label = 'منذ ${diff.inHours} ساعة';
+      label = _arabicCountedUnit(diff.inHours, 'ساعة', 'ساعتين', 'ساعات');
     } else if (diff.inDays < 7) {
-      label = 'منذ ${diff.inDays} يوم';
+      label = _arabicCountedUnit(diff.inDays, 'يوم', 'يومين', 'أيام');
     } else {
-      label = '${dt.day}/${dt.month}/${dt.year}';
+      label = _formatArabicDate(dt);
     }
     return 'آخر ظهور: $label';
   } catch (_) {
