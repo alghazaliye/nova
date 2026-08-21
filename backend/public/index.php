@@ -13,16 +13,15 @@ if (PHP_SAPI !== 'cli') {
         error_log('[nova error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
         if (!headers_sent()) { http_response_code(500); header('Content-Type: application/json; charset=utf-8'); }
         $env = $_ENV['APP_ENV'] ?? 'production';
-        $msg = ($env === 'development' || true) ? $e->getMessage() : 'خطأ داخلي في الخادم';
+        $msg = ($env === 'development') ? $e->getMessage() : 'خطأ داخلي في الخادم';
         $payload = ['success'=>false,'message'=>$msg,'error_code'=>'INTERNAL_ERROR'];
-        if ($env === 'development' || true) {
+        if ($env === 'development') {
             $payload['trace'] = $e->getFile().':'.$e->getLine().' | '.$e->getTraceAsString();
         }
         echo json_encode($payload,JSON_UNESCAPED_UNICODE);
     });
 }
 
-try { require_once __DIR__ . "/../config/app.php"; } catch (Throwable $e) { echo json_encode(["bootstrap_error" => $e->getMessage()]); exit; }
 // Bootstrap
 require_once __DIR__ . '/../config/app.php';
 
