@@ -123,6 +123,9 @@ class AuthController
         }
 
         $phone = trim($body['phone']);
+        if (!str_starts_with($phone, '+')) {
+            $phone = '+966' . ltrim($phone, '0');
+        }
         $otp   = trim($body['otp']);
         // WhatsApp-style: name is supplied later via profile setup (optional here)
         $name  = isset($body['name']) && trim((string)$body['name']) !== ''
@@ -248,6 +251,9 @@ class AuthController
             Response::validationError($v->errors());
         }
         $phone = trim($body['phone']);
+        if (!str_starts_with($phone, '+')) {
+            $phone = '+966' . ltrim($phone, '0');
+        }
         // Server-side enforcement of login methods
         require_once __DIR__ . '/../helpers/AuthConfigService.php';
         $cfg = new AuthConfigService();
