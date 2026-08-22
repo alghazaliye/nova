@@ -1778,7 +1778,7 @@ class _ContactsTabState extends State<ContactsTab> {
                         const SizedBox(width: 4),
                         Icon(
                           Icons.verified,
-                          color: user['badge_color'] != null ? NovaUI.parseColor(user['badge_color'].toString()) : Colors.blue,
+                          color: parseColor(user['badge_color']?.toString()),
                           size: 16,
                         ),
                       ],
