@@ -59,17 +59,31 @@ $stmt = $pdo->query('SELECT * FROM audit_logs WHERE action IN ("ERROR", "FAILED"
 $recentErrors = $stmt->fetchAll();
 
 // System health
+$dbSizeDb = $_ENV['DB_PATH'] ?? realpath(__DIR__ . '/../../backend/config/nova.sqlite');
+$dbSize = ($dbSizeDb !== false && is_file($dbSizeDb)) ? round(filesize($dbSizeDb) / 1024 / 1024, 2) : 0;
+
+// Get disk space (cross-platform for Linux)
+$diskFree = "غير معروف";
+if (function_exists('disk_free_space')) {
+    $free = disk_free_space(__DIR__);
+    if ($free !== false) {
+        $diskFree = round($free / 1024 / 1024 / 1024, 2) . " GB";
+    }
+}
+
+// Server uptime/load (simplified for display)
+$serverLoad = "مستقر";
+if (function_exists('sys_getloadavg')) {
+    $load = sys_getloadavg();
+    if ($load) $serverLoad = round($load[0], 2);
+}
+
 $systemHealth = [
     'database' => 'متصل ✓',
     'api' => 'متشغل ✓',
-    'storage' => 'متاح ✓',
-    'fcm' => 'مفعل ✓'
+    'storage' => $diskFree,
+    'server' => $serverLoad
 ];
-
-// Database size
-// Database size — SQLite-safe: physical file size (MySQL info_schema not available in SQLite)
-$dbSizeDb = $_ENV['DB_PATH'] ?? realpath(__DIR__ . '/../../backend/config/nova.sqlite');
-$dbSize = ($dbSizeDb !== false && is_file($dbSizeDb)) ? round(filesize($dbSizeDb) / 1024 / 1024, 2) : 0;
 
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
@@ -93,12 +107,12 @@ include __DIR__ . '/includes/sidebar.php';
     <div style="padding: 15px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9;">الخادم</h4>
         <p style="font-size: 20px; font-weight: bold; margin: 0;">✓ متشغل</p>
-        <small style="opacity: 0.8;">الاستجابة: سريعة</small>
+        <small style="opacity: 0.8;">الحمل: <?= $systemHealth['server'] ?></small>
     </div>
     <div style="padding: 15px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9;">التخزين</h4>
         <p style="font-size: 20px; font-weight: bold; margin: 0;">✓ متاح</p>
-        <small style="opacity: 0.8;">المساحة الحرة: وفيرة</small>
+        <small style="opacity: 0.8;">المساحة الحرة: <?= $systemHealth['storage'] ?></small>
     </div>
     <div style="padding: 15px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9;">الأخطاء</h4>
