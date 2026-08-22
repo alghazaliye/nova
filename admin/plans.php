@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'add' && hasPermission($admin, 'plans.view')) {
+    if ($action === 'add' && hasPermission($admin, 'plans.manage')) {
         $name = trim((string)($_POST['plan_name'] ?? ''));
         $planType = in_array($_POST['plan_type'] ?? '', ['free', 'verification', 'premium', 'pro', 'custom'], true) ? $_POST['plan_type'] : 'premium';
         $enableVerification = !empty($_POST['enable_verification']) ? 1 : 0;
@@ -45,14 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (\Throwable $e) { $error = 'خطأ: ' . $e->getMessage(); }
     }
 
-    if ($action === 'toggle' && hasPermission($admin, 'plans.view')) {
+    if ($action === 'toggle' && hasPermission($admin, 'plans.manage')) {
         $planId = (int)$_POST['plan_id'];
         $pdo->prepare('UPDATE plans SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?')->execute([$planId]);
         logAudit($admin, 'PLAN_TOGGLE', 'plan', $planId, "تبديل حالة الباقة #{$planId}");
         $message = 'تم تغيير حالة الباقة';
     }
 
-    if ($action === 'delete' && hasPermission($admin, 'plans.view')) {
+    if ($action === 'delete' && hasPermission($admin, 'plans.manage')) {
         $planId = (int)$_POST['plan_id'];
         $pdo->prepare("UPDATE user_subscriptions SET plan_id = NULL WHERE plan_id = ?")->execute([$planId]);
         $pdo->prepare('DELETE FROM plans WHERE id = ?')->execute([$planId]);

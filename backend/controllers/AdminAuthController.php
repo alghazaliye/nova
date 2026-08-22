@@ -192,7 +192,8 @@ class AdminAuthController
         try {
             $res = $mgr->create($data);
         } catch (Throwable $e) {
-            $this->out(['success' => false, 'error_code' => 'INTERNAL_ERROR'], 500, 'خطأ داخلي: ' . $e->getMessage());
+            $msg = ($_ENV['APP_ENV'] ?? 'production') === 'development' ? 'خطأ داخلي: ' . $e->getMessage() : 'حدث خطأ داخلي في الخادم';
+            $this->out(['success' => false, 'error_code' => 'INTERNAL_ERROR'], 500, $msg);
         }
         logAdminAudit($admin, 'EMAIL_PROVIDER_CREATED', 'email_providers', (int)$res['id'],
             'إضافة مزود بريد: ' . $data['name'] . ' (' . $data['type'] . ')');

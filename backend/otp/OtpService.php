@@ -322,10 +322,9 @@ class OtpService
             }
         }
 
-        return [
+        $res = [
             'otp_id' => $otpId,
             'delivery_mode' => $manual ? 'manual' : 'auto',
-            'otp_debug' => $otpCode,
             'sent' => $sent || $manual,
             'manual' => $manual,
             'cooldown' => (int)$this->getSetting('otp_resend_cooldown_seconds', '60'),
@@ -333,6 +332,13 @@ class OtpService
                 ? 'تم إنشاء رمز التحقق وسيتم إتاحته للمدير لتسليمه يدويًا'
                 : 'تم إرسال رمز التحقق',
         ];
+
+        // Only include otp_debug in development mode
+        if (($_ENV['APP_ENV'] ?? 'production') !== 'production') {
+            $res['otp_debug'] = $otpCode;
+        }
+
+        return $res;
     }
 
     /**
