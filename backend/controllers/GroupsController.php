@@ -85,9 +85,9 @@ class GroupsController
         $members = $stmt->fetchAll();
         require_once __DIR__ . '/UserController.php';
         $uc = new UserController();
-        // تطبيق خصوصية آخر الظهور والحالة المتصلة لكل عضو في المجموعة
+        // تطبيق خصوصية الملف الشخصي (بما في ذلك الحظر وآخر الظهور) لكل عضو في المجموعة
         $group['members'] = array_map(function ($m) use ($uc, $userId) {
-            return $uc->applyPresencePrivacy($m, $userId);
+            return $uc->filterProfile($m, $userId, (int)$m['user_id']);
         }, $members);
 
         // Group settings

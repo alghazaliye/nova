@@ -259,7 +259,7 @@ class StoryController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
 
-        $story = $this->getStoryById($id, $userId, false); // الفحص التفصيلي أدناه
+        $story = $this->getStoryById($id, $userId, true); // استخدام الفحص الصارم (strict) للخصوصية
         if (!$story) {
             Response::notFound('الحالة غير موجودة أو انتهت صلاحيتها');
         }
@@ -300,7 +300,7 @@ class StoryController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
 
-        $story = $this->getStoryById($id, $userId, false);
+        $story = $this->getStoryById($id, $userId, true);
         if (!$story) {
             Response::notFound('الحالة غير موجودة أو انتهت صلاحيتها');
         }

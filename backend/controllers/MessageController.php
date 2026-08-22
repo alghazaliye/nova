@@ -57,15 +57,37 @@ class MessageController
             }
         }
         if (!empty($messages)) {
-            $ids = array_map(fn ($m) => (int)$m['id'], $messages);
-            $placeholders = implode(',', array_fill(0, count($ids), '?'));
-            $this->pdo->prepare(
-                "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at)
-		                 SELECT id, ?, datetime('now') FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
-            )->execute(array_merge([$userId], $ids, [$userId]));
-            $this->pdo->prepare(
-                "UPDATE messages SET status = 'read', updated_at = datetime('now') WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
-            )->execute(array_merge($ids, [$userId]));
+            // Check if read receipts should be sent
+            $convStmt = $this->pdo->prepare('SELECT type FROM conversations WHERE id = ? LIMIT 1');
+            $convStmt->execute([$convId]);
+            $conv = $convStmt->fetch();
+            $isPrivate = $conv && $conv['type'] === 'private';
+            
+            $shouldMarkRead = true;
+            if ($isPrivate) {
+                $otherStmt = $this->pdo->prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ? AND user_id != ? LIMIT 1');
+                $otherStmt->execute([$convId, $userId]);
+                $other = $otherStmt->fetch();
+                if ($other) {
+                    require_once __DIR__ . '/UserController.php';
+                    $userCtrl = new UserController();
+                    if (!$userCtrl->canSeeReadReceipt($userId, (int)$other['user_id'])) {
+                        $shouldMarkRead = false;
+                    }
+                }
+            }
+
+            if ($shouldMarkRead) {
+                $ids = array_map(fn ($m) => (int)$m['id'], $messages);
+                $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                $this->pdo->prepare(
+                    "INSERT OR IGNORE INTO message_reads (message_id, user_id, read_at)
+                                     SELECT id, ?, datetime('now') FROM messages WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+                )->execute(array_merge([$userId], $ids, [$userId]));
+                $this->pdo->prepare(
+                    "UPDATE messages SET status = 'read', updated_at = datetime('now') WHERE id IN ($placeholders) AND sender_id != ? AND status NOT IN ('deleted', 'read')"
+                )->execute(array_merge($ids, [$userId]));
+            }
         }
 
         // Update last_read_message_id
@@ -836,17 +858,31 @@ class MessageController
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
         $this->requireMember($convId, $userId);
-
+        
         try {
             $stmt = $this->pdo->prepare(
-"SELECT ts.user_id, u.name, u.avatar
-                 FROM typing_status ts
-                 JOIN users u ON u.id = ts.user_id
-                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime('now') AND ts.user_id != ?"
+	"SELECT ts.user_id, u.id, u.name, u.username, u.phone, u.email, u.avatar, u.status_text, u.is_verified
+	                 FROM typing_status ts
+	                 JOIN users u ON u.id = ts.user_id
+	                 WHERE ts.conversation_id = ? AND ts.expires_at > datetime('now') AND ts.user_id != ?"
             );
             $stmt->execute([$convId, $userId]);
-            $typing = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            Response::success(['typing_users' => $typing], 'ok');
+            $typingUsers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            require_once __DIR__ . '/UserController.php';
+            $userCtrl = new UserController();
+            $filtered = [];
+            foreach ($typingUsers as $u) {
+                $profile = $userCtrl->filterProfile($u, $userId, (int)$u['user_id']);
+                if ($profile) {
+                    $filtered[] = [
+                        'user_id' => $profile['id'],
+                        'name'    => $profile['display_name'],
+                        'avatar'  => $profile['avatar']
+                    ];
+                }
+            }
+            Response::success(['typing_users' => $filtered], 'ok');
         } catch (\Throwable $e) {
             error_log('Get typing error: ' . $e->getMessage());
             Response::success(['typing_users' => []], 'ok');

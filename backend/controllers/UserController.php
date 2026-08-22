@@ -596,15 +596,22 @@ class UserController
         $stmt = $this->pdo->prepare('SELECT show_online_status FROM privacy_settings WHERE user_id = ? LIMIT 1');
         $stmt->execute([$targetId]);
         $row = $stmt->fetch();
-        return $row ? ((int)($row['show_online_status'] ?? 1)) !== 0 : true;
+        $mode = $row ? (int)($row['show_online_status'] ?? 2) : 2; // 2=Everyone
+        if ($mode === 0) return false;
+        if ($mode === 1) return $this->isContactOf($viewerId, $targetId);
+        return true;
     }
     // هل يُسمح بعرض read receipt؟ (show_read_receipts لـأحد الطرفين)
     public function canSeeReadReceipt(int $viewerId, int $otherId): bool
     {
-        $stmt = $this->pdo->prepare('SELECT show_read_receipts FROM privacy_settings WHERE user_id = ? LIMIT 1');
-        $stmt->execute([$otherId]);
-        $row = $stmt->fetch();
-        return $row ? ((int)($row['show_read_receipts'] ?? 1)) !== 0 : true;
+        // إيصالات القراءة متبادلة: إذا أغلقها أحدهم، لا يراها الآخر
+        $stmt = $this->pdo->prepare('SELECT show_read_receipts FROM privacy_settings WHERE user_id IN (?, ?)');
+        $stmt->execute([$viewerId, $otherId]);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as $row) {
+            if (((int)($row['show_read_receipts'] ?? 1)) === 0) return false;
+        }
+        return true;
     }
 
     /**
@@ -792,12 +799,12 @@ class UserController
         }
         $profile['status_text'] = $show((int)($row['show_status_text'] ?? 1)) ? $profile['status_text'] : null;
 
-        if (!$show((int)($row['show_online_status'] ?? 1))) {
+        if (!$show((int)($row['show_online_status'] ?? 2))) { // الافتراضي للجميع
             $profile['is_online'] = false;
         }
-        if (!$show((int)($row['show_last_seen'] ?? 1))) {
+        if (!$show((int)($row['show_last_seen'] ?? 1))) { // الافتراضي لجهات الاتصال
             $profile['last_seen'] = null;
-            $profile['is_online'] = false;
+            // لا نخفي is_online هنا إذا كان مسموحاً به في show_online_status
         }
 
         $profile['display_name'] = self::_displayNameForIdentity($profile);
