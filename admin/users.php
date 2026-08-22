@@ -50,9 +50,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         logAudit($admin, $isV ? 'USER_VERIFY' : 'USER_UNVERIFY', 'user', $userId, $isV ? 'توثيق الحساب (العلامة الزرقاء)' : 'إلغاء التوثيق');
         $message = $isV ? 'تم توثيق الحساب — ستظهر العلامة الزرقاء في التطبيق' : 'تم إلغاء التوثيق';
     } elseif ($action === 'delete' && hasPermission($admin, 'users.delete')) {
-        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
-        logAudit($admin, 'USER_DELETE', 'user', $userId, "حذف المستخدم #{$userId}");
-        $message = 'تم حذف المستخدم';
+        $pdo->beginTransaction();
+        try {
+            // Delete related data first (cascade simulation)
+            $pdo->prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?')->execute([$userId, $userId]);
+            $pdo->prepare('DELETE FROM conversations WHERE user_one = ? OR user_two = ?')->execute([$userId, $userId]);
+            $pdo->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM user_devices WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM user_subscriptions WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM user_bans WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM audit_logs WHERE admin_id = ? AND entity_type = "user" AND entity_id = ?')->execute([$admin['id'], $userId]);
+            
+            // Finally delete the user
+            $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
+            
+            $pdo->commit();
+            logAudit($admin, 'USER_DELETE', 'user', $userId, "حذف المستخدم #{$userId} وجميع بياناته المرتبطة");
+            $message = 'تم حذف المستخدم وجميع بياناته بنجاح';
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            $error = 'فشل حذف المستخدم: ' . $e->getMessage();
+        }
     }
 }
 

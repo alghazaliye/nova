@@ -30,24 +30,11 @@ function getAdminDB(): PDO
 {
     static $pdo = null;
     if ($pdo === null) {
-        $dbType = ($_ENV['DB_TYPE'] ?? 'sqlite');
+        require_once __DIR__ . '/../../backend/config/database.php';
+        $dbType = Database::getType();
+        
         if ($dbType === 'turso') {
-            $url   = $_ENV['TURSO_URL'] ?? '';
-            $token = $_ENV['TURSO_AUTH_TOKEN'] ?? '';
-            
-            if (empty($url) || empty($token)) {
-                die("Turso configuration missing. Set TURSO_URL and TURSO_AUTH_TOKEN in Render environment.");
-            }
-            
-            $tursoPdoFile = realpath(__DIR__ . '/../../backend/config/TursoPdo.php');
-            if ($tursoPdoFile) {
-                require_once $tursoPdoFile;
-                // TursoPdo behaves like PDO but is not a subclass. 
-                // We cast or return it; admin panel uses $pdo->prepare/query which it supports.
-                $pdo = new TursoPdo($url, $token);
-            } else {
-                die("TursoPdo adapter file not found.");
-            }
+            $pdo = Database::getInstance();
         } elseif ($dbType === 'sqlite') {
             // Share the same SQLite database as the backend
             $dbPath = $_ENV['DB_PATH']
