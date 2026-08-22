@@ -43,14 +43,11 @@ class _CallScreenState extends State<CallScreen> {
   @override
   void initState() {
     super.initState();
-    // تحديد الاتجاه: إذا كانت callData تحوي caller_name فهذا يعني أنها
-    // مكالمة واردة (الطرف الآخر هو المتصل). outgoing عندنا لا يحتوي caller_name
-    // عادة لكنه قد يحتوي caller_name أيضًا — نستخدم callUuid/peer:
-    // الأبسط: outgoing = تم إنشاؤها من _startCall (نمرر caller_id = current user)
     _isOutgoingFromData =
         widget.callData['is_outgoing']?.toString() == 'true' ||
         widget.callData['caller_id']?.toString() ==
             ApiService.userId.toString();
+    _poll(); // بدء الفحص الدوري فوراً لمراقبة حالة المكالمة
     _pollNow();
   }
 
@@ -115,12 +112,13 @@ class _CallScreenState extends State<CallScreen> {
 
   Future<void> _pollNow() async {
     final callId = widget.callData['id']?.toString();
-    if (callId == null || callId.isEmpty || callId == 'null') return;
+    if (callId == null || callId.isEmpty || callId == 'null' || ApiService.token == null) return;
     try {
       final res = await ApiService.get('/calls/$callId');
       if (!mounted) return;
       if (res['status_code'] == 401) {
         _timer?.cancel();
+        _closeScreen('انتهت الجلسة');
         return;
       }
       if (res['success'] != true) return;
@@ -217,15 +215,13 @@ class _CallScreenState extends State<CallScreen> {
             // الفيديو البعيد (الطرف الآخر)
             if (_answered && isVideo && _svc != null)
               Positioned.fill(
-                child: ValueListenableBuilder<RTCVideoRenderer>(
-                  valueListenable: ValueNotifier(_svc!.remoteRenderer),
-                  builder: (context, renderer, _) {
-                    return RTCVideoView(
-                      renderer,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                      mirror: false,
-                    );
-                  },
+                child: Container(
+                  color: Colors.black,
+                  child: RTCVideoView(
+                    _svc!.remoteRenderer,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                    mirror: false,
+                  ),
                 ),
               ),
 
@@ -241,18 +237,14 @@ class _CallScreenState extends State<CallScreen> {
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     decoration: BoxDecoration(
+                      color: Colors.black26,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
                     ),
-                    child: ValueListenableBuilder<RTCVideoRenderer>(
-                      valueListenable: ValueNotifier(_svc!.localRenderer),
-                      builder: (context, renderer, _) {
-                        return RTCVideoView(
-                          renderer,
-                          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                          mirror: true,
-                        );
-                      },
+                    child: RTCVideoView(
+                      _svc!.localRenderer,
+                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      mirror: true,
                     ),
                   ),
                 ),

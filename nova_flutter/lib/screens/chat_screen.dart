@@ -888,7 +888,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _incomingCallPolling = true;
     try {
       final res = await ApiService.get('/calls/incoming');
-      if (!mounted || res['success'] != true) return;
+      if (!mounted) return;
+      if (res['status_code'] == 401) {
+        _incomingCallTimer?.cancel();
+        return;
+      }
+      if (res['success'] != true) return;
       final data = res['data'];
       Map<String, dynamic>? nextCall;
       if (data is List) {

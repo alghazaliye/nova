@@ -60,9 +60,10 @@ class CallService {
     MediaStream? acquired;
     // محاولة الحصول على الفيديو والصوت بأقل قيود ممكنة لضمان النجاح
     try {
+      // محاولة الحصول على الفيديو والصوت بقيود مرنة لضمان النجاح في الويب
       acquired = await navigator.mediaDevices.getUserMedia({
         'audio': true,
-        'video': {
+        'video': kIsWeb ? true : {
           'facingMode': 'user',
           'width': {'min': 320, 'ideal': 640, 'max': 1280},
           'height': {'min': 240, 'ideal': 480, 'max': 720},
@@ -218,12 +219,15 @@ class CallService {
 
   /// إرسال إشارة signal_type/payload إلى الخادم
   Future<void> _sendSignal(String type, Map<String, dynamic> payload) async {
-    if (_callId == null) return;
+    if (_callId == null || ApiService.token == null) return;
     try {
-      await ApiService.post('/calls/$_callId/signal', body: {
+      final res = await ApiService.post('/calls/$_callId/signal', body: {
         'signal_type': type,
         ...payload,
       });
+      if (res['status_code'] == 401) {
+        await dispose();
+      }
     } catch (e) {
       debugPrint('CallService: فشل إرسال إشارة $type: $e');
     }

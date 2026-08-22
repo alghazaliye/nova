@@ -61,20 +61,22 @@ class _ChatsScreenState extends State<ChatsScreen> {
       if (mounted) _pollIncomingCall();
     });
     _pollIncomingCall();
-    // فتح شاشة المكالمة تلقائيًا إذا كانت هناك مكالمة نشطة (ringing/answered)
-    // تخص المستخدم ولم تُفتح بعد — يفيد عند قبول المكالمة عبر أي وسيلة
-    // (زر القبول، أو قبول الطرف الآخر للمكالمة الصادرة).
     _activeCallTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted) _pollActiveCall();
     });
   }
 
   Future<void> _pollActiveCall() async {
-    if (_activeCallPolling) return;
+    if (_activeCallPolling || ApiService.token == null) return;
     _activeCallPolling = true;
     try {
       final res = await ApiService.get('/calls');
-      if (!mounted || res['success'] != true) return;
+      if (!mounted) return;
+      if (res['status_code'] == 401) {
+        _activeCallTimer?.cancel();
+        return;
+      }
+      if (res['success'] != true) return;
       final data = res['data'];
       if (data is! List) return;
       for (final raw in data) {
@@ -107,11 +109,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
         setState(() => _incomingCall = null);
       return;
     }
-    if (_incomingCallPolling) return;
+    if (_incomingCallPolling || ApiService.token == null) return;
     _incomingCallPolling = true;
     try {
       final res = await ApiService.get('/calls/incoming');
-      if (!mounted || res['success'] != true) return;
+      if (!mounted) return;
+      if (res['status_code'] == 401) {
+        _incomingCallTimer?.cancel();
+        return;
+      }
+      if (res['success'] != true) return;
       final data = res['data'];
       Map<String, dynamic>? nextCall;
       if (data is List) {
