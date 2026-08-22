@@ -47,20 +47,29 @@ class OtpService
 
         // 2) otp_rate_limits columns (Fix for Render schema drift)
         try {
-            $stmt = $this->pdo->query("PRAGMA table_info(otp_rate_limits)");
-            $columns = $stmt->fetchAll(PDO::FETCH_COLUMN, 1);
-            if (!empty($columns)) {
-                if (!in_array('attempts_count', $columns)) {
-                    $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN attempts_count INTEGER NOT NULL DEFAULT 1");
+            $tableExists = false;
+            try {
+                $stmt = $this->pdo->query("SELECT 1 FROM otp_rate_limits LIMIT 1");
+                if ($stmt !== false) $tableExists = true;
+            } catch (Throwable $e) {
+                $tableExists = false;
+            }
+
+            if ($tableExists) {
+                $stmt = $this->pdo->query("PRAGMA table_info(otp_rate_limits)");
+                $columns = $stmt->fetchAll(PDO::FETCH_COLUMN, 1);
+                
+                $requiredColumns = ['phone', 'last_attempt_at', 'attempts_count', 'resend_count', 'cooldown_until'];
+                $missing = false;
+                foreach ($requiredColumns as $col) {
+                    if (!in_array($col, $columns)) {
+                        $missing = true;
+                        break;
+                    }
                 }
-                if (!in_array('resend_count', $columns)) {
-                    $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN resend_count INTEGER NOT NULL DEFAULT 0");
-                }
-                if (!in_array('cooldown_until', $columns)) {
-                    $this->pdo->exec("ALTER TABLE otp_rate_limits ADD COLUMN cooldown_until DATETIME DEFAULT NULL");
-                }
-                if (!in_array('phone', $columns) || !in_array('last_attempt_at', $columns)) {
-                    // Legacy schema (bucket_key style) — reset it
+
+                if ($missing) {
+                    // Reset table to correct schema if any column is missing
                     $this->pdo->exec("DROP TABLE otp_rate_limits");
                     $this->pdo->exec("CREATE TABLE otp_rate_limits (
                         phone TEXT PRIMARY KEY,
