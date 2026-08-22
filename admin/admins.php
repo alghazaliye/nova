@@ -19,30 +19,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // إضافة مشرف جديد
     if ($action === 'add') {
         $name = trim($_POST['name'] ?? '');
+        $username = trim($_POST['username'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $role_id = (int)($_POST['role_id'] ?? 0);
         
-        if (!$name || !$email || !$password || !$role_id) {
+        if (!$name || !$username || !$email || !$password || !$role_id) {
             $error = 'جميع الحقول مطلوبة';
         } elseif (strlen($password) < 8) {
             $error = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
         } else {
             try {
-                // التحقق من عدم وجود بريد مكرر
-                $stmt = $pdo->prepare('SELECT id FROM admins WHERE email = ? LIMIT 1');
-                $stmt->execute([$email]);
+                // التحقق من عدم وجود بريد أو اسم مستخدم مكرر
+                $stmt = $pdo->prepare('SELECT id FROM admins WHERE email = ? OR username = ? LIMIT 1');
+                $stmt->execute([$email, $username]);
                 if ($stmt->fetch()) {
-                    $error = 'البريد الإلكتروني موجود بالفعل';
+                    $error = 'البريد الإلكتروني أو اسم المستخدم موجود بالفعل';
                 } else {
                     $password_hash = password_hash($password, PASSWORD_BCRYPT);
                     $stmt = $pdo->prepare(
-                        'INSERT INTO admins (name, email, password_hash, role_id, is_active, created_at)
-                         VALUES (?, ?, ?, ?, 1, datetime("now"))'
+                        'INSERT INTO admins (name, username, email, password_hash, role_id, is_active, created_at)
+                         VALUES (?, ?, ?, ?, ?, 1, datetime("now"))'
                     );
-                    $stmt->execute([$name, $email, $password_hash, $role_id]);
+                    $stmt->execute([$name, $username, $email, $password_hash, $role_id]);
                     $message = 'تم إضافة المشرف بنجاح';
-                    logAudit($admin, 'CREATE', 'admin', (int)$pdo->lastInsertId(), "إضافة مشرف: $email");
+                    logAudit($admin, 'CREATE', 'admin', (int)$pdo->lastInsertId(), "إضافة مشرف: $username ($email)");
                 }
             } catch (Exception $e) {
                 $error = 'خطأ في إضافة المشرف: ' . $e->getMessage();
@@ -54,26 +55,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'edit') {
         $admin_id = (int)($_POST['admin_id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
+        $username = trim($_POST['username'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $role_id = (int)($_POST['role_id'] ?? 0);
         $is_active = (int)($_POST['is_active'] ?? 0);
         
-        if (!$admin_id || !$name || !$email || !$role_id) {
+        if (!$admin_id || !$name || !$username || !$email || !$role_id) {
             $error = 'جميع الحقول مطلوبة';
         } else {
             try {
-                // التحقق من عدم وجود بريد مكرر (ما عدا الحالي)
-                $stmt = $pdo->prepare('SELECT id FROM admins WHERE email = ? AND id != ? LIMIT 1');
-                $stmt->execute([$email, $admin_id]);
+                // التحقق من عدم التكرار (ما عدا الحالي)
+                $stmt = $pdo->prepare('SELECT id FROM admins WHERE (email = ? OR username = ?) AND id != ? LIMIT 1');
+                $stmt->execute([$email, $username, $admin_id]);
                 if ($stmt->fetch()) {
-                    $error = 'البريد الإلكتروني موجود بالفعل';
+                    $error = 'البريد الإلكتروني أو اسم المستخدم موجود بالفعل لمشرف آخر';
                 } else {
                     $stmt = $pdo->prepare(
-                        'UPDATE admins SET name = ?, email = ?, role_id = ?, is_active = ? WHERE id = ?'
+                        'UPDATE admins SET name = ?, username = ?, email = ?, role_id = ?, is_active = ? WHERE id = ?'
                     );
-                    $stmt->execute([$name, $email, $role_id, $is_active, $admin_id]);
+                    $stmt->execute([$name, $username, $email, $role_id, $is_active, $admin_id]);
                     $message = 'تم تحديث المشرف بنجاح';
-                    logAudit($admin, 'UPDATE', 'admin', $admin_id, "تحديث مشرف: $email");
+                    logAudit($admin, 'UPDATE', 'admin', $admin_id, "تحديث مشرف: $username ($email)");
                 }
             } catch (Exception $e) {
                 $error = 'خطأ في تحديث المشرف: ' . $e->getMessage();
@@ -105,22 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // جلب البيانات
-    // تحقق من وجود عمود username قبل الاستعلام
-    $checkCols = $pdo->query("PRAGMA table_info(admins)")->fetchAll();
-    $hasUsername = false;
-    foreach ($checkCols as $col) {
-        if ($col['name'] === 'username') {
-            $hasUsername = true;
-            break;
-        }
-    }
-    
-    $usernameField = $hasUsername ? "a.username" : "'' as username";
-    
-    $admins = $pdo->query(
-        "SELECT a.id, a.name, $usernameField, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
-         FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC"
-    )->fetchAll();
+$admins = $pdo->query(
+    "SELECT a.id, a.name, a.username, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
+     FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC"
+)->fetchAll();
 
 $roles = $pdo->query(
     'SELECT r.id, r.name, r.description, COUNT(rp.permission_id) permission_count 
@@ -152,48 +142,42 @@ try {
     error_log('Database stats error: ' . $e->getMessage());
 }
 
-// سجل الأخطاء الأخيرة
-$error_logs = $pdo->query(
-    'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 20'
+// سجل النشاط الحديث
+$recent_activity = $pdo->query(
+    'SELECT a.id, a.admin_id, a.action, a.entity_type, a.description, a.created_at, ad.name as admin_name
+     FROM audit_logs a
+     LEFT JOIN admins ad ON ad.id = a.admin_id
+     ORDER BY a.created_at DESC LIMIT 15'
 )->fetchAll() ?: [];
 
-// سجل النشاط الحديث
-    $recent_activity = $pdo->query(
-	    'SELECT a.id, a.admin_id, a.action, a.entity_type, a.description, a.created_at, ad.name as admin_name
-		     FROM audit_logs a
-		     LEFT JOIN admins ad ON ad.id = a.admin_id
-		     ORDER BY a.created_at DESC LIMIT 15'
-		)->fetchAll() ?: [];
-		
-		$actionMap = [
-		    'CREATE' => 'إضافة',
-		    'UPDATE' => 'تعديل',
-		    'DELETE' => 'حذف',
-		    'LOGIN' => 'دخول',
-		    'LOGOUT' => 'خروج',
-		    'REPORT_RESOLVED' => 'حل بلاغ',
-		    'REPORT_REJECTED' => 'رفض بلاغ',
-		    'REPORT_BAN_USER' => 'حظر مستخدم',
-		    'REPORT_SUSPEND_USER' => 'تعليق مستخدم',
-		    'REPORT_REVIEWING' => 'مراجعة بلاغ',
-		    'statuses.admin_deleted' => 'حذف حالة إدارياً',
-		];
-	$entityMap = [
-	    'admin' => 'مشرف',
-	    'user' => 'مستخدم',
-	    'report' => 'بلاغ',
-	    'message' => 'رسالة',
-	    'plan' => 'باقة',
-	    'subscription' => 'اشتراك',
-	];
-		
-	
-	include __DIR__ . '/includes/header.php';
-	include __DIR__ . '/includes/sidebar.php';
-	?>
-	
-	<div class="main-content">
-	<div class="pagehead">
+$actionMap = [
+    'CREATE' => 'إضافة',
+    'UPDATE' => 'تعديل',
+    'DELETE' => 'حذف',
+    'LOGIN' => 'دخول',
+    'LOGOUT' => 'خروج',
+    'REPORT_RESOLVED' => 'حل بلاغ',
+    'REPORT_REJECTED' => 'رفض بلاغ',
+    'REPORT_BAN_USER' => 'حظر مستخدم',
+    'REPORT_SUSPEND_USER' => 'تعليق مستخدم',
+    'REPORT_REVIEWING' => 'مراجعة بلاغ',
+    'statuses.admin_deleted' => 'حذف حالة إدارياً',
+];
+$entityMap = [
+    'admin' => 'مشرف',
+    'user' => 'مستخدم',
+    'report' => 'بلاغ',
+    'message' => 'رسالة',
+    'plan' => 'باقة',
+    'subscription' => 'اشتراك',
+];
+
+include __DIR__ . '/includes/header.php';
+include __DIR__ . '/includes/sidebar.php';
+?>
+
+<div class="main-content">
+<div class="pagehead">
     <div>
         <h2>المشرفون والصلاحيات</h2>
         <p>إدارة حسابات المشرفين والأدوار والصلاحيات</p>
@@ -249,6 +233,10 @@ $error_logs = $pdo->query(
                 <input type="text" id="name" name="name" required placeholder="أدخل الاسم الكامل" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
             </div>
             <div>
+                <label for="username" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">اسم المستخدم:</label>
+                <input type="text" id="username" name="username" required placeholder="مثلاً: mohammed_admin" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+            </div>
+            <div>
                 <label for="email" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">البريد الإلكتروني:</label>
                 <input type="email" id="email" name="email" required placeholder="example@domain.com" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
             </div>
@@ -277,43 +265,43 @@ $error_logs = $pdo->query(
     <table class="table" style="width: 100%; border-collapse: collapse;">
         <thead>
             <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">الاسم</th>
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">اسم المستخدم</th>
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">البريد</th>
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">الحالة</th>
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">آخر دخول</th>
-	                <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراءات</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">الاسم</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">اسم المستخدم</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">البريد</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">الحالة</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">آخر دخول</th>
+                <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراءات</th>
             </tr>
         </thead>
         <tbody>
-	            <?php foreach ($admins as $a): ?>
-	                <tr style="border-bottom: 1px solid #ddd; hover: background: #f9f9f9;">
-	                    <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
-	                    <td style="padding: 12px;"><?= htmlspecialchars($a['username'] ?? '-') ?></td>
-	                    <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
-		                    <td style="padding: 12px;">
-		                      <?php 
-		                      $roleMap = [
-		                          'Super Admin' => 'مدير خارق',
-		                          'Admin' => 'مشرف',
-		                          'Moderator' => 'مراقب',
-		                          'Support' => 'دعم فني',
-		                          'Analyst' => 'محلل بيانات'
-		                      ]; 
-		                      ?>
-		                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
-		                    </td>
-	                    <td style="padding: 12px;">
-                        <span style="padding: 5px 10px; border-radius: 4px; background: <?= $a['is_active'] ? '#d4edda' : '#f8d7da' ?>; color: <?= $a['is_active'] ? '#155724' : '#721c24' ?>; font-weight: bold;">
+            <?php foreach ($admins as $a): ?>
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
+                    <td style="padding: 12px;"><code><?= htmlspecialchars($a['username'] ?: '-') ?></code></td>
+                    <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
+                    <td style="padding: 12px;">
+                      <?php 
+                      $roleMap = [
+                          'Super Admin' => 'مدير خارق',
+                          'Admin' => 'مشرف',
+                          'Moderator' => 'مراقب',
+                          'Support' => 'دعم فني',
+                          'Analyst' => 'محلل بيانات'
+                      ]; 
+                      ?>
+                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
+                    </td>
+                    <td style="padding: 12px;">
+                        <span style="padding: 5px 10px; border-radius: 12px; background: <?= $a['is_active'] ? '#d4edda' : '#f8d7da' ?>; color: <?= $a['is_active'] ? '#155724' : '#721c24' ?>; font-weight: bold; font-size: 11px;">
                             <?= $a['is_active'] ? '🟢 نشط' : '🔴 معطل' ?>
                         </span>
                     </td>
                     <td style="padding: 12px;">
-                        <small><?= $a['last_login_at'] ? date('d/m/Y H:i', strtotime($a['last_login_at'])) : '⏳ لم يدخل بعد' ?></small>
+                        <small style="color: #666;"><?= $a['last_login_at'] ? date('d/m/Y H:i', strtotime($a['last_login_at'])) : '⏳ لم يدخل بعد' ?></small>
                     </td>
                     <td style="padding: 12px;">
-                        <button onclick="editAdmin(<?= $a['id'] ?>, '<?= htmlspecialchars($a['name']) ?>', '<?= htmlspecialchars($a['email']) ?>', <?= $a['is_active'] ?>)" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; font-size: 12px;">✏️ تعديل</button>
+                        <button onclick="editAdmin(<?= $a['id'] ?>, '<?= htmlspecialchars($a['name']) ?>', '<?= htmlspecialchars($a['username']) ?>', '<?= htmlspecialchars($a['email']) ?>', <?= $a['is_active'] ?>, <?= $a['role_id'] ?>)" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; font-size: 12px;">✏️ تعديل</button>
                         <form method="POST" style="display: inline;">
                             <input type="hidden" name="_csrf" value="<?= htmlspecialchars(csrfToken()) ?>">
                             <input type="hidden" name="action" value="delete">
@@ -327,80 +315,40 @@ $error_logs = $pdo->query(
     </table>
 </div>
 
-<!-- سجل النشاط الحديث (المراقبة الحية) -->
+<!-- سجل النشاط الحديث -->
 <div class="card panel" style="margin: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-    <h3 style="margin-bottom: 20px; color: #333;">📊 سجل النشاط الحديث (مراقبة حية)</h3>
-    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px;">
+    <h3 style="margin-bottom: 20px; color: #333;">📊 سجل النشاط الحديث</h3>
+    <div style="max-height: 300px; overflow-y: auto;">
         <table class="table" style="width: 100%; border-collapse: collapse;">
-            <thead style="position: sticky; top: 0; background: #f8f9fa; border-bottom: 2px solid #ddd;">
-                <tr>
+            <thead>
+                <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
                     <th style="padding: 12px; text-align: right; font-weight: bold;">الوقت</th>
                     <th style="padding: 12px; text-align: right; font-weight: bold;">المسؤول</th>
                     <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراء</th>
-                    <th style="padding: 12px; text-align: right; font-weight: bold;">النوع</th>
                     <th style="padding: 12px; text-align: right; font-weight: bold;">الوصف</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($recent_activity as $activity): ?>
                     <tr style="border-bottom: 1px solid #eee;">
-                        <td style="padding: 10px;"><small><?= date('H:i:s', strtotime($activity['created_at'])) ?></small></td>
+                        <td style="padding: 10px;"><small><?= date('d/m H:i', strtotime($activity['created_at'])) ?></small></td>
                         <td style="padding: 10px;"><small><?= htmlspecialchars($activity['admin_name'] ?? 'نظام') ?></small></td>
                         <td style="padding: 10px;">
-                            <span style="background: <?php 
-                                $action = $activity['action'];
-                                echo ($action === 'CREATE') ? '#d4edda' : (($action === 'UPDATE') ? '#cfe2ff' : '#f8d7da');
-                            ?>; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;">
-	                                <?= $actionMap[$activity['action']] ?? htmlspecialchars($activity['action']) ?>
-	                            </span>
-	                        </td>
-	                        <td style="padding: 10px;"><small><?= $entityMap[$activity['entity_type']] ?? htmlspecialchars($activity['entity_type'] ?? '-') ?></small></td>
+                            <span style="background: #e7f3ff; color: #0066cc; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">
+                                <?= $actionMap[$activity['action']] ?? htmlspecialchars($activity['action']) ?>
+                            </span>
+                        </td>
                         <td style="padding: 10px;"><small><?= htmlspecialchars($activity['description'] ?? '-') ?></small></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
     </div>
-    <p style="margin-top: 10px; color: #666; font-size: 12px;">🔄 يتم تحديث هذا السجل تلقائياً عند كل إجراء في النظام</p>
-</div>
-
-<!-- جدول الأدوار -->
-<div class="card panel tablewrap" style="margin: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-    <h3 style="margin-bottom: 20px; color: #333;">🔐 الأدوار والصلاحيات</h3>
-    <table class="table" style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الوصف</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">عدد الصلاحيات</th>
-            </tr>
-        </thead>
-        <tbody>
-	            <?php foreach ($roles as $r): ?>
-	                <tr style="border-bottom: 1px solid #ddd;">
-		                    <td style="padding: 12px;">
-		                      <?php 
-		                      $roleMap = [
-		                          'Super Admin' => 'مدير خارق',
-		                          'Admin' => 'مشرف',
-		                          'Moderator' => 'مراقب',
-		                          'Support' => 'دعم فني',
-		                          'Analyst' => 'محلل بيانات'
-		                      ]; 
-		                      ?>
-		                      <strong><?= $roleMap[$r['name']] ?? htmlspecialchars($r['name']) ?></strong>
-	                    </td>
-                    <td style="padding: 12px;"><?= htmlspecialchars($r['description'] ?? '') ?></td>
-                    <td style="padding: 12px;"><span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px; font-weight: bold;"><?= (int)$r['permission_count'] ?></span></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
 </div>
 
 <!-- نموذج التعديل المخفي -->
 <div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+    <div style="background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
         <h3 style="margin-bottom: 20px; color: #333;">✏️ تعديل المشرف</h3>
         <form method="POST" style="display: grid; gap: 15px;">
             <input type="hidden" name="_csrf" value="<?= htmlspecialchars(csrfToken()) ?>">
@@ -408,8 +356,12 @@ $error_logs = $pdo->query(
             <input type="hidden" id="editAdminId" name="admin_id" value="">
             
             <div>
-                <label for="editName" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">الاسم:</label>
+                <label for="editName" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">الاسم الكامل:</label>
                 <input type="text" id="editName" name="name" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div>
+                <label for="editUsername" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">اسم المستخدم:</label>
+                <input type="text" id="editUsername" name="username" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             </div>
             <div>
                 <label for="editEmail" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">البريد الإلكتروني:</label>
@@ -431,21 +383,22 @@ $error_logs = $pdo->query(
                 </select>
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">✓ حفظ</button>
-                <button type="button" onclick="closeEditModal()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">✕ إلغاء</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <button type="submit" style="padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">✓ حفظ التعديلات</button>
+                <button type="button" onclick="closeEditModal()" style="padding: 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">✕ إلغاء</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- تحديث تلقائي للمراقبة الحية -->
 <script>
-function editAdmin(id, name, email, isActive) {
+function editAdmin(id, name, username, email, isActive, roleId) {
     document.getElementById('editAdminId').value = id;
     document.getElementById('editName').value = name;
+    document.getElementById('editUsername').value = username;
     document.getElementById('editEmail').value = email;
     document.getElementById('editIsActive').value = isActive ? '1' : '0';
+    document.getElementById('editRole').value = roleId;
     document.getElementById('editModal').style.display = 'flex';
 }
 
@@ -459,29 +412,7 @@ window.onclick = function(event) {
         modal.style.display = 'none';
     }
 }
-
-// تحديث تلقائي للمراقبة الحية كل 5 ثوان
-setInterval(function() {
-    fetch(window.location.href)
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const newDoc = parser.parseFromString(html, 'text/html');
-            const newActivityTable = newDoc.querySelector('table');
-            const currentActivityTable = document.querySelector('table');
-            
-            if (newActivityTable && currentActivityTable) {
-                const newRows = newActivityTable.querySelectorAll('tbody tr');
-                const currentRows = currentActivityTable.querySelectorAll('tbody tr');
-                
-                if (newRows.length > currentRows.length) {
-                    location.reload();
-                }
-            }
-        })
-        .catch(err => console.log('Live update check: ' + err));
-}, 5000);
 </script>
 
-	</div>
-	<?php include __DIR__ . '/includes/footer.php'; ?>
+</div>
+<?php include __DIR__ . '/includes/footer.php'; ?>
