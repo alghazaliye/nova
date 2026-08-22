@@ -333,6 +333,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// تحديث صامت: يجلب أحدث الرسائل الجديدة فقط ويحدّث حالة الرسائل الحالية
   Future<void> _refreshSilent() async {
+    if (ApiService.token == null) return;
     final wasNearBottom = !_scroll.hasClients ||
         _scroll.position.maxScrollExtent - _scroll.position.pixels < 120;
     var addedNewMessage = false;
@@ -341,7 +342,12 @@ class _ChatScreenState extends State<ChatScreen> {
         '/conversations/${widget.conv.id}/messages',
         query: {'limit': '50'},
       );
-      if (!mounted || res['success'] != true || res['data'] is! List) return;
+      if (!mounted) return;
+      if (res['status_code'] == 401) {
+        _pollTimer?.cancel();
+        return;
+      }
+      if (res['success'] != true || res['data'] is! List) return;
       final msgs = (res['data'] as List)
           .map((e) => NovaMessage.fromJson(Map<String, dynamic>.from(e)))
           .toList();

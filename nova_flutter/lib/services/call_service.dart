@@ -101,6 +101,8 @@ class CallService {
       if (event.streams.isNotEmpty) {
         if (remoteRenderer.srcObject?.id != event.streams.first.id) {
           remoteRenderer.srcObject = event.streams.first;
+          // في الويب، أحياناً نحتاج لتنبيه الـ renderer يدوياً
+          remoteRenderer.onResize?.call();
         }
       }
     };
@@ -108,6 +110,7 @@ class CallService {
       debugPrint('CallService: onAddStream: ${stream.id}');
       if (remoteRenderer.srcObject?.id != stream.id) {
         remoteRenderer.srcObject = stream;
+        remoteRenderer.onResize?.call();
       }
     };
 
