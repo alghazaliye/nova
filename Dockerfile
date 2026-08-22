@@ -1,5 +1,5 @@
-# Nova Messenger — production image (PHP 8.3 + Apache + SQLite)
-# SQLite is the default database adapter (DB_TYPE=sqlite in backend/.env).
+# Nova Messenger — production image (PHP 8.3 + Apache + SQLite/Turso)
+# Supports Turso (DB_TYPE=turso) or local SQLite (DB_TYPE=sqlite).
 FROM php:8.3-apache
 
 # Apache modules
@@ -38,7 +38,6 @@ RUN mkdir -p /var/www/html/backend/config \
     && chmod -R 755 /var/www/html
 
 # Runtime defaults — override with real values in Render environment variables.
-# Never commit real secrets to Git.
 ENV DB_TYPE=sqlite \
     JWT_SECRET=REPLACE_ME \
     APP_ENV=production \
@@ -50,30 +49,32 @@ ENV DB_TYPE=sqlite \
     NOVA_DIAG_KEY=REPLACE_ME \
     NOVA_DATA_DIR=/data/nova_data
 
-# Startup: create SQLite DB from schema if missing, bind Apache to $PORT (Render), then run apache2-foreground
+# Startup: Skip SQLite bootstrapping if Turso is enabled to prevent data loss confusion.
 RUN { echo '#!/bin/sh'; \
       echo 'set -e'; \
-      echo 'DB_PATH="${DB_PATH:-/var/www/html/backend/config/nova.sqlite}"'; \
-      echo 'DATA_DIR="${NOVA_DATA_DIR:-/data/nova_data}"'; \
-      echo 'DATA_DB="$DATA_DIR/nova.sqlite"'; \
-      echo 'mkdir -p "$DATA_DIR" 2>/dev/null || true'; \
-      echo 'chown -R www-data:www-data "$DATA_DIR" 2>/dev/null || true'; \
-      echo 'if [ -f "$DATA_DB" ] && [ -s "$DATA_DB" ]; then'; \
-      echo '  # Persistent copy exists (Render volume or mounted path): restore it'; \
-      echo '  cp -f "$DATA_DB" "$DB_PATH"'; \
-      echo '  chown www-data:www-data "$DB_PATH"'; \
-      echo '  echo "Restored database from persistent storage: $DATA_DB"'; \
-      echo 'elif [ ! -s "$DB_PATH" ]; then'; \
-      echo '  echo "Bootstrapping SQLite schema..."'; \
-      echo '  sqlite3 "$DB_PATH" < /var/www/html/database/schema.sqlite.sql'; \
-      echo '  chown www-data:www-data "$DB_PATH"'; \
-      echo '  [ -f /var/www/html/database/seed.sql ] && (sqlite3 "$DB_PATH" < /var/www/html/database/seed.sql 2>/dev/null || true)'; \
+      echo 'if [ "$DB_TYPE" = "turso" ]; then'; \
+      echo '  echo "Running in Turso mode. Skipping SQLite bootstrap."'; \
+      echo 'else'; \
+      echo '  DB_PATH="${DB_PATH:-/var/www/html/backend/config/nova.sqlite}"'; \
+      echo '  DATA_DIR="${NOVA_DATA_DIR:-/data/nova_data}"'; \
+      echo '  DATA_DB="$DATA_DIR/nova.sqlite"'; \
+      echo '  mkdir -p "$DATA_DIR" 2>/dev/null || true'; \
+      echo '  chown -R www-data:www-data "$DATA_DIR" 2>/dev/null || true'; \
+      echo '  if [ -f "$DATA_DB" ] && [ -s "$DATA_DB" ]; then'; \
+      echo '    cp -f "$DATA_DB" "$DB_PATH"'; \
+      echo '    chown www-data:www-data "$DB_PATH"'; \
+      echo '    echo "Restored SQLite database from: $DATA_DB"'; \
+      echo '  elif [ ! -s "$DB_PATH" ]; then'; \
+      echo '    echo "Bootstrapping SQLite schema..."'; \
+      echo '    sqlite3 "$DB_PATH" < /var/www/html/database/schema.sqlite.sql'; \
+      echo '    chown www-data:www-data "$DB_PATH"'; \
+      echo '    [ -f /var/www/html/database/seed.sql ] && (sqlite3 "$DB_PATH" < /var/www/html/database/seed.sql 2>/dev/null || true)'; \
+      echo '    cp -f "$DB_PATH" "$DATA_DB" 2>/dev/null || true'; \
+      echo '  fi'; \
       echo '  cp -f "$DB_PATH" "$DATA_DB" 2>/dev/null || true'; \
-      echo 'fi'; \
-      echo '# Sync active DB back to persistent dir (guards against loss on container restart).'; \
-      echo 'cp -f "$DB_PATH" "$DATA_DB" 2>/dev/null || true'; \
-      echo 'if [ -f /var/www/html/database/seed_production.sql ]; then'; \
-      echo '  sqlite3 "$DB_PATH" < /var/www/html/database/seed_production.sql 2>/dev/null || true'; \
+      echo '  if [ -f /var/www/html/database/seed_production.sql ]; then'; \
+      echo '    sqlite3 "$DB_PATH" < /var/www/html/database/seed_production.sql 2>/dev/null || true'; \
+      echo '  fi'; \
       echo 'fi'; \
       echo 'if [ -f /var/www/html/database/seed_providers.php ]; then'; \
       echo '  export OTP_ENCRYPTION_KEY="${OTP_ENCRYPTION_KEY:-${ENCRYPTION_KEY:-}}"'; \
