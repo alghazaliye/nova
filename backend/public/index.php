@@ -44,6 +44,7 @@ require_once __DIR__ . '/../helpers/SettingsHelper.php';
 require_once __DIR__ . '/../controllers/ReportsController.php';
 require_once __DIR__ . '/../controllers/AppealsController.php';
 require_once __DIR__ . '/../controllers/PaymentRequestsController.php';
+require_once __DIR__ . '/../controllers/SystemController.php';
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -662,6 +663,9 @@ if ($uri === '/plans' && $method === 'GET') {
 // Health check
 if ($uri === '/health' && $method === 'GET') {
     Response::success(['status' => 'ok', 'version' => '1.0.0', 'timestamp' => date('c'), 'timezone' => Database::getTimezone()]);
+}
+if ($uri === '/system/status' && $method === 'GET') {
+    (new SystemController())->status();
 }
 
 // 404 fallback
