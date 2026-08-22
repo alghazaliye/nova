@@ -526,7 +526,7 @@ class AdminController
     public function userAdmin(int $id): void
     {
         $stmt = $this->pdo->prepare(
-            'SELECT u.id, u.uuid, u.phone, u.email, u.name, u.username, u.bio, u.avatar, u.status_text,
+            'SELECT u.id, u.uuid, u.phone, u.email, u.name, u.bio, u.avatar, u.status_text,
                     u.is_online, u.last_seen, u.is_verified, u.verified_until, u.is_blocked, u.blocked_at, u.created_at
              FROM users u WHERE u.id = ? LIMIT 1'
         );
