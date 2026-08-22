@@ -120,7 +120,10 @@ class Database
     private static function migrateMissingColumns(): void
     {
         $migrations = [
-            'conversation_members' => ['disappear_after' => 'INTEGER DEFAULT NULL'],
+            'conversation_members' => [
+                'disappear_after' => 'INTEGER DEFAULT NULL',
+                'muted_until'     => 'DATETIME DEFAULT NULL'
+            ],
             'messages'             => [
                 'disappear_after'    => 'INTEGER DEFAULT NULL',
                 'deleted_by'         => 'INTEGER DEFAULT NULL',

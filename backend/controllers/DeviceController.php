@@ -49,11 +49,11 @@ class DeviceController
 
         // Sync with user_devices table for FCM compatibility
         $this->pdo->prepare(
-            'INSERT INTO user_devices (user_id, device_id, platform, last_active)
-             VALUES (?, ?, ?, datetime("now"))
-             ON CONFLICT(user_id, device_id) DO UPDATE SET
-                last_active = datetime("now")'
-        )->execute([$userId, $fingerprint, $platform ?? $osName]);
+            'INSERT INTO user_devices (user_id, device_uuid, platform, last_active_at, updated_at)
+             VALUES (?, ?, ?, datetime("now"), datetime("now"))
+             ON CONFLICT(user_id, device_uuid) DO UPDATE SET
+                last_active_at = datetime("now"), updated_at = datetime("now")'
+        )->execute([$userId, $fingerprint, $platform ?? $osName ?? 'web']);
 
         $maxAllowed = $this->getMaxDevicesAllowed($userId);
         $activeCount = $this->getActiveDeviceCount($userId);
@@ -88,10 +88,10 @@ class DeviceController
         $fingerprint = trim((string)$body['device_fingerprint']);
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO user_devices (user_id, device_id, fcm_token, last_active)
-             VALUES (?, ?, ?, datetime("now"))
-             ON CONFLICT(user_id, device_id) DO UPDATE SET
-                fcm_token = excluded.fcm_token, last_active = datetime("now")'
+            'INSERT INTO user_devices (user_id, device_uuid, fcm_token, last_active_at, updated_at)
+             VALUES (?, ?, ?, datetime("now"), datetime("now"))
+             ON CONFLICT(user_id, device_uuid) DO UPDATE SET
+                fcm_token = excluded.fcm_token, last_active_at = datetime("now"), updated_at = datetime("now")'
         );
         $stmt->execute([$userId, $fingerprint, $fcmToken]);
 
