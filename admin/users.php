@@ -27,7 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'block' && hasPermission($admin, 'users.block')) {
         $reason = trim((string)($_POST['ban_reason'] ?? ''));
-        // Kill all live sessions so the banned user is kicked out immediately
         $pdo->prepare('UPDATE sessions SET revoked_at = datetime("now") WHERE user_id = ? AND revoked_at IS NULL')->execute([$userId]);
         $pdo->prepare('UPDATE device_registrations SET is_active = 0 WHERE user_id = ?')->execute([$userId]);
         try {
@@ -67,7 +66,7 @@ $filter = $_GET['filter'] ?? 'all';
 $where  = '1=1';
 $params = [];
 
-    if ($search) {
+if ($search) {
     $where   .= ' AND (name LIKE ? OR phone LIKE ?)';
     $s        = "%{$search}%";
     $params   = array_merge($params, [$s, $s]);
@@ -142,66 +141,69 @@ include __DIR__ . '/includes/sidebar.php';
       <?php foreach ($users as $u): ?>
       <tr>
         <td>
-          <div class="user">
-	            <?php 
-	              $avatarUrl = $u['avatar'];
-	              if ($avatarUrl && !str_starts_with($avatarUrl, 'http')) {
-	                  $avatarUrl = '/api/v1/media/' . ltrim($avatarUrl, '/');
-	              }
-	            ?>
-	            <?php if ($avatarUrl): ?>
-	              <img src="<?= htmlspecialchars($avatarUrl) ?>" class="avatar" style="object-fit:cover; width:38px; height:38px; border-radius:10px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-	              <div class="avatar" style="width:38px; height:38px; border-radius:10px; display:none;"><?= mb_substr($u['name'], 0, 1) ?></div>
-	            <?php else: ?>
-	              <div class="avatar" style="width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center;"><?= mb_substr($u['name'], 0, 1) ?></div>
-	            <?php endif; ?>
-	            <div>
-	              <b><?= htmlspecialchars($u['name']) ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb; margin-right:4px;" title="موثق">✔</span><?php endif; ?></b>
-	            </div>
+          <div class="user" style="display: flex; align-items: center; gap: 10px;">
+            <?php 
+              $avatarUrl = $u['avatar'];
+              if ($avatarUrl && !str_starts_with($avatarUrl, 'http')) {
+                  $avatarUrl = '/api/v1/media/' . ltrim($avatarUrl, '/');
+              }
+            ?>
+            <?php if ($avatarUrl): ?>
+              <img src="<?= htmlspecialchars($avatarUrl) ?>" class="avatar" style="object-fit:cover; width:38px; height:38px; border-radius:10px; display:block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+              <div class="avatar" style="width:38px; height:38px; border-radius:10px; display:none; align-items:center; justify-content:center; background:var(--surface2); color:var(--text);"><?= mb_substr($u['name'] ?: 'U', 0, 1) ?></div>
+            <?php else: ?>
+              <div class="avatar" style="width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--surface2); color:var(--text);"><?= mb_substr($u['name'] ?: 'U', 0, 1) ?></div>
+            <?php endif; ?>
+            <div>
+              <b style="display: block;"><?= htmlspecialchars($u['name'] ?: 'مستخدم NOVA') ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb; margin-right:4px;" title="موثق">✔</span><?php endif; ?></b>
+              <small style="color: var(--muted); font-size: 11px;">#<?= $u['id'] ?></small>
+            </div>
           </div>
         </td>
         <td dir="ltr" style="text-align:right;"><code><?= htmlspecialchars($u['phone']) ?></code></td>
         <td style="text-align:center"><?= (int)$u['is_verified'] ? '<span style="color:#2563eb;font-weight:800">✔ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
         <td><?= $u['plan_name'] ? htmlspecialchars((string)$u['plan_name']) : '<span style="color:var(--muted)">مجاني</span>' ?></td>
-        <td><?= (int)($u['active_devices'] ?? 0) ?><?= $u['plan_max_devices'] ? '/' . (int)$u['plan_max_devices'] : '' ?></td>
-	        <td style="vertical-align: middle;">
-	          <?php if ($u['is_blocked']): ?>
-	            <span class="status blocked">محظور</span>
-	          <?php elseif ($u['is_online']): ?>
-	            <span class="status online">نشط</span>
-	          <?php else: ?>
-	            <span class="status offline">أوفلاين</span>
-	          <?php endif; ?>
-	          <div style="font-size:10px; color:var(--muted); margin-top:4px; white-space:nowrap;"><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></div>
-	        </td>
-	        <td style="vertical-align: middle; white-space:nowrap;">
-	          <div style="font-weight:600;"><?= date('d/m/Y', strtotime($u['created_at'])) ?></div>
-	          <div style="font-size:10px; color:var(--muted);"><?= date('H:i', strtotime($u['created_at'])) ?></div>
-	        </td>
+        <td style="text-align:center;"><?= (int)($u['active_devices'] ?? 0) ?><?= $u['plan_max_devices'] ? '/' . (int)$u['plan_max_devices'] : '' ?></td>
+        <td style="vertical-align: middle;">
+          <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
+            <?php if ($u['is_blocked']): ?>
+              <span class="status blocked" style="background:#f8d7da; color:#721c24; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold; width: 70px; text-align:center;">محظور</span>
+            <?php elseif ($u['is_online']): ?>
+              <span class="status online" style="background:#d4edda; color:#155724; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold; width: 70px; text-align:center;">نشط</span>
+            <?php else: ?>
+              <span class="status offline" style="background:#e2e3e5; color:#383d41; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold; width: 70px; text-align:center;">أوفلاين</span>
+            <?php endif; ?>
+            <div style="font-size:10px; color:var(--muted); white-space:nowrap;"><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></div>
+          </div>
+        </td>
+        <td style="vertical-align: middle; white-space:nowrap; text-align:center;">
+          <div style="font-weight:600; font-size:13px;"><?= date('d/m/Y', strtotime($u['created_at'])) ?></div>
+          <div style="font-size:10px; color:var(--muted);"><?= date('H:i', strtotime($u['created_at'])) ?></div>
+        </td>
         <td>
-          <div style="display:flex; gap:5px; align-items:center;">
+          <div style="display:flex; gap:5px; align-items:center; justify-content: center;">
             <form method="POST" style="display:inline;">
               <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
               <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
               <input type="hidden" name="action" value="verify">
-              <button type="submit" class="btn sm" style="background:<?= (int)$u['is_verified'] ? 'rgba(245,158,11,.1);color:#d97706' : 'rgba(37,99,235,.1);color:#2563eb' ?>" data-confirm="<?= (int)$u['is_verified'] ? 'إلغاء التوثيق؟' : 'توثيق الحساب وإظهار العلامة الزرقاء؟' ?>"><?= (int)$u['is_verified'] ? '✖ إلغاء' : '✔ توثيق' ?></button>
+              <button type="submit" class="btn sm" style="background:<?= (int)$u['is_verified'] ? 'rgba(245,158,11,.1);color:#d97706' : 'rgba(37,99,235,.1);color:#2563eb' ?>" onclick="return confirm('<?= (int)$u['is_verified'] ? 'إلغاء التوثيق؟' : 'توثيق الحساب وإظهار العلامة الزرقاء؟' ?>')"><?= (int)$u['is_verified'] ? '✖ إلغاء' : '✔ توثيق' ?></button>
             </form>
             <form method="POST" style="display:inline;">
               <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
               <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
               <?php if ($u['is_blocked']): ?>
                 <input type="hidden" name="action" value="unblock">
-                <button type="submit" class="btn sm">فك الحظر</button>
+                <button type="submit" class="btn sm" style="background:rgba(18,183,106,.1);color:#12b76a;">فك الحظر</button>
               <?php else: ?>
                 <input type="hidden" name="action" value="block">
-                <button type="submit" class="btn sm" data-confirm="هل تريد حظر هذا المستخدم؟ سيمتنع من الدخول للتطبيق">حظر</button>
+                <button type="submit" class="btn sm" style="background:rgba(240,68,56,.1);color:#f04438;" onclick="return confirm('هل تريد حظر هذا المستخدم؟ سيمتنع من الدخول للتطبيق')">حظر</button>
               <?php endif; ?>
             </form>
             <form method="POST" style="display:inline;">
               <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
               <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
               <input type="hidden" name="action" value="delete">
-              <button type="submit" class="btn danger sm" data-confirm="حذف نهائي؟">حذف</button>
+              <button type="submit" class="btn danger sm" onclick="return confirm('حذف نهائي؟')">حذف</button>
             </form>
           </div>
         </td>
@@ -213,10 +215,10 @@ include __DIR__ . '/includes/sidebar.php';
 
 <!-- Pagination -->
 <?php $totalPages = (int)ceil($total / $limit); if ($totalPages > 1): ?>
-<div class="pagination">
+<div class="pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 20px;">
   <?php for ($i = 1; $i <= $totalPages; $i++): ?>
     <a href="?page=<?= $i ?>&q=<?= urlencode($search) ?>&filter=<?= $filter ?>"
-       class="page-btn <?= $i === $page ? 'active' : '' ?>"><?= $i ?></a>
+       class="page-btn <?= $i === $page ? 'active' : '' ?>" style="padding: 8px 12px; border-radius: 8px; text-decoration: none; <?= $i === $page ? 'background: var(--primary); color: white;' : 'background: var(--surface2); color: var(--text);' ?>"><?= $i ?></a>
   <?php endfor; ?>
 </div>
 <?php endif; ?>
