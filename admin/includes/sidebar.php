@@ -29,6 +29,12 @@ try {
     $pendingPaymentRequests = (int)$stmt->fetchColumn();
 } catch (\Throwable $e) {}
 
+$pendingRegistrations = 0;
+try {
+    $stmt = $pdo->query("SELECT COUNT(*) FROM otp_verifications WHERE status IN ('pending', 'sent', 'manual', 'delivery_failed')");
+    $pendingRegistrations = (int)$stmt->fetchColumn();
+} catch (\Throwable $e) {}
+
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 if (!isset($admin)) { $admin = ['name' => '', 'role_name' => '']; }
 function navActive(string $page, string $current): string {
@@ -115,6 +121,9 @@ function navActive(string $page, string $current): string {
     </a>
     <a href="registrations.php" class="<?= in_array($currentPage ?? '', ['registrations', 'email-registrations', 'otp-registrations'], true) ? 'active' : '' ?>">
       <span>📝</span> طلبات التسجيل
+      <?php if ($pendingRegistrations > 0): ?>
+        <em class="count"><?= $pendingRegistrations ?></em>
+      <?php endif; ?>
     </a>
     <a href="otp-settings.php" class="<?= navActive('otp-settings', $currentPage) ?>">
       <span>⚙️</span> إعدادات OTP

@@ -277,6 +277,10 @@ class AdminAuthController
         if ($res === null) {
             $this->out(['success' => false, 'error_code' => 'OTP_NOT_VIEWABLE'], 404, 'لا يمكن عرض هذا الرمز');
         }
+        
+        // Update status to manual when viewed
+        $this->pdo->prepare("UPDATE email_verification_codes SET status = 'manual', updated_at = datetime('now') WHERE id = ?")->execute([$id]);
+        
         logAdminAudit($admin, 'OTP_VIEWED', 'email_verification_codes', $id, 'المدير شاهد رمز OTP بالبريد للتسليم اليدوي');
         $this->out(['success' => true, 'otp_code' => $res['code'], 'expires_at' => $res['expires_at']], 200, 'انسخ هذا الرمز وأرسله للمستخدم');
     }

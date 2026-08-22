@@ -158,9 +158,9 @@ async function loadRegs(){
           ${nameCell}
           <td>${modeLabel(r.delivery_mode)}</td>
           <td>${phoneStatusLabel(r.status)}</td>
-          <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
-          <td style="font-size:12px; color:var(--muted);">${r.expires_at ? fmt(r.expires_at) : '—'}</td>
-          <td dir="ltr" style="text-align:right; font-size:11px;">${r.ip_address || '—'}</td>
+	          <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
+	          <td style="font-size:12px; color:var(--muted);">${r.expires_at ? fmt(r.expires_at) : '—'}</td>
+	          <td dir="ltr" style="text-align:center; font-size:11px; color:var(--muted);">${r.ip_address || '—'}</td>
           <td style="font-size:12px; color:var(--muted);">${fmt(r.created_at)}</td>
           <td>
             <div style="display:flex; gap:5px; flex-wrap:wrap;">

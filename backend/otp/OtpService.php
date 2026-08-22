@@ -532,15 +532,23 @@ class OtpService
 
     public function getPendingRegistrations(int $page = 1, int $perPage = 20): array
     {
+        // Update expired records to 'expired' status if they were still active
+        $this->pdo->query(
+            "UPDATE otp_verifications SET status = 'expired', updated_at = datetime('now') 
+             WHERE status IN ('pending','sent','manual','delivery_failed') 
+             AND expires_at < datetime('now')"
+        );
+
         $offset = ($page - 1) * $perPage;
         $stmt = $this->pdo->prepare(
             'SELECT o.id, o.phone_number, o.name, o.status, o.delivery_mode, o.delivery_status,
                     o.attempts, o.resends, o.expires_at, o.created_at, o.provider_id,
+                    o.ip_address, o.max_attempts,
                     p.name AS provider_name
              FROM otp_verifications o
              LEFT JOIN otp_providers p ON p.id = o.provider_id
-             WHERE o.status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\',\'verified\')
-             ORDER BY CASE WHEN o.status = \'verified\' THEN 1 ELSE 0 END ASC, o.id DESC
+             WHERE o.status IN (\'pending\',\'sent\',\'manual\',\'delivery_failed\',\'verified\',\'expired\')
+             ORDER BY CASE WHEN o.status = \'verified\' THEN 2 WHEN o.status = \'expired\' THEN 1 ELSE 0 END ASC, o.id DESC
              LIMIT ? OFFSET ?'
         );
         $stmt->bindValue(1, $perPage, PDO::PARAM_INT);

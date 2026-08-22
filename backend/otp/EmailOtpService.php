@@ -690,18 +690,28 @@ class EmailOtpService
     /** Admin: pending email verification requests */
     public function getPendingCodes(int $page = 1, int $perPage = 20): array
     {
+        // Update expired records
+        $this->pdo->query(
+            "UPDATE email_verification_codes SET status = 'expired', updated_at = datetime('now') 
+             WHERE status IN ('pending','sent','manual') 
+             AND expires_at < datetime('now')"
+        );
+
         $offset = ($page - 1) * $perPage;
         $stmt = $this->pdo->prepare(
-            'SELECT id, email, name, purpose, status, delivery_mode, attempts, resends, expires_at, created_at
+            'SELECT id, email, name, purpose, status, delivery_mode, attempts, resends, expires_at, created_at, ip, max_attempts
              FROM email_verification_codes
-             WHERE status IN (\'pending\',\'sent\',\'manual\')
-             ORDER BY id DESC LIMIT ? OFFSET ?'
+             WHERE status IN (\'pending\',\'sent\',\'manual\',\'verified\',\'expired\')
+             ORDER BY CASE WHEN status = \'verified\' THEN 2 WHEN status = \'expired\' THEN 1 ELSE 0 END ASC, id DESC 
+             LIMIT ? OFFSET ?'
         );
         $stmt->bindValue(1, $perPage, PDO::PARAM_INT);
         $stmt->bindValue(2, $offset, PDO::PARAM_INT);
         $stmt->execute();
+        
         $countStmt = $this->pdo->query('SELECT COUNT(*) c FROM email_verification_codes WHERE status IN (\'pending\',\'sent\',\'manual\')');
         $total = (int)($countStmt->fetch()['c']);
+        
         return [
             'rows' => $stmt->fetchAll(),
             'total' => $total,

@@ -327,8 +327,12 @@ class AdminOtpController
         $service = new OtpService();
         $res = $service->revealManualCode($id);
         if ($res === null) {
-            $this->out(['error_code' => 'OTP_NOT_VIEWABLE'], 404, 'لا يمكن عرض هذا الرمز (غير موجود أو تم التحقق منه أو وضعه تلقائي)');
+            $this->out(['error_code' => 'OTP_NOT_VIEWABLE'], 404, 'لا يمكن عرض هذا الرمز (غير موجود أو تم التحقق منه)');
         }
+        
+        // Update status to manual when viewed
+        $this->pdo->prepare("UPDATE otp_verifications SET status = 'manual', updated_at = datetime('now') WHERE id = ?")->execute([$id]);
+        
         logAdminAudit($admin, 'OTP_VIEWED', 'otp_verifications', $id, 'المدير شاهد رمز OTP للتسليم اليدوي');
         $this->out(['otp_code' => $res['code'], 'expires_at' => $res['expires_at']], 200, 'انسخ هذا الرمز وأرسله للمستخدم');
     }

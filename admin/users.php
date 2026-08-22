@@ -143,10 +143,16 @@ include __DIR__ . '/includes/sidebar.php';
       <tr>
         <td>
           <div class="user">
-            <?php if ($u['avatar']): ?>
-              <img src="<?= htmlspecialchars($u['avatar']) ?>" class="avatar" style="object-fit:cover;">
+            <?php 
+              $avatarUrl = $u['avatar'];
+              if ($avatarUrl && !str_starts_with($avatarUrl, 'http')) {
+                  $avatarUrl = '/media/' . ltrim($avatarUrl, '/');
+              }
+            ?>
+            <?php if ($avatarUrl): ?>
+              <img src="<?= htmlspecialchars($avatarUrl) ?>" class="avatar" style="object-fit:cover; width:38px; height:38px; border-radius:10px;">
             <?php else: ?>
-              <div class="avatar"><?= mb_substr($u['name'], 0, 1) ?></div>
+              <div class="avatar" style="width:38px; height:38px; border-radius:10px;"><?= mb_substr($u['name'], 0, 1) ?></div>
             <?php endif; ?>
             <div>
               <b><?= htmlspecialchars($u['name']) ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb">✔</span><?php endif; ?></b>
@@ -158,7 +164,6 @@ include __DIR__ . '/includes/sidebar.php';
         <td style="text-align:center"><?= (int)$u['is_verified'] ? '<span style="color:#2563eb;font-weight:800">✔ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
         <td><?= $u['plan_name'] ? htmlspecialchars((string)$u['plan_name']) : '<span style="color:var(--muted)">مجاني</span>' ?></td>
         <td><?= (int)($u['active_devices'] ?? 0) ?><?= $u['plan_max_devices'] ? '/' . (int)$u['plan_max_devices'] : '' ?></td>
-        <td><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></td>
         <td>
           <?php if ($u['is_blocked']): ?>
             <span class="status blocked">محظور</span>
@@ -167,15 +172,16 @@ include __DIR__ . '/includes/sidebar.php';
           <?php else: ?>
             <span class="status offline">أوفلاين</span>
           <?php endif; ?>
+          <small style="display:block; font-size:10px; color:var(--muted); margin-top:4px;"><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></small>
         </td>
         <td><?= date('d/m/Y', strtotime($u['created_at'])) ?></td>
         <td>
-          <div style="display:flex; gap:5px;">
+          <div style="display:flex; gap:5px; align-items:center;">
             <form method="POST" style="display:inline;">
               <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
               <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
               <input type="hidden" name="action" value="verify">
-              <button type="submit" class="btn sm" style="background:<?= (int)$u['is_verified'] ? 'rgba(245,158,11,.1);color:#d97706' : 'rgba(37,99,235,.1);color:#2563eb' ?>" data-confirm="<?= (int)$u['is_verified'] ? 'إلغاء التوثيق؟' : 'توثيق الحساب وإظهار العلامة الزرقاء؟' ?>"><?= (int)$u['is_verified'] ? '✖ إلغاء التوثيق' : '✔ توثيق' ?></button>
+              <button type="submit" class="btn sm" style="background:<?= (int)$u['is_verified'] ? 'rgba(245,158,11,.1);color:#d97706' : 'rgba(37,99,235,.1);color:#2563eb' ?>" data-confirm="<?= (int)$u['is_verified'] ? 'إلغاء التوثيق؟' : 'توثيق الحساب وإظهار العلامة الزرقاء؟' ?>"><?= (int)$u['is_verified'] ? '✖ إلغاء' : '✔ توثيق' ?></button>
             </form>
             <form method="POST" style="display:inline;">
               <input type="hidden" name="_csrf" value="<?= csrfToken() ?>">
@@ -185,7 +191,6 @@ include __DIR__ . '/includes/sidebar.php';
                 <button type="submit" class="btn sm">فك الحظر</button>
               <?php else: ?>
                 <input type="hidden" name="action" value="block">
-                <input type="text" name="ban_reason" placeholder="سبب الحظر (اختياري)" style="width:130px;height:34px;border:1px solid var(--line);background:var(--surface2);color:var(--text);border-radius:8px;padding:0 10px" maxlength="200">
                 <button type="submit" class="btn sm" data-confirm="هل تريد حظر هذا المستخدم؟ سيمتنع من الدخول للتطبيق">حظر</button>
               <?php endif; ?>
             </form>
