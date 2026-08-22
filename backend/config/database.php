@@ -53,6 +53,7 @@ class Database
                 self::connectCompat($dsn, $options);
                 self::migrateMissingColumns();
                 self::migrateMissingTables();
+                self::migrateMissingIndexes();
                 self::migrateLinkSessionsTable();
                 self::applyConfiguredTimezone();
 
@@ -239,6 +240,32 @@ class Database
      * Safe, idempotent migrations: creates tables that newer code expects
      * but may be missing in older database files (e.g. after deployment).
      */
+    /**
+     * Safe, idempotent index migrations: creates indexes that improve query performance.
+     */
+    private static function migrateMissingIndexes(): void
+    {
+        $indexes = [
+            'idx_messages_conversation_id' => 'CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id)',
+            'idx_messages_sender_id'       => 'CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id)',
+            'idx_messages_created_at'      => 'CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)',
+            'idx_users_phone'              => 'CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)',
+            'idx_users_email'              => 'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
+            'idx_users_name'               => 'CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)',
+            'idx_conversations_last_msg'   => 'CREATE INDEX IF NOT EXISTS idx_conversations_last_msg ON conversations(last_message_id)',
+            'idx_audit_logs_action'        => 'CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)',
+            'idx_audit_logs_created'       => 'CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)',
+            'idx_typing_status_expires'    => 'CREATE INDEX IF NOT EXISTS idx_typing_status_expires ON typing_status(expires_at)',
+        ];
+        foreach ($indexes as $ddl) {
+            try {
+                self::$instance->exec($ddl);
+            } catch (PDOException $e) {
+                error_log('Index migration skipped: ' . $e->getMessage());
+            }
+        }
+    }
+
     private static function migrateMissingTables(): void
     {
         $tables = [
