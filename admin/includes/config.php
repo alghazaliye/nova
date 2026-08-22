@@ -31,7 +31,17 @@ function getAdminDB(): PDO
     static $pdo = null;
     if ($pdo === null) {
         $dbType = ($_ENV['DB_TYPE'] ?? 'sqlite');
-        if ($dbType === 'sqlite') {
+        if ($dbType === 'turso') {
+            $url   = $_ENV['TURSO_URL'] ?? '';
+            $token = $_ENV['TURSO_AUTH_TOKEN'] ?? '';
+            
+            $tursoPdoFile = realpath(__DIR__ . '/../../backend/config/TursoPdo.php');
+            if ($tursoPdoFile) {
+                require_once $tursoPdoFile;
+                // TursoPdo handles SQL adaptation internally
+                $pdo = new TursoPdo($url, $token);
+            }
+        } elseif ($dbType === 'sqlite') {
             // Share the same SQLite database as the backend
             $dbPath = $_ENV['DB_PATH']
                 ?? realpath(__DIR__ . '/../../backend/config/nova.sqlite');
@@ -47,10 +57,10 @@ function getAdminDB(): PDO
             }
             $pdoClass = class_exists('MysqlCompatPdo') ? 'MysqlCompatPdo' : 'PDO';
             $pdo = new $pdoClass($dsn, null, null, [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-        ]);
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+            ]);
         } else {
             $dsn = sprintf(
                 'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',

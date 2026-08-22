@@ -87,6 +87,9 @@ function navActive(string $page, string $current): string {
     <a href="calls.php" class="<?= navActive('calls', $currentPage) ?>">
       <span>☎</span> المكالمات
     </a>
+    <a href="webrtc-logs.php" class="<?= navActive('webrtc-logs', $currentPage) ?>">
+      <span>📋</span> سجلات WebRTC
+    </a>
     <a href="stories.php" class="<?= navActive('stories', $currentPage) ?>">
       <span>◌</span> الحالات
     </a>

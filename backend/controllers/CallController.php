@@ -512,4 +512,43 @@ class CallController
 
         Response::success($servers);
     }
+
+    /**
+     * POST /api/v1/calls/{id}/log
+     * Custom logging for WebRTC errors and events.
+     */
+    public function logEvent(int $callId): void
+    {
+        $auth   = AuthMiddleware::authenticate();
+        $userId = (int)$auth['user_id'];
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $eventType = $body['event_type'] ?? 'unknown';
+        $logLevel  = $body['log_level'] ?? 'info';
+        $message   = $body['message'] ?? null;
+        $details   = isset($body['details']) ? json_encode($body['details']) : null;
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+
+        try {
+            $this->pdo->prepare(
+                "INSERT INTO webrtc_logs (call_id, user_id, event_type, log_level, message, details, ip_address, user_agent, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"
+            )->execute([
+                $callId,
+                $userId,
+                $eventType,
+                $logLevel,
+                $message,
+                $details,
+                $ipAddress,
+                $userAgent
+            ]);
+
+            Response::success(null, 'Log recorded', 201);
+        } catch (\Throwable $e) {
+            error_log('WebRTC logging error: ' . $e->getMessage());
+            Response::error('Failed to record log', 'LOG_ERROR', 500);
+        }
+    }
 }

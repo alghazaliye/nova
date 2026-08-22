@@ -105,11 +105,13 @@ class CallService {
     // تتبع حالة ICE للتشخيص
     _pc!.onIceGatheringState = (state) {
       debugPrint('CallService: ICE gathering: $state');
+      logEvent('ice_gathering', details: {'state': state.toString()});
     };
 
     // استقبال الإشارات من الطرف الآخر
     _pc!.onTrack = (RTCTrackEvent event) {
       debugPrint('CallService: onTrack: ${event.track.kind}');
+      logEvent('track_added', details: {'kind': event.track.kind});
       if (event.streams.isNotEmpty) {
         final stream = event.streams.first;
         if (remoteRenderer.srcObject?.id != stream.id) {
@@ -123,6 +125,7 @@ class CallService {
     };
     _pc!.onAddStream = (MediaStream stream) {
       debugPrint('CallService: onAddStream: ${stream.id}');
+      logEvent('stream_added', details: {'stream_id': stream.id});
       if (remoteRenderer.srcObject?.id != stream.id) {
         remoteRenderer.srcObject = stream;
         Timer(const Duration(milliseconds: 500), () {
@@ -144,17 +147,24 @@ class CallService {
 
     _pc!.onConnectionState = (state) {
       debugPrint('CallService: Connection state changed to $state');
+      logEvent('connection_state', details: {'state': state.toString()});
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         // Force a final resize check when connected to ensure video displays
         Timer(const Duration(seconds: 1), () {
           remoteRenderer.onResize?.call();
           localRenderer.onResize?.call();
         });
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        logEvent('connection_failed', level: 'error', message: 'WebRTC connection failed');
       }
     };
 
     _pc!.onIceConnectionState = (RTCIceConnectionState state) {
       debugPrint('CallService: ICE $state');
+      logEvent('ice_connection', details: {'state': state.toString()});
+      if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        logEvent('ice_failed', level: 'error', message: 'ICE connection failed - possible TURN issue');
+      }
     };
 
     _startSignalPolling();
@@ -265,6 +275,22 @@ class CallService {
       }
     } catch (e) {
       debugPrint('CallService: فشل إرسال إشارة $type: $e');
+      logEvent('signal_error', level: 'error', message: 'Failed to send $type', details: {'error': e.toString()});
+    }
+  }
+
+  /// إرسال سجل مخصص إلى الخادم للمراقبة
+  Future<void> logEvent(String type, {String level = 'info', String? message, Map<String, dynamic>? details}) async {
+    if (_callId == null || ApiService.token == null) return;
+    try {
+      await ApiService.post('/calls/$_callId/log', body: {
+        'event_type': type,
+        'log_level': level,
+        'message': message,
+        'details': details,
+      });
+    } catch (e) {
+      debugPrint('CallService: فشل إرسال السجل: $e');
     }
   }
 

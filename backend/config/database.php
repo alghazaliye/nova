@@ -393,12 +393,24 @@ class Database
   PRIMARY KEY (conversation_id, user_id)
 )",
             'otp_rate_limits' => "CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
-  `phone` varchar(50) NOT NULL PRIMARY KEY,
-  `last_attempt_at` datetime NOT NULL,
-  `attempts_count` integer NOT NULL DEFAULT 1,
-  `resend_count` integer NOT NULL DEFAULT 0,
-  `cooldown_until` datetime DEFAULT NULL
-)",
+	  `phone` varchar(50) NOT NULL PRIMARY KEY,
+	  `last_attempt_at` datetime NOT NULL,
+	  `attempts_count` integer NOT NULL DEFAULT 1,
+	  `resend_count` integer NOT NULL DEFAULT 0,
+	  `cooldown_until` datetime DEFAULT NULL
+	)",
+            'webrtc_logs' => "CREATE TABLE IF NOT EXISTS `webrtc_logs` (
+	  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+	  `call_id` integer NOT NULL,
+	  `user_id` integer NOT NULL,
+	  `event_type` varchar(50) NOT NULL,
+	  `log_level` varchar(20) NOT NULL DEFAULT 'info',
+	  `message` text DEFAULT NULL,
+	  `details` text DEFAULT NULL,
+	  `ip_address` varchar(45) DEFAULT NULL,
+	  `user_agent` text DEFAULT NULL,
+	  `created_at` datetime NOT NULL DEFAULT current_timestamp
+	)",
         ];
         foreach ($tables as $table => $ddl) {
             try {
