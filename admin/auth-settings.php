@@ -224,10 +224,7 @@ $API = '/api/v1/admin/auth';
         <input type="checkbox" id="loginEmail">
         <div class="toggle-label">البريد الإلكتروني (كلمة مرور)</div>
       </label>
-      <label class="auth-toggle">
-        <input type="checkbox" id="loginUsername">
-        <div class="toggle-label">اسم المستخدم (كلمة مرور)</div>
-      </label>
+<!-- خيار اسم المستخدم معطل لتوحيد النظام -->
     </div>
   </div>
 
@@ -346,7 +343,7 @@ async function loadSettings() {
     const w = j.warnings || [];
     if (w.length) showAlert('تنبيهات: ' + w.join(' — '), 'success');
     setCb('regPhone', s.auth_phone_registration); setCb('regEmail', s.auth_email_registration);
-    setCb('loginPhone', s.auth_phone_login); setCb('loginEmail', s.auth_email_login); setCb('loginUsername', s.auth_username_login);
+    setCb('loginPhone', s.auth_phone_login); setCb('loginEmail', s.auth_email_login);
     setCb('otpPhoneEnabled', s.otp_phone_enabled);
     setSel('otpPhoneDelivery', s.otp_phone_delivery_mode || 'auto');
     setNum('otpPhoneExpiry', s.otp_phone_expiry_minutes ?? 5);
@@ -370,7 +367,7 @@ async function saveSettings() {
     auth_email_registration: document.getElementById('regEmail').checked ? '1' : '0',
     auth_phone_login: document.getElementById('loginPhone').checked ? '1' : '0',
     auth_email_login: document.getElementById('loginEmail').checked ? '1' : '0',
-    auth_username_login: document.getElementById('loginUsername').checked ? '1' : '0',
+    auth_username_login: '0',
     otp_phone_enabled: document.getElementById('otpPhoneEnabled').checked ? '1' : '0',
     otp_phone_delivery_mode: document.getElementById('otpPhoneDelivery').value,
     otp_phone_expiry_minutes: parseInt(document.getElementById('otpPhoneExpiry').value) || 5,

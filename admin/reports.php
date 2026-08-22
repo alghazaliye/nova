@@ -64,8 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasPermission($admin, 'reports.reso
 $detail = null;
 if (isset($_GET['id'])) {
     $detailStmt = $pdo->prepare(
-        "SELECT r.*, u1.name AS reporter_name, u1.phone AS reporter_phone, u1.username AS reporter_username,
-                u2.name AS reported_name, u2.phone AS reported_phone, u2.username AS reported_username, u2.is_blocked AS reported_blocked
+        "SELECT r.*, u1.name AS reporter_name, u1.phone AS reporter_phone,
+                u2.name AS reported_name, u2.phone AS reported_phone, u2.is_blocked AS reported_blocked
          FROM reports r
          JOIN users u1 ON u1.id = r.reporter_id
          JOIN users u2 ON u2.id = r.reported_user_id
