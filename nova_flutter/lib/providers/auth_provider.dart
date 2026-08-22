@@ -132,13 +132,45 @@ class AppSettings {
       );
 }
 
+/// معلومات حالة الحساب (محظور، معلق، إلخ)
+class AccountStatus {
+  final bool isBlocked;
+  final String? reason;
+  final String? suspendUntil;
+  final String type; // ACTIVE, BANNED, SUSPENDED
+
+  AccountStatus({
+    this.isBlocked = false,
+    this.reason,
+    this.suspendUntil,
+    this.type = 'ACTIVE',
+  });
+
+  factory AccountStatus.fromJson(Map<String, dynamic> j) => AccountStatus(
+        isBlocked: j['is_blocked'] == true || (j['is_blocked'] ?? 0) == 1,
+        reason: j['reason'],
+        suspendUntil: j['suspend_until'],
+        type: j['type'] ?? 'ACTIVE',
+      );
+}
+
 /// مزود حالة المصادقة والمستخدم الحالي
 class AuthProvider extends ChangeNotifier {
   NovaUser? _user;
   AppSettings? _appSettings;
   AuthConfig? _authConfig;
+  AccountStatus? _accountStatus;
   bool _loading = false;
   String? _error;
+
+  AuthProvider() {
+    // ربط معالج 401 العالمي
+    ApiService.onUnauthorized = (code, error) {
+      if (error == 'UNAUTHORIZED' || code == 401) {
+        logout(isForced: true, reason: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً');
+      }
+    };
+  }
 
   /// إعدادات المصادقة الديناميكية (طرق التسجيل/الدخول من لوحة الإدارة)
   AuthConfig? get authConfig => _authConfig;
@@ -167,6 +199,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   NovaUser? get user => _user;
+  AccountStatus? get accountStatus => _accountStatus;
 
   /// إعدادات التطبيق العامة (المكالمات/المجموعات/الحالات من لوحة التحكم)
   AppSettings? get appSettings => _appSettings;
@@ -515,15 +548,19 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
     final data = res['data'] as Map<String, dynamic>? ?? {};
-      final token = data['token'] as String?;
+    final token = data['token'] as String?;
     if (token != null) {
       _user = NovaUser.fromJson(Map<String, dynamic>.from(data['user'] ?? {}));
+      if (data['account_status'] != null) {
+        _accountStatus = AccountStatus.fromJson(Map<String, dynamic>.from(data['account_status']));
+      }
       await saveToken(token, userId: _user?.id);
-      // تسجيل الجهاز وجلب إعدادات التطبيق لا يجب أن يؤخّر الدخول:
-      // الطلبان بطيئان (حتى ~25 ثانية) وكانت بطأتهما تدفع المستخدم
-      // للضغط المزدوج على «تحقق» (فيظهر خطأ 400 رمز منتهٍ)
-      registerCurrentDevice().catchError((_) {});
-      fetchAppSettings().catchError((_) {});
+      
+      // إذا كان الحساب محظوراً، لا نقوم بتسجيل الجهاز أو جلب الإعدادات المحمية
+      if (_accountStatus == null || _accountStatus!.type == 'ACTIVE') {
+        registerCurrentDevice().catchError((_) {});
+        fetchAppSettings().catchError((_) {});
+      }
     }
     notifyListeners();
     return true;
@@ -593,12 +630,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool isForced = false, String? reason}) async {
     final token = ApiService.token;
     
     // 1. مسح البيانات محلياً فوراً لتحديث الواجهة ومنع أي طلبات إضافية بالتوكن القديم
     _user = null;
     _appSettings = null;
+    _accountStatus = null;
+    if (isForced) _forcedLogoutReason = reason;
     await clearToken();
     notifyListeners();
 

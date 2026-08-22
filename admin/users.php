@@ -143,37 +143,41 @@ include __DIR__ . '/includes/sidebar.php';
       <tr>
         <td>
           <div class="user">
-            <?php 
-              $avatarUrl = $u['avatar'];
-              if ($avatarUrl && !str_starts_with($avatarUrl, 'http')) {
-                  $avatarUrl = '/media/' . ltrim($avatarUrl, '/');
-              }
-            ?>
-            <?php if ($avatarUrl): ?>
-              <img src="<?= htmlspecialchars($avatarUrl) ?>" class="avatar" style="object-fit:cover; width:38px; height:38px; border-radius:10px;">
-            <?php else: ?>
-              <div class="avatar" style="width:38px; height:38px; border-radius:10px;"><?= mb_substr($u['name'], 0, 1) ?></div>
-            <?php endif; ?>
-            <div>
-              <b><?= htmlspecialchars($u['name']) ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb">✔</span><?php endif; ?></b>
-            </div>
+	            <?php 
+	              $avatarUrl = $u['avatar'];
+	              if ($avatarUrl && !str_starts_with($avatarUrl, 'http')) {
+	                  $avatarUrl = '/api/v1/media/' . ltrim($avatarUrl, '/');
+	              }
+	            ?>
+	            <?php if ($avatarUrl): ?>
+	              <img src="<?= htmlspecialchars($avatarUrl) ?>" class="avatar" style="object-fit:cover; width:38px; height:38px; border-radius:10px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+	              <div class="avatar" style="width:38px; height:38px; border-radius:10px; display:none;"><?= mb_substr($u['name'], 0, 1) ?></div>
+	            <?php else: ?>
+	              <div class="avatar" style="width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center;"><?= mb_substr($u['name'], 0, 1) ?></div>
+	            <?php endif; ?>
+	            <div>
+	              <b><?= htmlspecialchars($u['name']) ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb; margin-right:4px;" title="موثق">✔</span><?php endif; ?></b>
+	            </div>
           </div>
         </td>
         <td dir="ltr" style="text-align:right;"><code><?= htmlspecialchars($u['phone']) ?></code></td>
         <td style="text-align:center"><?= (int)$u['is_verified'] ? '<span style="color:#2563eb;font-weight:800">✔ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
         <td><?= $u['plan_name'] ? htmlspecialchars((string)$u['plan_name']) : '<span style="color:var(--muted)">مجاني</span>' ?></td>
         <td><?= (int)($u['active_devices'] ?? 0) ?><?= $u['plan_max_devices'] ? '/' . (int)$u['plan_max_devices'] : '' ?></td>
-        <td>
-          <?php if ($u['is_blocked']): ?>
-            <span class="status blocked">محظور</span>
-          <?php elseif ($u['is_online']): ?>
-            <span class="status online">نشط</span>
-          <?php else: ?>
-            <span class="status offline">أوفلاين</span>
-          <?php endif; ?>
-          <small style="display:block; font-size:10px; color:var(--muted); margin-top:4px;"><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></small>
-        </td>
-        <td><?= date('d/m/Y', strtotime($u['created_at'])) ?></td>
+	        <td style="vertical-align: middle;">
+	          <?php if ($u['is_blocked']): ?>
+	            <span class="status blocked">محظور</span>
+	          <?php elseif ($u['is_online']): ?>
+	            <span class="status online">نشط</span>
+	          <?php else: ?>
+	            <span class="status offline">أوفلاين</span>
+	          <?php endif; ?>
+	          <div style="font-size:10px; color:var(--muted); margin-top:4px; white-space:nowrap;"><?= $u['last_seen'] ? date('d/m H:i', strtotime($u['last_seen'])) : '—' ?></div>
+	        </td>
+	        <td style="vertical-align: middle; white-space:nowrap;">
+	          <div style="font-weight:600;"><?= date('d/m/Y', strtotime($u['created_at'])) ?></div>
+	          <div style="font-size:10px; color:var(--muted);"><?= date('H:i', strtotime($u['created_at'])) ?></div>
+	        </td>
         <td>
           <div style="display:flex; gap:5px; align-items:center;">
             <form method="POST" style="display:inline;">

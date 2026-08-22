@@ -371,20 +371,24 @@ class AdminController
     {
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $reason = isset($body['reason']) ? trim((string)$body['reason']) : '';
+        $attachment = isset($body['attachment']) ? trim((string)$body['attachment']) : null;
         if ($reason === '') {
             Response::validationError(['reason' => 'سبب الاعتراض مطلوب']);
         }
-        $stmt = $this->pdo->prepare('SELECT id, name, is_blocked FROM users WHERE id = ? LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT id, name, phone, email, is_blocked, status FROM users WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
         $user = $stmt->fetch();
         if (!$user) {
             Response::notFound('المستخدم غير موجود');
         }
         $contactValue = ($user['phone'] ?? '') ?: ($user['email'] ?? '');
+        $accountStatusAtSubmission = (int)$user['is_blocked'] ? 'BANNED' : 'SUSPENDED';
+        
         $stmt = $this->pdo->prepare(
-            'INSERT INTO user_appeals (user_id, contact_value, reason) VALUES (?, ?, ?)'
+            'INSERT INTO user_appeals (user_id, contact_value, reason, attachment, account_status_at_submission, status, updated_at) 
+             VALUES (?, ?, ?, ?, ?, "pending", datetime("now"))'
         );
-        $stmt->execute([$id, $contactValue ?: null, $reason]);
+        $stmt->execute([$id, $contactValue ?: null, $reason, $attachment, $accountStatusAtSubmission]);
         Response::success(['id' => (int)$this->pdo->lastInsertId()], 'تم تسجيل الاعتراض');
     }
 
@@ -428,20 +432,21 @@ class AdminController
         )->execute([$id, $planId, $expiresAt]);
 
         // Verification badge follows the plan
-        $this->pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$id]);
+        $isVerified = (int)($plan['enable_verification'] ?? 0);
+        $this->pdo->prepare('UPDATE users SET is_verified = ?, updated_at = datetime("now") WHERE id = ?')->execute([$isVerified, $id]);
 
         // Independent verification: if the plan enables verification, the badge
         // survives until verification_duration_days ends even after the
         // subscription expires. Otherwise it follows the subscription itself.
         $verifiedUntil = null;
-        if (!empty($plan['enable_verification']) && !empty($plan['verification_duration_days'])) {
+        if ($isVerified && !empty($plan['verification_duration_days'])) {
             $verifiedUntil = date('Y-m-d H:i:s', strtotime('+' . (int)$plan['verification_duration_days'] . ' days'));
-        } else {
+        } elseif ($isVerified) {
             $verifiedUntil = $expiresAt;
         }
         $this->pdo->prepare('UPDATE users SET verified_until = ? WHERE id = ?')->execute([$verifiedUntil, $id]);
 
-        Response::success(['verified_until' => $verifiedUntil], 'تم تفعيل الاشتراك وعلامة التحقق الزرقاء');
+        Response::success(['verified_until' => $verifiedUntil], 'تم تفعيل الاشتراك' . ($isVerified ? ' وعلامة التحقق الزرقاء' : ''));
     }
 
     // POST /api/v1/admin/subscriptions/{id}/cancel
@@ -459,9 +464,11 @@ class AdminController
         $this->pdo->prepare('UPDATE user_subscriptions SET status = "cancelled" WHERE id = ?')->execute([$id]);
 
         // If no other active subscription remains, remove the verification badge
-        $activeCount = (int)$this->pdo->prepare(
+        $activeStmt = $this->pdo->prepare(
             'SELECT COUNT(*) FROM user_subscriptions WHERE user_id = ? AND status = "active"'
-        )->executeQuery([$sub['user_id']])->fetchColumn();
+        );
+        $activeStmt->execute([$sub['user_id']]);
+        $activeCount = (int)$activeStmt->fetchColumn();
 
         if ($activeCount === 0) {
             $this->pdo->prepare('UPDATE users SET is_verified = 0, verified_until = NULL WHERE id = ?')->execute([$sub['user_id']]);

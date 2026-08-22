@@ -9,9 +9,10 @@ import '../utils/nova_ui.dart';
 import '../utils/nova_web_state.dart';
 import 'profile_screen.dart';
 import 'chats_screen.dart';
-import '../models/user_model.dart';
 import 'chat_screen.dart';
+import 'account_status_screen.dart';
 import '../services/api_service.dart';
+import '../models/user_model.dart';
 
 
 /// شاشة إدخال رمز التحقق OTP
@@ -184,6 +185,14 @@ class _OtpScreenState extends State<OtpScreen> {
     }
     if (!mounted) return;
     if (ok) {
+      final auth = context.read<AuthProvider>();
+      if (auth.accountStatus != null && auth.accountStatus!.isBlocked) {
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AccountStatusScreen()));
+        return;
+      }
+
       // فتح محادثة مباشرة عند وجود ?chat=<id> في الرابط (للاختبار السريع)
       final q = Uri.splitQueryString(Uri.parse(novaHref()).query);
       final chatId = int.tryParse(q['chat'] ?? '') ?? 0;

@@ -87,11 +87,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadChatTheme();
     // Polling: تحديث تلقائي للرسائل كل 3 ثوانٍ
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted && !_loading) _refreshSilent();
+      if (mounted && !_loading && ApiService.token != null) _refreshSilent();
     });
     // Keep direct deep-linked chats eligible to receive calls.
     _incomingCallTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (mounted) _pollIncomingCall();
+      if (mounted && ApiService.token != null) _pollIncomingCall();
     });
   }
 
@@ -345,6 +345,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       if (res['status_code'] == 401) {
         _pollTimer?.cancel();
+        _incomingCallTimer?.cancel();
         return;
       }
       if (res['success'] != true || res['data'] is! List) return;

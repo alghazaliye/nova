@@ -23,7 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "INSERT INTO user_subscriptions (user_id, plan_id, status, starts_at, expires_at)
                  VALUES (?, ?, 'active', datetime('now'), ?)"
             )->execute([$userId, $planId, $ends]);
-            $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
+            
+            // تحديث حالة التوثيق بناءً على الباقة والمدة
+            $plan = $pdo->prepare("SELECT enable_verification, verification_duration_days FROM plans WHERE id = ?");
+            $plan->execute([$planId]);
+            $planData = $plan->fetch();
+            
+            if ($planData && (int)$planData['enable_verification']) {
+                $vEnds = $ends; // افتراضياً تنتهي مع الاشتراك
+                if ((int)$planData['verification_duration_days'] > 0) {
+                    $vEnds = date('Y-m-d H:i:s', strtotime("+{$planData['verification_duration_days']} days"));
+                }
+                $pdo->prepare('UPDATE users SET is_verified = 1, verified_until = ? WHERE id = ?')->execute([$vEnds, $userId]);
+            } else {
+                $pdo->prepare('UPDATE users SET is_verified = 0, verified_until = NULL WHERE id = ?')->execute([$userId]);
+            }
             logAudit($admin, 'SUBSCRIPTION_ACTIVATE', 'user', $userId, "تفعيل اشتراك على الباقة #{$planId} — حساب مميز");
             $message = 'تم تفعيل الاشتراك وعلامة التحقق الزرقاء';
         } catch (\Throwable $e) { $error = 'خطأ: ' . $e->getMessage(); }
@@ -36,9 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $row = $stmt->fetch();
         $pdo->prepare('UPDATE user_subscriptions SET status = "cancelled" WHERE id = ?')->execute([$subId]);
         if ($row) {
-            $active = (int)$pdo->prepare('SELECT COUNT(*) FROM user_subscriptions WHERE user_id = ? AND status = "active"')->execute([$row['user_id']])->fetchColumn();
+            $stmtCount = $pdo->prepare('SELECT COUNT(*) FROM user_subscriptions WHERE user_id = ? AND status = "active"');
+            $stmtCount->execute([$row['user_id']]);
+            $active = (int)$stmtCount->fetchColumn();
+            
             if ($active === 0) {
-                $pdo->prepare('UPDATE users SET is_verified = 0 WHERE id = ?')->execute([$row['user_id']]);
+                $pdo->prepare('UPDATE users SET is_verified = 0, verified_until = NULL WHERE id = ?')->execute([$row['user_id']]);
             }
         }
         logAudit($admin, 'SUBSCRIPTION_CANCEL', 'subscription', $subId, 'إلغاء اشتراك مميز');

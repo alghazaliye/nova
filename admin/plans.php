@@ -71,7 +71,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              VALUES (?, ?, 'active', datetime('now'), ?)"
         );
         $stmt->execute([$userId, $planId, $ends]);
-        $pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([$userId]);
+        
+        // تحديث حالة التوثيق بناءً على الباقة والمدة
+        $plan = $pdo->prepare("SELECT enable_verification, verification_duration_days FROM plans WHERE id = ?");
+        $plan->execute([$planId]);
+        $planData = $plan->fetch();
+        
+        if ($planData && (int)$planData['enable_verification']) {
+            $vEnds = $ends; // تنتهي مع الاشتراك
+            if ((int)$planData['verification_duration_days'] > 0) {
+                $vEnds = date('Y-m-d H:i:s', strtotime("+{$planData['verification_duration_days']} days"));
+            }
+            $pdo->prepare('UPDATE users SET is_verified = 1, verified_until = ? WHERE id = ?')->execute([$vEnds, $userId]);
+        } else {
+            $pdo->prepare('UPDATE users SET is_verified = 0, verified_until = NULL WHERE id = ?')->execute([$userId]);
+        }
+        
         logAudit($admin, 'SUBSCRIPTION_ACTIVATE', 'user', $userId, "تفعيل اشتراك للمستخدم #{$userId} على الباقة #{$planId}");
         $message = 'تم تفعيل الاشتراك وعلامة التحقق الزرقاء';
     }
@@ -87,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cntStmt->execute([$row['user_id']]);
             $count = (int)$cntStmt->fetchColumn();
             if ($count === 0) {
-                $pdo->prepare('UPDATE users SET is_verified = 0 WHERE id = ?')->execute([$row['user_id']]);
+                $pdo->prepare('UPDATE users SET is_verified = 0, verified_until = NULL WHERE id = ?')->execute([$row['user_id']]);
             }
         }
         logAudit($admin, 'SUBSCRIPTION_CANCEL', 'subscription', $subId, "إلغاء اشتراك #{$subId}");

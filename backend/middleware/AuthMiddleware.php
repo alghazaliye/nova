@@ -76,7 +76,12 @@ class AuthMiddleware
         }
 
         if ($session['is_blocked']) {
-            Response::forbidden('تم حظر حسابك. يرجى التواصل مع الدعم الفني');
+            // Exception: Blocked users are allowed to access the appeals endpoints
+            $uri = $_SERVER['REQUEST_URI'] ?? '';
+            if (str_contains($uri, '/api/v1/appeals')) {
+                return $session;
+            }
+            Response::forbidden('تم حظر حسابك. يرجى التواصل مع الدعم الفني', 'ACCOUNT_BANNED');
         }
 
         // تحديث آخر ظهور للمستخدم تلقائياً عند كل طلب

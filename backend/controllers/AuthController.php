@@ -194,7 +194,8 @@ class AuthController
             $userId = (int)$user['id'];
             $uuid   = $user['uuid'];
 
-            // Global ban check BEFORE allowing any login
+            // Global ban check: Blocked users are allowed to log in ONLY to submit appeals.
+            // We issue a restricted session token that AuthMiddleware will handle.
             if ((int)$user['is_blocked']) {
                 $banStmt = $this->pdo->prepare(
                     'SELECT reason, suspend_until FROM user_bans
@@ -202,15 +203,11 @@ class AuthController
                 );
                 $banStmt->execute([$userId]);
                 $ban = $banStmt->fetch();
-                $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
-                // Temporary suspension: if suspend_until is set and not yet passed, show a clear message
-                if ($ban && !empty($ban['suspend_until']) && $ban['suspend_until'] > date('Y-m-d H:i:s')) {
-                    Response::forbidden(
-                        'هذا الحساب معلق مؤقتًا حتى ' . $ban['suspend_until'] . $reason .
-                        ' — يمكنك تقديم اعتراض بعد انتهاء التعليق أو التواصل مع الإدارة'
-                    );
-                }
-                Response::forbidden('تم حظر هذا الحساب' . $reason . ' — يمكنك تقديم اعتراض أو التواصل مع إدارة التطبيق');
+                
+                $isSuspended = $ban && !empty($ban['suspend_until']) && $ban['suspend_until'] > date('Y-m-d H:i:s');
+                
+                // We still proceed to issue a token, but the frontend will receive the account status.
+                // The actual blocking of other APIs is handled in AuthMiddleware.
             }
 
             // Update name if provided WITHOUT auto-verifying (verification is admin-controlled)
@@ -228,9 +225,27 @@ class AuthController
         $token    = $this->createSession($userId, $body['device_uuid'] ?? null, $body['fcm_token'] ?? null);
         $userData = $this->getUserById($userId);
 
+        // Check if user is blocked to inform the frontend
+        $isBlocked = (int)($userData['is_blocked'] ?? 0);
+        $banReason = null;
+        $suspendUntil = null;
+        if ($isBlocked) {
+            $banStmt = $this->pdo->prepare('SELECT reason, suspend_until FROM user_bans WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1');
+            $banStmt->execute([$userId]);
+            $ban = $banStmt->fetch();
+            $banReason = $ban['reason'] ?? null;
+            $suspendUntil = $ban['suspend_until'] ?? null;
+        }
+
         Response::success([
             'token' => $token,
             'user'  => $userData,
+            'account_status' => [
+                'is_blocked' => $isBlocked,
+                'reason' => $banReason,
+                'suspend_until' => $suspendUntil,
+                'type' => ($isBlocked && $suspendUntil && $suspendUntil > date('Y-m-d H:i:s')) ? 'SUSPENDED' : ($isBlocked ? 'BANNED' : 'ACTIVE')
+            ]
         ], 'تم تسجيل الدخول بنجاح');
     }
 
@@ -263,27 +278,8 @@ class AuthController
             Response::error('رقم الهاتف غير مسجل. يرجى إنشاء حساب جديد أولاً.', 'USER_NOT_FOUND', 404);
         }
 
-        // Blocked users cannot start a new login session at all
-        if ((int)$existing['is_blocked']) {
-            $banStmt = $this->pdo->prepare(
-                'SELECT reason, suspend_until FROM user_bans
-                 WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1'
-            );
-            $banStmt->execute([(int)$existing['id']]);
-            $ban = $banStmt->fetch();
-            $reason = ($ban && !empty($ban['reason'])) ? ': ' . $ban['reason'] : '';
-            if ($ban && !empty($ban['suspend_until']) && $ban['suspend_until'] > date('Y-m-d H:i:s')) {
-                Response::error(
-                    'هذا الحساب معلق مؤقتًا حتى ' . $ban['suspend_until'] . $reason
-                    . ' — يمكنك تقديم اعتراض أو التواصل مع الإدارة',
-                    'ACCOUNT_SUSPENDED', 403
-                );
-            }
-            Response::error(
-                'تم حظر هذا الحساب' . $reason . ' — يمكنك تقديم اعتراض أو التواصل مع إدارة التطبيق',
-                'ACCOUNT_BANNED', 403
-            );
-        }
+        // Blocked users are allowed to login (receive OTP) to access appeals.
+        // We no longer block them here. The restriction is applied at AuthMiddleware.
 
         // ---- New multi-provider OTP pipeline ----
         require_once __DIR__ . '/../otp/OtpProviderInterface.php';

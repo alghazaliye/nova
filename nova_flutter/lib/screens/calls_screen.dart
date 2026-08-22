@@ -25,9 +25,15 @@ class _CallsScreenState extends State<CallsScreen> {
   }
 
   Future<void> _load() async {
+    if (ApiService.token == null) return;
     setState(() => _loading = true);
     try {
       final res = await ApiService.get('/calls');
+      if (res['status_code'] == 401) {
+        // AuthProvider handles global redirect, just stop loading
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
       if (res['success'] == true && res['data'] is List) {
         setState(() {
           _calls = List<Map<String, dynamic>>.from(res['data'] as List);

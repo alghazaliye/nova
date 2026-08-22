@@ -15,8 +15,14 @@ class PaymentRequestsController
     public function __construct()
     {
         $this->pdo = Database::getInstance();
-        $session = AuthMiddleware::authenticate();
-        $this->userId = (int)$session['user_id'];
+        // Determine if this is a user-facing request or admin-facing request based on route
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
+        if (str_contains($uri, '/admin/')) {
+            // Admin authentication will be handled per-method via requireAdmin()
+        } else {
+            $session = AuthMiddleware::authenticate();
+            $this->userId = (int)$session['user_id'];
+        }
     }
 
     /** Require the caller to be an active admin (admin pages/routes) */
@@ -25,13 +31,31 @@ class PaymentRequestsController
         $authHeader = nova_get_auth_header() ?? '';
         $token = str_starts_with($authHeader, 'Bearer ') ? substr($authHeader, 7) : '';
         $payload = $token !== '' ? JwtHelper::verify($token) : null;
+        
         $isAdmin = $payload !== null
             && isset($payload['role']) && $payload['role'] === 'admin'
             && isset($payload['exp']) && (int)$payload['exp'] > time();
+            
+        if (!$isAdmin) {
+            // Also support session-bound user JWTs if the user is an admin
+            try {
+                $session = AuthMiddleware::authenticate();
+                $userId = (int)$session['user_id'];
+                $stmt = $this->pdo->prepare('SELECT id FROM admins WHERE id = ? AND is_active = 1 LIMIT 1');
+                $stmt->execute([$userId]);
+                if ($stmt->fetch()) {
+                    $isAdmin = true;
+                }
+            } catch (\Exception $e) {
+                // Not authenticated as user either
+            }
+        }
+        
         if (!$isAdmin) {
             Response::forbidden('هذه العمليات متاحة للمشرفين فقط');
         }
-        return (int)($payload['user_id'] ?? $payload['sub'] ?? 0);
+        
+        return $this->adminId();
     }
 
     // ============ User-facing ============
@@ -106,7 +130,7 @@ class PaymentRequestsController
         $ext = $mime === 'application/pdf' ? 'pdf' : ($mime === 'image/png' ? 'png' : ($mime === 'image/webp' ? 'webp' : 'jpg'));
         $fileName = 'receipt-' . $id . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
         if (!move_uploaded_file($files['tmp_name'], $dir . '/' . $fileName)) {
-            Response::serverError('فشل حفظ الإيصال');
+            Response::error('فشل حفظ الإيصال', 'UPLOAD_FAILED', 500);
         }
 
         $this->pdo->prepare('UPDATE payment_requests SET receipt_path = ? WHERE id = ?')
@@ -224,12 +248,15 @@ class PaymentRequestsController
              VALUES (?, ?, "active", datetime("now","localtime"), ?)'
         )->execute([(int)$row['user_id'], (int)$row['plan_id'], $expiresAt]);
 
-        $this->pdo->prepare('UPDATE users SET is_verified = 1 WHERE id = ?')->execute([(int)$row['user_id']]);
+        // Verification badge follows the plan
+        $isVerified = (int)($plan['enable_verification'] ?? 0);
+        $this->pdo->prepare('UPDATE users SET is_verified = ?, updated_at = datetime("now") WHERE id = ?')
+             ->execute([$isVerified, (int)$row['user_id']]);
 
         $verifiedUntil = null;
-        if (!empty($plan['enable_verification']) && !empty($plan['verification_duration_days'])) {
+        if ($isVerified && !empty($plan['verification_duration_days'])) {
             $verifiedUntil = date('Y-m-d H:i:s', strtotime('+' . (int)$plan['verification_duration_days'] . ' days'));
-        } else {
+        } elseif ($isVerified) {
             $verifiedUntil = $expiresAt;
         }
         $this->pdo->prepare('UPDATE users SET verified_until = ? WHERE id = ?')
@@ -287,7 +314,18 @@ class PaymentRequestsController
 
     private function adminId(): int
     {
-        $session = AuthMiddleware::authenticate();
-        return (int)$session['user_id'];
+        $authHeader = nova_get_auth_header() ?? '';
+        $token = str_starts_with($authHeader, 'Bearer ') ? substr($authHeader, 7) : '';
+        $payload = $token !== '' ? JwtHelper::verify($token) : null;
+        if ($payload !== null && isset($payload['role']) && $payload['role'] === 'admin') {
+            return (int)($payload['user_id'] ?? 0);
+        }
+        
+        try {
+            $session = AuthMiddleware::authenticate();
+            return (int)$session['user_id'];
+        } catch (\Exception $e) {
+            return 0;
+        }
     }
 }

@@ -99,25 +99,25 @@ include __DIR__ . '/includes/sidebar.php';
 
 <!-- حالة النظام الحية -->
 <div style="margin: 0 0 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; width: 100%;">
-    <div class="card" style="padding: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+    <div class="card panel" style="padding: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px;">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9; font-size: 14px;">قاعدة البيانات</h4>
-        <p style="font-size: 22px; font-weight: bold; margin: 0;">✓ متصل</p>
-        <small style="opacity: 0.8;">حجم: <?= number_format((float)$dbSize, 2) ?> MB</small>
+        <p style="font-size: 22px; font-weight: bold; margin: 0;">✓ متصلة</p>
+        <small style="opacity: 0.8; display: block; margin-top: 5px;">الحجم: <?= number_format((float)$dbSize, 2) ?> MB</small>
     </div>
-    <div class="card" style="padding: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none;">
+    <div class="card panel" style="padding: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; border-radius: 12px;">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9; font-size: 14px;">الخادم</h4>
         <p style="font-size: 22px; font-weight: bold; margin: 0;">✓ متشغل</p>
-        <small style="opacity: 0.8;">الحمل: <?= $systemHealth['server'] ?></small>
+        <small style="opacity: 0.8; display: block; margin-top: 5px;">الحمل: <?= $systemHealth['server'] ?></small>
     </div>
-    <div class="card" style="padding: 18px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border: none;">
+    <div class="card panel" style="padding: 18px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border: none; border-radius: 12px;">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9; font-size: 14px;">التخزين</h4>
         <p style="font-size: 22px; font-weight: bold; margin: 0;">✓ متاح</p>
-        <small style="opacity: 0.8;">الحرة: <?= $systemHealth['storage'] ?></small>
+        <small style="opacity: 0.8; display: block; margin-top: 5px;">المساحة: <?= $systemHealth['storage'] ?></small>
     </div>
-    <div class="card" style="padding: 18px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; border: none;">
+    <div class="card panel" style="padding: 18px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; border: none; border-radius: 12px;">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9; font-size: 14px;">الأخطاء</h4>
         <p style="font-size: 22px; font-weight: bold; margin: 0; color: #fff;"><?= $todayErrors ?></p>
-        <small style="opacity: 0.8;">اليوم: <?= $todayErrors ?> | الإجمالي: <?= $totalErrors ?></small>
+        <small style="opacity: 0.8; display: block; margin-top: 5px;">اليوم: <?= $todayErrors ?> | الإجمالي: <?= $totalErrors ?></small>
     </div>
 </div>
 

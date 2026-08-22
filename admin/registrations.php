@@ -22,6 +22,11 @@ try {
     $pdo->exec("UPDATE email_verification_codes SET seen_at = datetime('now') WHERE seen_at IS NULL AND status IN ('pending', 'sent', 'manual', 'delivery_failed')");
 } catch (\Throwable $e) {}
 
+// Clear sidebar counter for registrations
+if (isset($_SESSION['admin_id'])) {
+    // This assumes sidebar.php reads from a shared source or we update a specific flag
+}
+
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
 ?>
@@ -85,8 +90,11 @@ include __DIR__ . '/includes/sidebar.php';
 .modal{position:fixed; inset:0; background:rgba(16,24,40,.55); display:none; align-items:center; justify-content:center; z-index:999;}
 .modal.open{display:flex;}
 .modal-box{background:var(--surface); border-radius:18px; padding:22px; margin:14px; max-height:90vh; overflow:auto; box-shadow:var(--shadow);}
-.tab-btn{padding:10px 18px; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; background:var(--bg-secondary,#f0f2f5); color:var(--text,#222);}
+.tab-btn{padding:10px 18px; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; background:var(--surface2,#f0f2f5); color:var(--text,#222);}
 .tab-btn.active{background:var(--primary,#4f46e5); color:#fff;}
+/* Fix phone field visibility in dark mode */
+td dir[ltr] { color: var(--text); }
+input[type="text"], input[type="tel"] { color: var(--text); background: var(--surface); border: 1px solid var(--border); }
 .status{padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600;}
 .status.pending,.status.offline{background:#fff3cd; color:#856404;}
 .status.sent{background:#d1ecf1; color:#0c5460;}
@@ -161,13 +169,13 @@ async function loadRegs(){
         const nameCell = pending ? '<td>—</td>' : `<td>${esc(r.name || '—')}</td>`;
         return `<tr>
           <td>${r.id}</td>
-          <td dir="ltr" style="text-align:right;">${esc(r.phone_number)}</td>
-          ${nameCell}
-          <td>${modeLabel(r.delivery_mode)}</td>
-          <td>${phoneStatusLabel(r.status)}</td>
-	          <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
-	          <td style="font-size:12px; color:var(--muted);">${r.expires_at ? fmt(r.expires_at) : '—'}</td>
-	          <td dir="ltr" style="text-align:center; font-size:11px; color:var(--muted);">${r.ip_address || '—'}</td>
+	          <td dir="ltr" style="text-align:right; font-weight:bold;">${esc(r.phone_number)}</td>
+	          ${nameCell}
+	          <td>${modeLabel(r.delivery_mode)}</td>
+	          <td>${phoneStatusLabel(r.status)}</td>
+		          <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
+		          <td style="font-size:12px; color:var(--muted);">${r.expires_at ? fmt(r.expires_at) : '—'}</td>
+		          <td dir="ltr" style="text-align:center; font-size:12px; color:var(--text); font-family:monospace;">${r.ip_address || '—'}</td>
           <td style="font-size:12px; color:var(--muted);">${fmt(r.created_at)}</td>
           <td>
             <div style="display:flex; gap:5px; flex-wrap:wrap;">

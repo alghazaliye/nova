@@ -8,6 +8,7 @@ import 'screens/phone_screen.dart';
 import 'screens/otp_screen.dart';
 import 'screens/chats_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/account_status_screen.dart';
 import 'services/api_service.dart';
 import 'models/user_model.dart';
 import 'offline/network_detector.dart';
@@ -117,15 +118,19 @@ class _AppRouterState extends State<AppRouter> {
 
   void _onAuthChanged() {
     // إعادة توجيه فورية عند تسجيل خروج/دخول (بدون إعادة تحميل)
+    final auth = context.read<AuthProvider>();
     final token = AuthProvider.currentToken;
     if (_checked) {
-      // لا نُرجع إلى شاشة الدخول إذا كان المستخدم داخل شاشة OTP (رمز خاطئ أو انتهاء صلاحية):
-      // أي تغيير في حالة المصادقة (مثل حفظ رسالة خطأ) كان يُعيد التطبيق فورًا إلى صفحة الدخول
-      // ويُسقط شاشة التحقق — وهو سبب "الرمز لا يعمل ولا يدخل التطبيق"
       if (token == null && _target is! PhoneScreen && _target is! OtpScreen) {
         if (mounted) setState(() { _target = const PhoneScreen(); });
-      } else if (token != null && _target is PhoneScreen) {
-        if (mounted) setState(() { _target = const ChatsScreen(); });
+      } else if (token != null) {
+        if (auth.accountStatus != null && auth.accountStatus!.isBlocked) {
+          if (_target is! AccountStatusScreen) {
+            if (mounted) setState(() { _target = const AccountStatusScreen(); });
+          }
+        } else if (_target is PhoneScreen || _target is AccountStatusScreen) {
+          if (mounted) setState(() { _target = const ChatsScreen(); });
+        }
       }
     }
   }
@@ -232,12 +237,13 @@ class _AppRouterState extends State<AppRouter> {
       final ok = await context.read<AuthProvider>().fetchMe();
       if (!ok) {
         target = const PhoneScreen();
+      } else if (auth.accountStatus != null && auth.accountStatus!.isBlocked) {
+        target = const AccountStatusScreen();
       } else if (kIsWeb) {
         // فتح مباشر لمحادثة معينة عبر ?chat=<id> لأغراض الاختبار
         final chatId = Uri.parse(Uri.base.toString()).queryParameters['chat'];
         if (chatId != null) {
           target = _ChatByIdLoader(id: int.tryParse(chatId) ?? 0);
-          _onAuthChanged();
         } else {
           target = const ChatsScreen();
         }

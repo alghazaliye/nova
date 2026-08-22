@@ -211,9 +211,9 @@ class UserController
         // فلترة البحث، واستبعاد المستخدمين الذين حظرهم viewer أو حظروا viewer
         $isNumeric = preg_match('/^[0-9+\s\-()]+$/', $query) === 1 || str_starts_with($query, '+');
         $isEmail   = mb_strpos($query, '@') !== false;
+        $like      = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
         $nameCols  = ['name LIKE ?'];
         $params    = [$like];
-        $like      = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
 
         if ($isNumeric) {
             // تحسين البحث بالرقم: تنظيف المدخلات وتجربة عدة تنسيقات

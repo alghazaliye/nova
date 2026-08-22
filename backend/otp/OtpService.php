@@ -685,18 +685,18 @@ class OtpService
 
     public function getStats(string $day = ''): array
     {
-        $when = $day !== '' ? " AND DATE(o.created_at) = ?" : "";
+        $when = $day !== '' ? " AND strftime('%Y-%m-%d', o.created_at) = ?" : "";
         $params = $day !== '' ? [$day] : [];
 
         $stmt = $this->pdo->prepare(
             "SELECT
                 COUNT(*) AS total,
-SUM(CASE WHEN o.status = 'verified' THEN 1 ELSE 0 END) AS verified,
-	                SUM(CASE WHEN o.delivery_mode IN ('auto','auto_fallback') THEN 1 ELSE 0 END) AS auto_count,
-	                SUM(CASE WHEN o.delivery_mode = 'manual' OR o.status = 'manual' THEN 1 ELSE 0 END) AS manual_count,
-	                SUM(CASE WHEN o.status = 'delivery_failed' THEN 1 ELSE 0 END) AS failed,
-	                SUM(CASE WHEN o.status = 'expired' THEN 1 ELSE 0 END) AS expired,
-	                SUM(CASE WHEN o.status = 'blocked' THEN 1 ELSE 0 END) AS blocked
+                SUM(CASE WHEN o.status = 'verified' THEN 1 ELSE 0 END) AS verified,
+                SUM(CASE WHEN o.delivery_mode IN ('auto','auto_fallback') THEN 1 ELSE 0 END) AS auto_count,
+                SUM(CASE WHEN o.delivery_mode = 'manual' OR o.status = 'manual' THEN 1 ELSE 0 END) AS manual_count,
+                SUM(CASE WHEN o.status = 'delivery_failed' THEN 1 ELSE 0 END) AS failed,
+                SUM(CASE WHEN o.status = 'expired' THEN 1 ELSE 0 END) AS expired,
+                SUM(CASE WHEN o.status = 'blocked' THEN 1 ELSE 0 END) AS blocked
             FROM otp_verifications o WHERE 1=1 {$when}"
         );
         $stmt->execute($params);

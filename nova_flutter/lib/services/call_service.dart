@@ -43,6 +43,9 @@ class CallService {
     await localRenderer.initialize();
     await remoteRenderer.initialize();
 
+    // Removed widget-specific callbacks (mounted/setState) from service.
+    // CallScreen handles its own renderer listeners.
+    
     _pc = await createPeerConnection({
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
@@ -99,10 +102,13 @@ class CallService {
     _pc!.onTrack = (RTCTrackEvent event) {
       debugPrint('CallService: onTrack: ${event.track.kind}');
       if (event.streams.isNotEmpty) {
-        if (remoteRenderer.srcObject?.id != event.streams.first.id) {
-          remoteRenderer.srcObject = event.streams.first;
-          // في الويب، أحياناً نحتاج لتنبيه الـ renderer يدوياً
-          remoteRenderer.onResize?.call();
+        final stream = event.streams.first;
+        if (remoteRenderer.srcObject?.id != stream.id) {
+          remoteRenderer.srcObject = stream;
+          // إجبار المتصفح على إعادة رسم الفيديو لتجنب الشاشة السوداء
+          Timer(const Duration(milliseconds: 500), () {
+            remoteRenderer.onResize?.call();
+          });
         }
       }
     };
@@ -110,7 +116,9 @@ class CallService {
       debugPrint('CallService: onAddStream: ${stream.id}');
       if (remoteRenderer.srcObject?.id != stream.id) {
         remoteRenderer.srcObject = stream;
-        remoteRenderer.onResize?.call();
+        Timer(const Duration(milliseconds: 500), () {
+          remoteRenderer.onResize?.call();
+        });
       }
     };
 
@@ -121,6 +129,17 @@ class CallService {
           'candidate': candidate.candidate,
           'sdpMid': candidate.sdpMid,
           'sdpMLineIndex': candidate.sdpMLineIndex,
+        });
+      }
+    };
+
+    _pc!.onConnectionState = (state) {
+      debugPrint('CallService: Connection state changed to $state');
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        // Force a final resize check when connected to ensure video displays
+        Timer(const Duration(seconds: 1), () {
+          remoteRenderer.onResize?.call();
+          localRenderer.onResize?.call();
         });
       }
     };
@@ -202,6 +221,10 @@ class CallService {
       }
       try {
         if (type == 'offer' && data['sdp'] != null) {
+          if (_pc!.signalingState != RTCSignalingState.RTCSignalingStateStable) {
+            debugPrint('CallService: Skipping offer in state ${_pc!.signalingState}');
+            continue;
+          }
           await _pc!.setRemoteDescription(
               RTCSessionDescription(data['sdp'], data['type'] ?? 'offer'));
         } else if (type == 'answer' && data['sdp'] != null) {
@@ -271,9 +294,11 @@ class CallService {
         }
         try {
           if (type == 'offer' && data['sdp'] != null) {
+            if (_pc!.signalingState != RTCSignalingState.RTCSignalingStateStable) continue;
             await _pc!.setRemoteDescription(
                 RTCSessionDescription(data['sdp'], data['type'] ?? 'offer'));
           } else if (type == 'answer' && data['sdp'] != null) {
+            if (_pc!.signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) continue;
             await _pc!.setRemoteDescription(
                 RTCSessionDescription(data['sdp'], data['type'] ?? 'answer'));
           } else if (type == 'candidate' && data['candidate'] != null) {

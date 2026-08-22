@@ -54,7 +54,7 @@ class OutboxService {
 
   /// Drain: process pending items when online and server reachable.
   static Future<void> drain() async {
-    if (_isDraining) return;
+    if (_isDraining || ApiService.token == null) return;
     _isDraining = true;
     try {
       final db = await LocalNovaDbProvider.db;

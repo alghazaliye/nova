@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../utils/nova_ui.dart';
 import 'web_login_screen.dart';
 import 'privacy_screen.dart';
+import 'subscriptions_screen.dart';
 import '../utils/avatar_picker.dart';
 import '../offline/network_detector.dart';
 import '../offline/media_store.dart';
@@ -278,6 +279,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 title: 'تعديل الملف الشخصي',
                                 subtitle: 'الاسم والبريد الإلكتروني',
                                 onTap: _updateProfile,
+                              ),
+                              RowItem(
+                                leading: _iconBox(icon: Icons.workspace_premium_outlined),
+                                title: 'الباقات والاشتراكات',
+                                subtitle: 'إدارة اشتراكك والحصول على التوثيق',
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const SubscriptionsScreen())),
                               ),
                               RowItem(
                                 leading: _iconBox(icon: Icons.devices),

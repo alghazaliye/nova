@@ -173,17 +173,27 @@ class Database
             'email_verification_codes' => [
                 'seen_at' => 'DATETIME DEFAULT NULL',
             ],
-            'payment_requests' => [
-                'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
-                'user_id'                => 'INTEGER NOT NULL',
-                'plan_id'                => 'INTEGER NOT NULL',
-                'status'                 => "TEXT NOT NULL DEFAULT 'pending'",
-                'receipt_path'           => 'TEXT DEFAULT NULL',
-                'admin_note'             => 'TEXT DEFAULT NULL',
-                'reviewed_by'            => 'INTEGER DEFAULT NULL',
-                'reviewed_at'            => 'DATETIME DEFAULT NULL',
-                'created_at'             => 'DATETIME NOT NULL DEFAULT current_timestamp',
-            ],
+	            'payment_requests' => [
+	                'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
+	                'user_id'                => 'INTEGER NOT NULL',
+	                'plan_id'                => 'INTEGER NOT NULL',
+	                'status'                 => "TEXT NOT NULL DEFAULT 'pending'",
+	                'receipt_path'           => 'TEXT DEFAULT NULL',
+	                'admin_note'             => 'TEXT DEFAULT NULL',
+	                'reviewed_by'            => 'INTEGER DEFAULT NULL',
+	                'reviewed_at'            => 'DATETIME DEFAULT NULL',
+	                'created_at'             => 'DATETIME NOT NULL DEFAULT current_timestamp',
+	            ],
+	            'user_appeals' => [
+	                'attachment'                   => 'TEXT DEFAULT NULL',
+	                'account_status_at_submission' => 'TEXT DEFAULT NULL',
+	                'updated_at'                   => "DATETIME NOT NULL DEFAULT current_timestamp",
+	            ],
+	            'user_subscriptions' => [
+	                'payment_method' => 'TEXT DEFAULT NULL',
+	                'payment_id'     => 'TEXT DEFAULT NULL',
+	                'amount_paid'    => 'REAL DEFAULT NULL',
+	            ],
         ];
         // payment_requests is a whole table, not columns — create it separately
         $tableMigrations = [
@@ -298,17 +308,20 @@ class Database
   `unbanned_at` datetime DEFAULT NULL,
   `unbanned_by` integer DEFAULT NULL
 )",
-            'user_appeals' => "CREATE TABLE IF NOT EXISTS `user_appeals` (
-  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  `user_id` integer NOT NULL,
-  `contact_value` text DEFAULT NULL,
-  `reason` text NOT NULL,
-  `status` text NOT NULL DEFAULT 'pending',
-  `admin_note` text DEFAULT NULL,
-  `reviewed_by` integer DEFAULT NULL,
-  `reviewed_at` datetime DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp
-)",
+	            'user_appeals' => "CREATE TABLE IF NOT EXISTS `user_appeals` (
+	  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+	  `user_id` integer NOT NULL,
+	  `contact_value` text DEFAULT NULL,
+	  `reason` text NOT NULL,
+	  `attachment` text DEFAULT NULL,
+	  `account_status_at_submission` text DEFAULT NULL,
+	  `status` text NOT NULL DEFAULT 'pending',
+	  `admin_note` text DEFAULT NULL,
+	  `reviewed_by` integer DEFAULT NULL,
+	  `reviewed_at` datetime DEFAULT NULL,
+	  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+	  `updated_at` datetime NOT NULL DEFAULT current_timestamp
+	)",
             'report_attachments' => "CREATE TABLE IF NOT EXISTS `report_attachments` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `report_id` integer NOT NULL,

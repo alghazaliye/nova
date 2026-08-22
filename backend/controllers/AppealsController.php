@@ -48,6 +48,8 @@ class AppealsController
         $userId = $this->userId;
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $reason = isset($body['reason']) ? trim((string)$body['reason']) : '';
+        $attachment = isset($body['attachment']) ? trim((string)$body['attachment']) : null;
+        
         if ($reason === '' || mb_strlen($reason) < 5) {
             Response::validationError(['reason' => 'سبب الاعتراض مطلوب (5 أحرف على الأقل)']);
         }
@@ -56,12 +58,23 @@ class AppealsController
         }
 
         // A non-blocked user cannot appeal (nothing to appeal against)
+        // Note: 'status' column doesn't exist in users table. We use is_blocked + user_bans.suspend_until.
         $banStmt = $this->pdo->prepare('SELECT is_blocked FROM users WHERE id = ? LIMIT 1');
         $banStmt->execute([$userId]);
         $banRow = $banStmt->fetch();
-        if (!$banRow || !(int)$banRow['is_blocked']) {
+        
+        // Check if user is actually banned or suspended
+        $isBlocked = (int)($banRow['is_blocked'] ?? 0);
+        $suspendStmt = $this->pdo->prepare('SELECT suspend_until FROM user_bans WHERE user_id = ? AND unbanned_at IS NULL ORDER BY id DESC LIMIT 1');
+        $suspendStmt->execute([$userId]);
+        $susRow = $suspendStmt->fetch();
+        $isSuspended = $susRow && !empty($susRow['suspend_until']) && $susRow['suspend_until'] > date('Y-m-d H:i:s');
+
+        if (!$isBlocked && !$isSuspended) {
             Response::success(null, 'حسابك يعمل بشكل طبيعي، لا حاجة لاعتراض حاليًا');
         }
+        
+        $accountStatusAtSubmission = $isBlocked ? 'BANNED' : 'SUSPENDED';
 
         // Prevent duplicate pending appeals
         $dup = $this->pdo->prepare('SELECT id FROM user_appeals WHERE user_id = ? AND status = "pending" LIMIT 1');
@@ -73,9 +86,10 @@ class AppealsController
         $contactValue = (string)($user['phone'] ?? '') ?: (string)($user['email'] ?? '');
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO user_appeals (user_id, contact_value, reason, status) VALUES (?, ?, ?, "pending")'
+            'INSERT INTO user_appeals (user_id, contact_value, reason, attachment, account_status_at_submission, status, updated_at) 
+             VALUES (?, ?, ?, ?, ?, "pending", datetime("now"))'
         );
-        $stmt->execute([$userId, $contactValue ?: null, $reason]);
+        $stmt->execute([$userId, $contactValue ?: null, $reason, $attachment, $accountStatusAtSubmission]);
 
         Response::success(['id' => (int)$this->pdo->lastInsertId()], 'تم إرسال الاعتراض، سيتم مراجعته من قبل الإدارة');
     }
@@ -86,7 +100,7 @@ class AppealsController
         $this->assertUserActive();
         $userId = $this->userId;
         $stmt = $this->pdo->prepare(
-            'SELECT id, contact_value, reason, status, admin_note, reviewed_at, created_at
+            'SELECT id, contact_value, reason, attachment, account_status_at_submission, status, admin_note, reviewed_at, created_at, updated_at
              FROM user_appeals WHERE user_id = ? ORDER BY id DESC LIMIT 20'
         );
         $stmt->execute([$userId]);

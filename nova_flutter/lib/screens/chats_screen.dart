@@ -31,6 +31,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   int _index = 0;
   Timer? _incomingCallTimer;
   Timer? _activeCallTimer;
+  Timer? _contactsTimer;
   Map<String, dynamic>? _incomingCall;
   bool _incomingCallPolling = false;
   bool _activeCallPolling = false;
@@ -58,11 +59,11 @@ class _ChatsScreenState extends State<ChatsScreen> {
     // فحص المكالمات الواردة كل ثانيتين، بما في ذلك التحقق من انتهاء
     // المكالمة الحالية حتى لا تبقى نافذة الرنين ظاهرة بعد إغلاق المتصل.
     _incomingCallTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (mounted) _pollIncomingCall();
+      if (mounted && ApiService.token != null) _pollIncomingCall();
     });
     _pollIncomingCall();
     _activeCallTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted) _pollActiveCall();
+      if (mounted && ApiService.token != null) _pollActiveCall();
     });
   }
 
@@ -328,8 +329,14 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshSilent() async {
+    if (ApiService.token == null) return;
     try {
       final res = await ApiService.get('/conversations');
+      if (res['status_code'] == 401) {
+        _pollTimer?.cancel();
+        _heartbeatTimer?.cancel();
+        return;
+      }
       if (mounted && res['success'] == true && res['data'] is List) {
         final convs = (res['data'] as List)
             .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
@@ -1517,6 +1524,7 @@ class ContactsTab extends StatefulWidget {
 class _ContactsTabState extends State<ContactsTab> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
+  Timer? _contactsTimer;
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _newContacts = [];
   bool _loading = false;
@@ -1681,8 +1689,8 @@ class _ContactsTabState extends State<ContactsTab> {
     super.initState();
     _loadNewContacts();
     // تحديث دوري لجهات الاتصال الجديدة (آخر ظهور / متصل)
-    Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted) _loadNewContacts();
+    _contactsTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted && ApiService.token != null) _loadNewContacts();
     });
   }
 
@@ -1716,6 +1724,7 @@ class _ContactsTabState extends State<ContactsTab> {
 
   @override
   void dispose() {
+    _contactsTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }

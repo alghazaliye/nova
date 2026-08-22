@@ -51,6 +51,9 @@ class ApiService {
   static String? token;
   static int userId = 0;
 
+  /// Callback when a 401 Unauthorized is received globally
+  static Function(int statusCode, String? errorCode)? onUnauthorized;
+
   static final Map<String, String> _headers = {
     'Content-Type': 'application/json',
     'Accept-Language': 'ar',
@@ -123,16 +126,27 @@ class ApiService {
   static String getMediaUrl(String? path) => mediaUrl(path);
 
   static Map<String, dynamic> _decode(http.Response res) {
+    Map<String, dynamic> data;
     try {
-      final Map<String, dynamic> data = jsonDecode(res.body) as Map<String, dynamic>;
-      data['status_code'] = res.statusCode;
-      return data;
+      data = jsonDecode(res.body) as Map<String, dynamic>;
     } catch (_) {
-      return {
+      data = {
         'success': false,
         'message': res.body,
-        'status_code': res.statusCode,
       };
     }
+    data['status_code'] = res.statusCode;
+
+    // Global 401 handler: only trigger if we had a token (authenticated request)
+    // and the error code is UNAUTHORIZED (session expired/revoked)
+    // or status is 401. Note: ACCOUNT_BANNED (403) is handled by AuthProvider.
+    if (res.statusCode == 401 && token != null) {
+      final errorCode = data['error_code']?.toString();
+      if (onUnauthorized != null) {
+        onUnauthorized!(res.statusCode, errorCode);
+      }
+    }
+
+    return data;
   }
 }
