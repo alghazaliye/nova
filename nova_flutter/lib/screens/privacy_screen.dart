@@ -229,12 +229,13 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
 
     try {
       final res = await ApiService.post('/devices/link/authorize', body: {'session_uuid': uuid});
-      if (mounted) {
-        if (res['success'] == true) {
-          showToast(context, 'تم ربط الجهاز بنجاح');
-        } else {
-          showToast(context, res['message'] ?? 'فشل ربط الجهاز');
-        }
+      if (!mounted) return;
+      if (res['status_code'] == 401) return;
+      
+      if (res['success'] == true) {
+        showToast(context, 'تم ربط الجهاز بنجاح');
+      } else {
+        showToast(context, res['message'] ?? 'فشل ربط الجهاز');
       }
     } catch (_) {
       if (mounted) showToast(context, 'تعذر الاتصال بالخادم');

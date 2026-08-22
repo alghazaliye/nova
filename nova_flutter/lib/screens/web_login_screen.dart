@@ -38,6 +38,9 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
     setState(() => _loading = true);
     try {
       final res = await ApiService.get('/devices');
+      if (!mounted) return;
+      if (res['status_code'] == 401) return;
+      
       if (res['success'] == true) {
         final data = Map<String, dynamic>.from(res['data'] ?? {});
         setState(() {
@@ -70,6 +73,10 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
     if (_linkUuid == null) return;
     try {
       final res = await ApiService.get('/devices/link/$_linkUuid');
+      if (res['status_code'] == 401) {
+        _pollTimer?.cancel();
+        return;
+      }
       if (res['success'] == true && res['data']['status'] == 'completed') {
         _pollTimer?.cancel();
         final token = res['data']['token'];
