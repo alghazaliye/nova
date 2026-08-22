@@ -22,11 +22,6 @@ try {
     $pdo->exec("UPDATE email_verification_codes SET seen_at = datetime('now') WHERE seen_at IS NULL AND status IN ('pending', 'sent', 'manual', 'delivery_failed')");
 } catch (\Throwable $e) {}
 
-// Clear sidebar counter for registrations
-if (isset($_SESSION['admin_id'])) {
-    // This assumes sidebar.php reads from a shared source or we update a specific flag
-}
-
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
 ?>
@@ -162,25 +157,29 @@ async function loadRegs(){
       document.getElementById('statFailed').textContent = statFrom('expired') + statFrom('blocked') + statFrom('delivery_failed');
       if (regs.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:24px;">لا توجد طلبات.</td></tr>'; return; }
       tbody.innerHTML = regs.map(r => {
-        const pending = ['pending','sent','manual','delivery_failed'].includes(r.status);
-        // عرض الرمز متاح لأي طلب نشط (معلق / مُرسل / يدوي / فشل التسليم) سواء كان التسليم تلقائيًا أو يدويًا
-        const canView = pending && (r.delivery_mode === 'manual' || r.delivery_mode === 'auto_fallback' || r.status === 'manual' || r.status === 'sent' || r.status === 'pending' || r.status === 'delivery_failed');
+        const isPending = ['pending','sent','manual','delivery_failed'].includes(r.status);
+        const isVerified = r.status === 'verified';
+        const isExpired = r.status === 'expired' || r.status === 'blocked' || r.status === 'cancelled';
+        
+        // عرض الرمز متاح فقط للطلبات النشطة التي لم يتم التحقق منها أو انتهاؤها
+        const canView = isPending && !isVerified && !isExpired;
         // الاسم يظهر فقط بعد إتمام التحقق بنجاح
-        const nameCell = pending ? '<td>—</td>' : `<td>${esc(r.name || '—')}</td>`;
+        const nameCell = isVerified ? `<td>${esc(r.name || '—')}</td>` : '<td>—</td>';
+        
         return `<tr>
           <td>${r.id}</td>
-	          <td dir="ltr" style="text-align:right; font-weight:bold;">${esc(r.phone_number)}</td>
-	          ${nameCell}
-	          <td>${modeLabel(r.delivery_mode)}</td>
-	          <td>${phoneStatusLabel(r.status)}</td>
-		          <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
-		          <td style="font-size:12px; color:var(--muted);">${r.expires_at ? fmt(r.expires_at) : '—'}</td>
-		          <td dir="ltr" style="text-align:center; font-size:12px; color:var(--text); font-family:monospace;">${r.ip_address || '—'}</td>
+          <td dir="ltr" style="text-align:right; font-weight:bold;">${esc(r.phone_number)}</td>
+          ${nameCell}
+          <td>${modeLabel(r.delivery_mode)}</td>
+          <td>${phoneStatusLabel(r.status)}</td>
+          <td>${r.attempts ?? 0}/${r.max_attempts ?? 5}</td>
+          <td style="font-size:12px; color:var(--muted);">${r.expires_at ? fmt(r.expires_at) : '—'}</td>
+          <td dir="ltr" style="text-align:center; font-size:12px; color:var(--text); font-family:monospace;">${r.ip_address || '—'}</td>
           <td style="font-size:12px; color:var(--muted);">${fmt(r.created_at)}</td>
           <td>
             <div style="display:flex; gap:5px; flex-wrap:wrap;">
-              ${pending ? `<button class="btn sm" onclick="viewPhoneCode(${r.id})" title="عرض الرمز">🔑 عرض الرمز</button>` : ''}
-              ${pending ? `<button class="btn danger sm" onclick="cancelPhone(${r.id})">✖ إلغاء</button>` : ''}
+              ${canView ? `<button class="btn sm" onclick="viewPhoneCode(${r.id})" title="عرض الرمز">🔑 عرض الرمز</button>` : ''}
+              ${isPending ? `<button class="btn danger sm" onclick="cancelPhone(${r.id})">✖ إلغاء</button>` : ''}
             </div>
           </td>
         </tr>`;
@@ -196,7 +195,8 @@ async function loadRegs(){
       document.getElementById('statFailed').textContent = stats.failed ?? '—';
       if (regs.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px;">لا توجد طلبات.</td></tr>'; return; }
       tbody.innerHTML = regs.map(x => {
-        const actions = ['pending', 'sent', 'manual', 'delivery_failed'].includes(x.status)
+        const canViewEmail = ['pending', 'sent', 'manual', 'delivery_failed'].includes(x.status) && x.status !== 'verified';
+        const actions = canViewEmail
           ? `<button class="btn small" onclick="viewEmailCode(${x.id})">عرض الرمز</button>`
           : '';
         return `<tr>
@@ -290,24 +290,27 @@ async function cancelPhone(id){
     const res = await fetch(OTP_API + '/' + id + '/cancel', {method: 'POST', headers: {'X-Admin-Auth': token()}});
     const j = await res.json();
     if (!res.ok) throw new Error(j.message || 'فشل الإلغاء');
-    await loadRegs();
+    loadRegs();
   } catch (e) { alert(e.message); }
 }
 
 async function cancelEmail(id){
   if (!confirm('إلغاء هذا الطلب؟')) return;
   try {
-    const res = await fetch(EMAIL_API + '/' + id + '/cancel', {method: 'POST', headers: {'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json'}, body: '{}'});
+    const res = await fetch(EMAIL_API + '/' + id + '/cancel', {method: 'POST', headers: {'Authorization': 'Bearer ' + token()}});
     const j = await res.json();
     if (!j.success) { alert(j.message || 'فشل الإلغاء'); return; }
-    await loadRegs();
+    loadRegs();
   } catch (e) { alert('خطأ اتصال'); }
 }
 
-// التواريخ في قاعدة البيانات UTC نصية بصيغة 'Y-m-d H:i:s' — نطبعها إلى UTC أولًا ثم نحولها للمنطقة الزمنية المعتمدة
-function fmt(d){ if(!d) return ''; try { const raw = String(d).trim(); const iso = (raw.length >= 19 && raw[10] === ' ' && !raw.includes('T') && !raw.endsWith('Z')) ? raw + 'Z' : raw; return new Date(iso).toLocaleString('ar-SA', {timeZone: window.NovaTZ || 'Asia/Riyadh', hour12:false}); } catch(e){ return new Date(d).toLocaleString('ar-SA', {hour12:false}); } }
-function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmt(d){ 
+  if(!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit'}) + ' ' + dt.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+}
 
-document.addEventListener('DOMContentLoaded', loadRegs);
+loadRegs();
 setInterval(loadRegs, 30000);
 </script>
