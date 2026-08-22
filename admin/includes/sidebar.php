@@ -31,8 +31,14 @@ try {
 
 $pendingRegistrations = 0;
 try {
-    $stmt = $pdo->query("SELECT COUNT(*) FROM otp_verifications WHERE status IN ('pending', 'sent', 'manual', 'delivery_failed')");
-    $pendingRegistrations = (int)$stmt->fetchColumn();
+    // Count both phone and email unread (seen_at IS NULL) and active registrations
+    $stmt1 = $pdo->query("SELECT COUNT(*) FROM otp_verifications WHERE seen_at IS NULL AND status IN ('pending', 'sent', 'manual', 'delivery_failed')");
+    $c1 = (int)$stmt1->fetchColumn();
+    
+    $stmt2 = $pdo->query("SELECT COUNT(*) FROM email_verification_codes WHERE seen_at IS NULL AND status IN ('pending', 'sent', 'manual', 'delivery_failed')");
+    $c2 = (int)$stmt2->fetchColumn();
+    
+    $pendingRegistrations = $c1 + $c2;
 } catch (\Throwable $e) {}
 
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');

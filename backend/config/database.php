@@ -167,6 +167,12 @@ class Database
                 'deleted_by'  => 'INTEGER DEFAULT NULL',
                 'views_count' => 'INTEGER NOT NULL DEFAULT 0',
             ],
+            'otp_verifications' => [
+                'seen_at' => 'DATETIME DEFAULT NULL',
+            ],
+            'email_verification_codes' => [
+                'seen_at' => 'DATETIME DEFAULT NULL',
+            ],
             'payment_requests' => [
                 'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
                 'user_id'                => 'INTEGER NOT NULL',

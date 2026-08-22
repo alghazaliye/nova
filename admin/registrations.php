@@ -15,6 +15,13 @@ requireAdminLogin();
 $pageTitle = 'طلبات التسجيل';
 $currentPage = 'registrations';
 
+// Mark all pending as seen when this page is opened
+try {
+    $pdo = getAdminDB();
+    $pdo->exec("UPDATE otp_verifications SET seen_at = datetime('now') WHERE seen_at IS NULL AND status IN ('pending', 'sent', 'manual', 'delivery_failed')");
+    $pdo->exec("UPDATE email_verification_codes SET seen_at = datetime('now') WHERE seen_at IS NULL AND status IN ('pending', 'sent', 'manual', 'delivery_failed')");
+} catch (\Throwable $e) {}
+
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
 ?>

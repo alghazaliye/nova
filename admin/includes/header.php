@@ -251,6 +251,9 @@
     [data-theme=dark] input, [data-theme=dark] select, [data-theme=dark] textarea { background: var(--surface2) !important; color: var(--text) !important; border-color: var(--line) !important; }
     [data-theme=dark] ::placeholder { color: var(--muted); opacity: 1; }
     [data-theme=dark] .card { background: var(--surface) !important; }
+    [data-theme=dark] code { background: var(--surface2) !important; color: var(--primary) !important; border: 1px solid var(--line); }
+    [data-theme=dark] .table td { color: var(--text); }
+    [data-theme=dark] .table tr:hover { background: rgba(255,255,255,0.05) !important; }
 
     .form-group { margin-bottom: 16px; }
     .form-label { display: block; font-size: 12px; font-weight: 800; margin-bottom: 6px; color: var(--muted); }

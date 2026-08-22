@@ -159,7 +159,7 @@ include __DIR__ . '/includes/sidebar.php';
             </div>
           </div>
         </td>
-        <td><?= htmlspecialchars($u['phone']) ?></td>
+        <td dir="ltr" style="text-align:right;"><code><?= htmlspecialchars($u['phone']) ?></code></td>
         <td style="text-align:center"><?= (int)$u['is_verified'] ? '<span style="color:#2563eb;font-weight:800">✔ موثق</span>' : '<span style="color:var(--muted)">—</span>' ?></td>
         <td><?= $u['plan_name'] ? htmlspecialchars((string)$u['plan_name']) : '<span style="color:var(--muted)">مجاني</span>' ?></td>
         <td><?= (int)($u['active_devices'] ?? 0) ?><?= $u['plan_max_devices'] ? '/' . (int)$u['plan_max_devices'] : '' ?></td>
