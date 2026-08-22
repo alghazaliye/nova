@@ -25,24 +25,24 @@ function statCount(PDO $pdo, string $sql, array $params = []): int {
 
 $totalUsers     = statCount($pdo, 'SELECT COUNT(*) FROM users');
 $onlineUsers    = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE is_online = 1');
-$todayMessages  = statCount($pdo, "SELECT COUNT(*) FROM messages WHERE date(created_at) = date('now')");
-$todayCalls     = statCount($pdo, "SELECT COUNT(*) FROM calls WHERE date(created_at) = date('now')");
+$todayMessages  = statCount($pdo, "SELECT COUNT(*) FROM messages WHERE date(created_at) = date('now', 'localtime')");
+$todayCalls     = statCount($pdo, "SELECT COUNT(*) FROM calls WHERE date(created_at) = date('now', 'localtime')");
 $verifiedUsers  = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE is_verified = 1');
 $blockedUsers   = statCount($pdo, 'SELECT COUNT(*) FROM users WHERE is_blocked = 1');
-$newUsersToday  = statCount($pdo, "SELECT COUNT(*) FROM users WHERE date(created_at) = date('now')");
+$newUsersToday  = statCount($pdo, "SELECT COUNT(*) FROM users WHERE date(created_at) = date('now', 'localtime')");
 $totalConversations = statCount($pdo, 'SELECT COUNT(*) FROM conversations');
 $totalStories   = statCount($pdo, 'SELECT COUNT(*) FROM stories');
-$todayStories   = statCount($pdo, "SELECT COUNT(*) FROM stories WHERE date(created_at) = date('now')");
+$todayStories   = statCount($pdo, "SELECT COUNT(*) FROM stories WHERE date(created_at) = date('now', 'localtime')");
 $totalErrors    = statCount($pdo, 'SELECT COUNT(*) FROM audit_logs WHERE action IN ("ERROR", "FAILED")');
-$todayErrors    = statCount($pdo, "SELECT COUNT(*) FROM audit_logs WHERE action IN ('ERROR', 'FAILED') AND date(created_at) = date('now')");
+$todayErrors    = statCount($pdo, "SELECT COUNT(*) FROM audit_logs WHERE action IN ('ERROR', 'FAILED') AND date(created_at) = date('now', 'localtime')");
 
 // Chart Data (Last 7 days)
 $sevenDaysAgo = date('Y-m-d H:i:s', time() - 7 * 86400);
 $stmt = $pdo->query(
-    "SELECT date(created_at) AS day, COUNT(*) AS cnt
+    "SELECT date(created_at, 'localtime') AS day, COUNT(*) AS cnt
      FROM messages
      WHERE created_at >= '{$sevenDaysAgo}'
-     GROUP BY date(created_at)
+     GROUP BY date(created_at, 'localtime')
      ORDER BY day ASC"
 );
 $chartData = $stmt->fetchAll();
@@ -100,7 +100,7 @@ include __DIR__ . '/includes/sidebar.php';
     <div class="card panel" style="padding: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9; font-size: 14px;">قاعدة البيانات</h4>
         <p style="font-size: 22px; font-weight: bold; margin: 0;">✓ متصلة</p>
-        <small style="opacity: 0.8; display: block; margin-top: 5px;">النوع: <?= strtoupper($_ENV['DB_TYPE'] ?? 'sqlite') ?> | الحجم: <?= number_format((float)$dbSize, 2) ?> MB</small>
+        <small style="opacity: 0.8; display: block; margin-top: 5px;">النوع: <?= strtoupper(Database::getType()) ?> | الحجم: <?= number_format((float)$dbSize, 2) ?> MB</small>
     </div>
     <div class="card panel" style="padding: 18px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15);">
         <h4 style="margin: 0 0 10px 0; opacity: 0.9; font-size: 14px;">الخادم</h4>

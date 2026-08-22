@@ -33,7 +33,7 @@ if ($response) {
 }
 curl_close($ch);
 
-$db_type = $_ENV['DB_TYPE'] ?? 'sqlite';
+$db_type = $api_status['data']['database']['type'] ?? $_ENV['DB_TYPE'] ?? 'sqlite';
 $error_logs = $pdo->query(
     'SELECT * FROM audit_logs WHERE action IN ("ERROR", "FAILED", "WARNING") ORDER BY created_at DESC LIMIT 15'
 )->fetchAll() ?: [];

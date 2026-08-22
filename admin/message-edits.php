@@ -12,7 +12,12 @@ if ($q !== '') {
 }
 // The message_edits table is not part of the deployed schema yet:
 // show an empty state instead of a fatal error when visiting this page.
-$tableExists = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_edits'")->fetchColumn();
+// Check table existence compatibly for SQLite/Turso
+$tableExists = false;
+try {
+    $pdo->query("SELECT 1 FROM message_edits LIMIT 1");
+    $tableExists = true;
+} catch (Exception $e) {}
 $rows = [];
 if ($tableExists) {
     $stmt = $pdo->prepare(

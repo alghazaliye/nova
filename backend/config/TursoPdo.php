@@ -36,12 +36,19 @@ class TursoPdo
         return (int)($result['rows_affected'] ?? 0);
     }
 
-    public function query(string $query): TursoStatement
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): TursoStatement
     {
         $sql = $this->adaptSql($query);
         $stmt = new TursoStatement($this, $this->client, $sql);
         $stmt->execute();
         return $stmt;
+    }
+
+    public function fetchColumn(string $query, array $params = [], int $column = 0): mixed
+    {
+        $stmt = $this->prepare($query);
+        $stmt->execute($params);
+        return $stmt->fetchColumn($column);
     }
 
     public function lastInsertId(?string $name = null): string
@@ -87,6 +94,11 @@ class TursoPdo
     {
         $this->options[$attribute] = $value;
         return true;
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return $this->options[$attribute] ?? null;
     }
 
     private function adaptSql(string $sql): string
@@ -191,7 +203,8 @@ class TursoStatement
     public function fetchColumn(int $column = 0): mixed
     {
         $row = $this->fetch(PDO::FETCH_NUM);
-        return $row !== false ? ($row[$column] ?? null) : false;
+        if ($row === false) return false;
+        return $row[$column] ?? null;
     }
 
     public function fetchAll(int $mode = PDO::FETCH_ASSOC): array
@@ -206,5 +219,15 @@ class TursoStatement
     public function rowCount(): int
     {
         return (int)($this->result['rows_affected'] ?? 0);
+    }
+
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        return true;
+    }
+
+    public function errorInfo(): array
+    {
+        return ['00000', null, null];
     }
 }
