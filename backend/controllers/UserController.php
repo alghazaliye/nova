@@ -185,7 +185,7 @@ class UserController
         }
 
         // فلترة البحث بحسب إعدادات find_by_* لصاحب الحساب، واستبعاد المستخدمين الذين حظرهم viewer أو حظروا viewer
-        $isNumeric = preg_match('/^[0-9+\s\-()]+$/', $query) === 1;
+        $isNumeric = preg_match('/^[0-9+\s\-()]+$/', $query) === 1 || str_starts_with($query, '+');
         $isEmail   = mb_strpos($query, '@') !== false;
         $nameCols  = ['name LIKE ?', 'username LIKE ?'];
         $params    = [];
@@ -194,31 +194,25 @@ class UserController
         if ($isNumeric) {
             // تحسين البحث بالرقم: تنظيف المدخلات وتجربة عدة تنسيقات
             $cleanPhone = preg_replace('/[^0-9]/', '', $query);
-            $formattedPhone = $cleanPhone;
             
             // إذا كان الرقم يبدأ بـ 7 أو 07 وهو 9 أو 10 أرقام، فهو رقم يمني أو سعودي محلي
             $localPhone = ltrim($cleanPhone, '0');
+            
+            $variants = [$cleanPhone, $localPhone];
             if (strlen($localPhone) === 9) {
-                // تجربة كود السعودية واليمن (حسب ما هو شائع في التطبيق)
-                $variants = [
-                    '+966' . $localPhone,
-                    '+967' . $localPhone,
-                    '0' . $localPhone
-                ];
-            } else {
-                $variants = [$cleanPhone, '+' . $cleanPhone];
+                $variants[] = '+966' . $localPhone;
+                $variants[] = '+967' . $localPhone;
+                $variants[] = '0' . $localPhone;
             }
             
-            $nameCols = ['name LIKE ?', 'phone LIKE ?'];
+            $nameCols = ['name LIKE ?', 'username LIKE ?'];
             $params = [$like, $like];
             
-            foreach ($variants as $v) {
+            foreach (array_unique($variants) as $v) {
+                if (empty($v)) continue;
                 $nameCols[] = 'phone LIKE ?';
                 $params[] = '%' . $v . '%';
             }
-            // إضافة البحث بالرقم الخام بدون أي رموز
-            $nameCols[] = 'phone LIKE ?';
-            $params[] = '%' . $localPhone . '%';
         } elseif ($isEmail) {
             $nameCols = ['name LIKE ?', 'email LIKE ?'];
             $params = [$like, $like];

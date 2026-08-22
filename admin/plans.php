@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'toggle' && hasPermission($admin, 'plans.view')) {
         $planId = (int)$_POST['plan_id'];
-        $pdo->prepare('UPDATE plans SET is_active = IF(is_active = 1, 0, 1) WHERE id = ?')->execute([$planId]);
+        $pdo->prepare('UPDATE plans SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?')->execute([$planId]);
         logAudit($admin, 'PLAN_TOGGLE', 'plan', $planId, "تبديل حالة الباقة #{$planId}");
         $message = 'تم تغيير حالة الباقة';
     }

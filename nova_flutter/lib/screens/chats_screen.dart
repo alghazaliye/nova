@@ -1543,6 +1543,7 @@ class ContactsTab extends StatefulWidget {
 
 class _ContactsTabState extends State<ContactsTab> {
   final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _newContacts = [];
   bool _loading = false;
@@ -1862,7 +1863,10 @@ class _ContactsTabState extends State<ContactsTab> {
                   child: TextField(
                     controller: _searchCtrl,
                     onChanged: (v) {
-                      if (v.trim().length >= 2) _search(v);
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 500), () {
+                        if (v.trim().length >= 2) _search(v);
+                      });
                     },
                     onSubmitted: _search,
                     decoration: InputDecoration(
