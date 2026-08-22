@@ -55,6 +55,11 @@ function getAdminDB(): PDO
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
+            // Ensure SQLite foreign keys are enabled (matches backend behavior)
+            if ($dbType === 'sqlite') {
+                $pdo->exec("PRAGMA foreign_keys = ON");
+                $pdo->exec("PRAGMA journal_mode = WAL");
+            }
         } else {
             $dsn = sprintf(
                 'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',

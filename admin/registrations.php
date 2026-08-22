@@ -168,7 +168,7 @@ async function loadRegs(){
         
         return `<tr>
           <td>${r.id}</td>
-          <td dir="ltr" style="text-align:right; font-weight:bold;">${esc(r.phone_number)}</td>
+	<td dir="ltr" style="text-align:right; font-weight:bold; color:var(--text);">${esc(r.phone_number)}</td>
           ${nameCell}
           <td>${modeLabel(r.delivery_mode)}</td>
           <td>${phoneStatusLabel(r.status)}</td>

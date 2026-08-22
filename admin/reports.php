@@ -214,7 +214,7 @@ include __DIR__ . '/includes/sidebar.php';
       <div style="background:#f8f9fa;padding:12px;border-radius:8px;border:1px solid #e9ecef;margin-bottom:15px;">
         <b style="font-size:13px;color:#666;">الرسالة المبلغ عنها:</b><br>
         <small><b><?= htmlspecialchars($detail['message']['sender_name']) ?></b> · <?= htmlspecialchars($detail['message']['created_at']) ?></small>
-        <p style="margin:8px 0 0;padding:8px;background:white;border-radius:6px;"><?= htmlspecialchars($detail['message']['content'] ?? '(وسائط)') ?></p>
+	        <p style="margin:8px 0 0;padding:8px;background:white;border-radius:6px;"><?= htmlspecialchars($detail['message']['body'] ?? $detail['message']['content'] ?? '(وسائط)') ?></p>
       </div>
       <?php endif; ?>
       <?php if (!empty($detail['attachments'])): ?>
@@ -363,7 +363,7 @@ include __DIR__ . '/includes/sidebar.php';
 	                <b style="font-size:12px; color:var(--primary);">${msg.sender_name || 'مستخدم'}</b>
 	                <small style="color:#999; font-size:10px;">${msg.created_at}</small>
 	              </div>
-	              <div style="font-size:13px; color:var(--text);">${msg.content || (msg.file_id ? '[وسائط]' : '')}</div>
+		              <div style="font-size:13px; color:var(--text);">${msg.body || msg.content || (msg.file_id ? '[وسائط]' : '')}</div>
 	              ${isHighlight ? '<div style="font-size:9px; color:#856404; margin-top:4px; font-weight:bold;">⚠️ هذه هي الرسالة المبلغ عنها</div>' : ''}
 	            </div>
 	          `;

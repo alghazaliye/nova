@@ -264,15 +264,15 @@ include __DIR__ . '/includes/sidebar.php';
     <h3 style="margin-bottom: 20px; color: #333;">👥 حسابات المشرفين</h3>
     <table class="table" style="width: 100%; border-collapse: collapse;">
         <thead>
-            <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الاسم</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">اسم المستخدم</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">البريد</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الحالة</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">آخر دخول</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراءات</th>
-            </tr>
+	            <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الاسم</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">اسم المستخدم</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">البريد</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الحالة</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">آخر دخول</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراءات</th>
+	            </tr>
         </thead>
         <tbody>
             <?php foreach ($admins as $a): ?>
@@ -280,18 +280,23 @@ include __DIR__ . '/includes/sidebar.php';
                     <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
                     <td style="padding: 12px;"><code><?= htmlspecialchars($a['username'] ?: '-') ?></code></td>
                     <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
-                    <td style="padding: 12px;">
-                      <?php 
-                      $roleMap = [
-                          'Super Admin' => 'مدير خارق',
-                          'Admin' => 'مشرف',
-                          'Moderator' => 'مراقب',
-                          'Support' => 'دعم فني',
-                          'Analyst' => 'محلل بيانات'
-                      ]; 
-                      ?>
-                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
-                    </td>
+		                    <td style="padding: 12px;">
+		                      <?php 
+		                      $roleMap = [
+	                          'Super Admin' => 'مدير خارق',
+	                          'super_admin' => 'مدير خارق',
+	                          'Admin' => 'مشرف',
+	                          'admin' => 'مشرف',
+	                          'Moderator' => 'مراقب',
+	                          'moderator' => 'مراقب',
+	                          'Support' => 'دعم فني',
+	                          'support' => 'دعم فني',
+	                          'Analyst' => 'محلل بيانات',
+	                          'analyst' => 'محلل بيانات'
+	                      ]; 
+	                      ?>
+	                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
+	                    </td>
                     <td style="padding: 12px;">
                         <span style="padding: 5px 10px; border-radius: 12px; background: <?= $a['is_active'] ? '#d4edda' : '#f8d7da' ?>; color: <?= $a['is_active'] ? '#155724' : '#721c24' ?>; font-weight: bold; font-size: 11px;">
                             <?= $a['is_active'] ? '🟢 نشط' : '🔴 معطل' ?>

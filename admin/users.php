@@ -52,16 +52,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete' && hasPermission($admin, 'users.delete')) {
         $pdo->beginTransaction();
         try {
-            // Delete related data first (cascade simulation)
-            $pdo->prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?')->execute([$userId, $userId]);
-            $pdo->prepare('DELETE FROM conversations WHERE user_one = ? OR user_two = ?')->execute([$userId, $userId]);
+            // Explicitly delete data that might not cascade correctly or needs manual cleanup
+            // Note: Many tables have ON DELETE CASCADE in the schema, but we ensure full cleanup here.
+            
+            // 1. Delete notifications and logs
+            $pdo->prepare('DELETE FROM notifications WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM audit_logs WHERE (entity_type = "user" AND entity_id = ?) OR (admin_id = 0 AND entity_id = ?)')->execute([$userId, $userId]);
+            
+            // 2. Delete social/interaction data
+            $pdo->prepare('DELETE FROM contacts WHERE user_id = ? OR contact_user_id = ?')->execute([$userId, $userId]);
+            $pdo->prepare('DELETE FROM blocks WHERE user_id = ? OR blocked_user_id = ?')->execute([$userId, $userId]);
+            $pdo->prepare('DELETE FROM typing_status WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM message_reads WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM message_reactions WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM message_deletions WHERE deleted_by = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM message_edits WHERE user_id = ?')->execute([$userId]);
+            
+            // 3. Delete reports and appeals
+            $pdo->prepare('DELETE FROM reports WHERE reporter_id = ? OR reported_user_id = ?')->execute([$userId, $userId]);
+            $pdo->prepare('DELETE FROM user_appeals WHERE user_id = ?')->execute([$userId]);
+            
+            // 4. Delete attachments (files uploaded by user)
+            $pdo->prepare('DELETE FROM attachments WHERE uploader_id = ?')->execute([$userId]);
+            
+            // 5. Handle Conversations and Memberships
+            // Identify private conversations where this user is a member
+            $pdo->prepare('DELETE FROM conversation_members WHERE user_id = ?')->execute([$userId]);
+            // Orphan conversations (private ones with no members left) are usually handled by DB cleanup tasks, 
+            // but we can delete private ones created by this user if they have no other members.
+            $pdo->prepare('DELETE FROM conversations WHERE created_by = ? AND type = "private"')->execute([$userId]);
+            
+            // 6. Delete calls and participants
+            $pdo->prepare('DELETE FROM call_participants WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM calls WHERE caller_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM call_signals WHERE sender_id = ?')->execute([$userId]);
+            
+            // 7. Delete stories and views
+            $pdo->prepare('DELETE FROM story_views WHERE viewer_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM stories WHERE user_id = ?')->execute([$userId]);
+            
+            // 8. Delete auth/session data
             $pdo->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([$userId]);
             $pdo->prepare('DELETE FROM user_devices WHERE user_id = ?')->execute([$userId]);
             $pdo->prepare('DELETE FROM user_subscriptions WHERE user_id = ?')->execute([$userId]);
             $pdo->prepare('DELETE FROM user_bans WHERE user_id = ?')->execute([$userId]);
-            $pdo->prepare('DELETE FROM audit_logs WHERE admin_id = ? AND entity_type = "user" AND entity_id = ?')->execute([$admin['id'], $userId]);
+            $pdo->prepare('DELETE FROM otp_verifications WHERE phone_number IN (SELECT phone FROM users WHERE id = ?)')->execute([$userId]);
             
-            // Finally delete the user
+            // 9. Messages sent by user
+            $pdo->prepare('DELETE FROM messages WHERE sender_id = ?')->execute([$userId]);
+            
+            // Finally delete the user record
             $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
             
             $pdo->commit();

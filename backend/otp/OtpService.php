@@ -24,74 +24,15 @@ class OtpService
     public function __construct()
     {
         $this->pdo = Database::getInstance();
-        $this->ensureManualColumn();
     }
 
-    // ------------------------------------------------------------------
-    // Schema guard: additive manual-code column for manual delivery mode
-    // ------------------------------------------------------------------
-
-    private function ensureManualColumn(): void
+    /**
+     * Runtime schema health check - should only be called by migrations or setup,
+     * not on every request. Keeping it for reference but removing from constructor.
+     */
+    public function syncSchema(): void
     {
-        static $done = false;
-        if ($done) return;
-        $done = true;
-        
-        // 1) otp_verifications columns
-        try {
-            $this->pdo->exec("ALTER TABLE otp_verifications ADD COLUMN manual_code_hash VARCHAR(255) NULL");
-        } catch (Throwable $e) {}
-        try {
-            $this->pdo->exec("ALTER TABLE otp_verifications ADD COLUMN manual_code VARCHAR(16) NULL");
-        } catch (Throwable $e) {}
-
-        // 2) otp_rate_limits columns (Fix for Render schema drift)
-        try {
-            $tableExists = false;
-            try {
-                $stmt = $this->pdo->query("SELECT 1 FROM otp_rate_limits LIMIT 1");
-                if ($stmt !== false) $tableExists = true;
-            } catch (Throwable $e) {
-                $tableExists = false;
-            }
-
-            if ($tableExists) {
-                $stmt = $this->pdo->query("PRAGMA table_info(otp_rate_limits)");
-                $columns = $stmt->fetchAll(PDO::FETCH_COLUMN, 1);
-                
-                $requiredColumns = ['phone', 'last_attempt_at', 'attempts_count', 'resend_count', 'cooldown_until'];
-                $missing = false;
-                foreach ($requiredColumns as $col) {
-                    if (!in_array($col, $columns)) {
-                        $missing = true;
-                        break;
-                    }
-                }
-
-                if ($missing) {
-                    // Reset table to correct schema if any column is missing
-                    $this->pdo->exec("DROP TABLE otp_rate_limits");
-                    $this->pdo->exec("CREATE TABLE otp_rate_limits (
-                        phone TEXT PRIMARY KEY,
-                        last_attempt_at DATETIME NOT NULL,
-                        attempts_count INTEGER NOT NULL DEFAULT 1,
-                        resend_count INTEGER NOT NULL DEFAULT 0,
-                        cooldown_until DATETIME DEFAULT NULL
-                    )");
-                }
-            } else {
-                // Table doesn't exist — create it
-                $this->pdo->exec("CREATE TABLE IF NOT EXISTS otp_rate_limits (
-                    phone TEXT PRIMARY KEY,
-                    last_attempt_at DATETIME NOT NULL,
-                    attempts_count INTEGER NOT NULL DEFAULT 1,
-                    resend_count INTEGER NOT NULL DEFAULT 0,
-                    cooldown_until DATETIME DEFAULT NULL
-                )");
-            }
-        } catch (Throwable $e) {
-            error_log("OTP Schema Migration failed: " . $e->getMessage());
-        }
+        // Handled by Database::migrateMissingTables() and migrateMissingColumns()
     }
 
     // ------------------------------------------------------------------

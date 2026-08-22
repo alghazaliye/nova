@@ -199,9 +199,11 @@ class Database
                 'deleted_by'  => 'INTEGER DEFAULT NULL',
                 'views_count' => 'INTEGER NOT NULL DEFAULT 0',
             ],
-            'otp_verifications' => [
-                'seen_at' => 'DATETIME DEFAULT NULL',
-            ],
+	            'otp_verifications' => [
+	                'seen_at'          => 'DATETIME DEFAULT NULL',
+	                'manual_code_hash' => 'VARCHAR(255) DEFAULT NULL',
+	                'manual_code'      => 'VARCHAR(50) DEFAULT NULL',
+	            ],
             'email_verification_codes' => [
                 'seen_at' => 'DATETIME DEFAULT NULL',
             ],
@@ -364,30 +366,34 @@ class Database
   `banned_at` datetime NOT NULL DEFAULT current_timestamp,
   `suspend_until` datetime DEFAULT NULL,
   `unbanned_at` datetime DEFAULT NULL,
-  `unbanned_by` integer DEFAULT NULL
+  `unbanned_by` integer DEFAULT NULL,
+  CONSTRAINT `fk_user_bans_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 )",
 	            'user_appeals' => "CREATE TABLE IF NOT EXISTS `user_appeals` (
+		  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+		  `user_id` integer NOT NULL,
+		  `contact_value` text DEFAULT NULL,
+		  `reason` text NOT NULL,
+		  `attachment` text DEFAULT NULL,
+		  `account_status_at_submission` text DEFAULT NULL,
+		  `status` text NOT NULL DEFAULT 'pending',
+		  `admin_note` text DEFAULT NULL,
+		  `reviewed_by` integer DEFAULT NULL,
+		  `reviewed_at` datetime DEFAULT NULL,
+		  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+		  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
+		  CONSTRAINT `fk_user_appeals_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+		)",
+	            'report_attachments' => "CREATE TABLE IF NOT EXISTS `report_attachments` (
 	  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-	  `user_id` integer NOT NULL,
-	  `contact_value` text DEFAULT NULL,
-	  `reason` text NOT NULL,
-	  `attachment` text DEFAULT NULL,
-	  `account_status_at_submission` text DEFAULT NULL,
-	  `status` text NOT NULL DEFAULT 'pending',
-	  `admin_note` text DEFAULT NULL,
-	  `reviewed_by` integer DEFAULT NULL,
-	  `reviewed_at` datetime DEFAULT NULL,
+	  `report_id` integer NOT NULL,
+	  `message_id` integer NOT NULL,
+	  `conversation_id` integer NOT NULL,
 	  `created_at` datetime NOT NULL DEFAULT current_timestamp,
-	  `updated_at` datetime NOT NULL DEFAULT current_timestamp
+	  UNIQUE (report_id, message_id),
+	  CONSTRAINT `fk_report_attachments_report` FOREIGN KEY (`report_id`) REFERENCES `reports` (`id`) ON DELETE CASCADE,
+	  CONSTRAINT `fk_report_attachments_message` FOREIGN KEY (`message_id`) REFERENCES `messages` (`id`) ON DELETE CASCADE
 	)",
-            'report_attachments' => "CREATE TABLE IF NOT EXISTS `report_attachments` (
-  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  `report_id` integer NOT NULL,
-  `message_id` integer NOT NULL,
-  `conversation_id` integer NOT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp,
-  UNIQUE (report_id, message_id)
-)",
             'audit_logs' => "CREATE TABLE IF NOT EXISTS `audit_logs` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `admin_id` integer NOT NULL,
@@ -399,34 +405,36 @@ class Database
   `user_agent` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp
 )",
-            'privacy_settings' => "CREATE TABLE IF NOT EXISTS `privacy_settings` (
-  `user_id` integer NOT NULL PRIMARY KEY,
-  `show_last_seen` integer DEFAULT 1,
-  `show_online_status` integer DEFAULT 1,
-  `show_read_receipts` integer DEFAULT 1,
-  `show_phone` integer DEFAULT 2,
-  `show_email` integer DEFAULT 2,
-  `show_avatar` integer DEFAULT 1,
-  `show_status_text` integer DEFAULT 1,
-  `messages_from` integer DEFAULT 1,
-  `calls_from` integer DEFAULT 1,
-  `groups_from` integer DEFAULT 1,
-  `find_by_phone` integer DEFAULT 1,
-  `find_by_email` integer DEFAULT 1,
-  `find_by_username` integer DEFAULT 1,
-  `display_identity` varchar(50) DEFAULT 'name_username',
-  `story_privacy` integer DEFAULT 1,
-  `allow_by_phone` integer DEFAULT 1,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp,
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp
-)",
-            'typing_status' => "CREATE TABLE IF NOT EXISTS `typing_status` (
-  `conversation_id` integer NOT NULL,
-  `user_id` integer NOT NULL,
-  `expires_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
-  PRIMARY KEY (conversation_id, user_id)
-)",
+	            'privacy_settings' => "CREATE TABLE IF NOT EXISTS `privacy_settings` (
+	  `user_id` integer NOT NULL PRIMARY KEY,
+	  `show_last_seen` integer DEFAULT 1,
+	  `show_online_status` integer DEFAULT 1,
+	  `show_read_receipts` integer DEFAULT 1,
+	  `show_phone` integer DEFAULT 2,
+	  `show_email` integer DEFAULT 2,
+	  `show_avatar` integer DEFAULT 1,
+	  `show_status_text` integer DEFAULT 1,
+	  `messages_from` integer DEFAULT 1,
+	  `calls_from` integer DEFAULT 1,
+	  `groups_from` integer DEFAULT 1,
+	  `find_by_phone` integer DEFAULT 1,
+	  `find_by_email` integer DEFAULT 1,
+	  `find_by_username` integer DEFAULT 1,
+	  `display_identity` varchar(50) DEFAULT 'name_username',
+	  `story_privacy` integer DEFAULT 1,
+	  `allow_by_phone` integer DEFAULT 1,
+	  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+	  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
+	  CONSTRAINT `fk_privacy_settings_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+	)",
+	            'typing_status' => "CREATE TABLE IF NOT EXISTS `typing_status` (
+	  `conversation_id` integer NOT NULL,
+	  `user_id` integer NOT NULL,
+	  `expires_at` datetime NOT NULL,
+	  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
+	  PRIMARY KEY (conversation_id, user_id),
+	  CONSTRAINT `fk_typing_status_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+	)",
 	            'otp_rate_limits' => "CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
 		  `phone` varchar(50) NOT NULL PRIMARY KEY,
 		  `last_attempt_at` datetime NOT NULL,
