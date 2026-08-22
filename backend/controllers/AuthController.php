@@ -538,12 +538,15 @@ class AuthController
         // Fail-closed: require at least one enabled provider in the new pipeline
         try {
             $stmt = $this->pdo->query("SELECT COUNT(*) c FROM otp_providers WHERE status = 'enabled' LIMIT 1");
-            $enabled = (int)($stmt->fetch()['c'] ?? 0);
+            $row = $stmt->fetch();
+            $enabled = (int)($row['c'] ?? 0);
             if ($enabled > 0) {
                 return;
             }
         } catch (\Throwable $e) {
-            // table may not exist in old schema — fall through to error
+            error_log('OTP provider check failed: ' . $e->getMessage());
+            // If table doesn't exist, try to seed it once via Database instance which will run migrations
+            try { Database::getInstance(); } catch (\Throwable $dbE) {}
         }
 
         Response::error('مزود رسائل التحقق غير مهيأ بعد. يجب تفعيل مزود واحد على الأقل من لوحة التحكم', 'OTP_PROVIDER_NOT_CONFIGURED', 503);

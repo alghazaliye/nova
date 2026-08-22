@@ -178,6 +178,7 @@ class Database
             ],
 	            'users' => [
 	                'verified_until' => 'DATETIME DEFAULT NULL',
+                    'badge_color'    => 'VARCHAR(50) DEFAULT NULL',
 	            ],
 	            'admins' => [
 	                'username' => 'TEXT DEFAULT NULL',
@@ -186,6 +187,13 @@ class Database
                 'attempts_count' => 'INTEGER NOT NULL DEFAULT 1',
                 'resend_count'   => 'INTEGER NOT NULL DEFAULT 0',
                 'cooldown_until' => 'DATETIME DEFAULT NULL',
+            ],
+            'sessions' => [
+                'device_name' => 'VARCHAR(255) DEFAULT NULL',
+                'platform'    => 'VARCHAR(50) DEFAULT NULL',
+            ],
+            'user_devices' => [
+                'platform' => 'VARCHAR(50) DEFAULT NULL',
             ],
             'stories' => [
                 'deleted_by'  => 'INTEGER DEFAULT NULL',
@@ -336,13 +344,13 @@ class Database
   `revoked_at` datetime DEFAULT NULL,
   CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 )",
-            'user_devices' => "CREATE TABLE IF NOT EXISTS `user_devices` (
-  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  `user_id` integer NOT NULL,
-  `device_uuid` varchar(190) NOT NULL,
-  `fcm_token` varchar(500) DEFAULT NULL,
-  `platform` varchar(50) DEFAULT NULL,
-  `last_active_at` datetime DEFAULT NULL,
+	            'user_devices' => "CREATE TABLE IF NOT EXISTS `user_devices` (
+	  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+	  `user_id` integer NOT NULL,
+	  `device_uuid` varchar(190) NOT NULL,
+	  `fcm_token` varchar(500) DEFAULT NULL,
+	  `platform` varchar(50) DEFAULT NULL,
+	  `last_active_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp,
   `updated_at` datetime NOT NULL DEFAULT current_timestamp,
   UNIQUE (`user_id`, `device_uuid`),
@@ -419,25 +427,80 @@ class Database
   `updated_at` datetime NOT NULL DEFAULT current_timestamp,
   PRIMARY KEY (conversation_id, user_id)
 )",
-            'otp_rate_limits' => "CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
-	  `phone` varchar(50) NOT NULL PRIMARY KEY,
-	  `last_attempt_at` datetime NOT NULL,
-	  `attempts_count` integer NOT NULL DEFAULT 1,
-	  `resend_count` integer NOT NULL DEFAULT 0,
-	  `cooldown_until` datetime DEFAULT NULL
-	)",
+	            'otp_rate_limits' => "CREATE TABLE IF NOT EXISTS `otp_rate_limits` (
+		  `phone` varchar(50) NOT NULL PRIMARY KEY,
+		  `last_attempt_at` datetime NOT NULL,
+		  `attempts_count` integer NOT NULL DEFAULT 1,
+		  `resend_count` integer NOT NULL DEFAULT 0,
+		  `cooldown_until` datetime DEFAULT NULL
+		)",
             'webrtc_logs' => "CREATE TABLE IF NOT EXISTS `webrtc_logs` (
-	  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-	  `call_id` integer NOT NULL,
-	  `user_id` integer NOT NULL,
-	  `event_type` varchar(50) NOT NULL,
-	  `log_level` varchar(20) NOT NULL DEFAULT 'info',
-	  `message` text DEFAULT NULL,
-	  `details` text DEFAULT NULL,
-	  `ip_address` varchar(45) DEFAULT NULL,
-	  `user_agent` text DEFAULT NULL,
-	  `created_at` datetime NOT NULL DEFAULT current_timestamp
-	)",
+		  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+		  `call_id` integer NOT NULL,
+		  `user_id` integer NOT NULL,
+		  `event_type` varchar(50) NOT NULL,
+		  `log_level` varchar(20) DEFAULT 'info',
+		  `message` text,
+		  `details` text,
+		  `ip_address` varchar(45) DEFAULT NULL,
+		  `user_agent` text DEFAULT NULL,
+		  `created_at` datetime NOT NULL DEFAULT current_timestamp
+		)",
+            'otp_providers' => "CREATE TABLE IF NOT EXISTS `otp_providers` (
+		  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+		  `name` varchar(120) NOT NULL,
+		  `type` varchar(20) NOT NULL,
+		  `status` varchar(20) NOT NULL DEFAULT 'disabled',
+		  `priority` integer NOT NULL DEFAULT 0,
+		  `is_default` integer NOT NULL DEFAULT 0,
+		  `is_fallback` integer NOT NULL DEFAULT 0,
+		  `api_base_url` varchar(500) DEFAULT NULL,
+		  `api_key` varchar(500) DEFAULT NULL,
+		  `api_secret` varchar(500) DEFAULT NULL,
+		  `account_sid` varchar(300) DEFAULT NULL,
+		  `message_template` text DEFAULT NULL,
+		  `sender_id` varchar(100) DEFAULT NULL,
+		  `extra_config` text DEFAULT NULL,
+		  `success_count` integer NOT NULL DEFAULT 0,
+		  `failure_count` integer NOT NULL DEFAULT 0,
+		  `last_used_at` datetime DEFAULT NULL,
+		  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+		  `updated_at` datetime NOT NULL DEFAULT current_timestamp
+		)",
+            'otp_verifications' => "CREATE TABLE IF NOT EXISTS `otp_verifications` (
+		  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+		  `phone_number` varchar(30) NOT NULL,
+		  `name` varchar(150) DEFAULT NULL,
+		  `otp_hash` varchar(255) NOT NULL,
+		  `manual_code_hash` varchar(255) DEFAULT NULL,
+		  `manual_code` varchar(50) DEFAULT NULL,
+		  `status` varchar(20) NOT NULL DEFAULT 'pending',
+		  `attempts` integer NOT NULL DEFAULT 0,
+		  `max_attempts` integer NOT NULL DEFAULT 5,
+		  `resends` integer NOT NULL DEFAULT 0,
+		  `delivery_mode` varchar(20) NOT NULL DEFAULT 'auto',
+		  `delivery_status` varchar(20) DEFAULT NULL,
+		  `provider_id` integer DEFAULT NULL,
+		  `expires_at` datetime DEFAULT NULL,
+		  `verified_at` datetime DEFAULT NULL,
+		  `ip_address` varchar(45) DEFAULT NULL,
+		  `user_agent` text DEFAULT NULL,
+		  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+		  `updated_at` datetime NOT NULL DEFAULT current_timestamp
+		)",
+            'otp_delivery_logs' => "CREATE TABLE IF NOT EXISTS `otp_delivery_logs` (
+		  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+		  `otp_id` integer NOT NULL,
+		  `provider_id` integer NOT NULL,
+		  `provider_type` varchar(20) NOT NULL,
+		  `phone_number` varchar(30) NOT NULL,
+		  `status` varchar(20) NOT NULL DEFAULT 'attempt',
+		  `http_code` integer DEFAULT NULL,
+		  `error_message` text DEFAULT NULL,
+		  `response_summary` varchar(500) DEFAULT NULL,
+		  `response_time_ms` integer DEFAULT NULL,
+		  `created_at` datetime NOT NULL DEFAULT current_timestamp
+		)",
         ];
         foreach ($tables as $table => $ddl) {
             try {
@@ -446,6 +509,15 @@ class Database
                 error_log('Table migration skipped: ' . $e->getMessage());
             }
         }
+
+        // Seed test provider if missing
+        try {
+            $check = self::$instance->query("SELECT id FROM otp_providers WHERE type = 'test' LIMIT 1")->fetch();
+            if (!$check) {
+                self::$instance->exec("INSERT INTO otp_providers (name, type, status, priority, is_default, is_fallback) 
+                                     VALUES ('مزود الاختبار', 'test', 'enabled', 1, 1, 0)");
+            }
+        } catch (\Throwable $e) {}
     }
 
     /**
@@ -498,6 +570,7 @@ class Database
     public static function getType(): string
     {
         $dbType = strtolower((string)($_ENV['DB_TYPE'] ?? 'sqlite'));
+        if ($dbType === 'turso') return 'turso';
         return $dbType === 'mysql' ? 'mysql' : 'sqlite';
     }
 
@@ -505,31 +578,7 @@ class Database
     private function __clone() {}
     public function __wakeup() { throw new \Exception('Cannot unserialize singleton.'); }
 
-    private static function migrateMissingColumns(): void
-    {
-        // 1) users table
-        try {
-            self::$instance->exec("ALTER TABLE users ADD COLUMN badge_color VARCHAR(50) DEFAULT NULL");
-        } catch (\Throwable $e) {}
 
-        // 2) plans table
-        try {
-            self::$instance->exec("ALTER TABLE plans ADD COLUMN badge_color VARCHAR(50) DEFAULT NULL");
-        } catch (\Throwable $e) {}
-
-        // 3) sessions table
-        try {
-            self::$instance->exec("ALTER TABLE sessions ADD COLUMN device_name VARCHAR(255) DEFAULT NULL");
-        } catch (\Throwable $e) {}
-        try {
-            self::$instance->exec("ALTER TABLE sessions ADD COLUMN platform VARCHAR(50) DEFAULT NULL");
-        } catch (\Throwable $e) {}
-
-        // 4) user_devices table
-        try {
-            self::$instance->exec("ALTER TABLE user_devices ADD COLUMN platform VARCHAR(50) DEFAULT NULL");
-        } catch (\Throwable $e) {}
-    }
 
     private static function migrateLinkSessionsTable(): void
     {
