@@ -155,9 +155,12 @@ class Database
                 'enable_verification'       => 'INTEGER NOT NULL DEFAULT 0',
                 'verification_duration_days' => 'INTEGER DEFAULT NULL',
             ],
-            'users' => [
-                'verified_until' => 'DATETIME DEFAULT NULL',
-            ],
+	            'users' => [
+	                'verified_until' => 'DATETIME DEFAULT NULL',
+	            ],
+	            'admins' => [
+	                'username' => 'TEXT DEFAULT NULL',
+	            ],
             'otp_rate_limits' => [
                 'attempts_count' => 'INTEGER NOT NULL DEFAULT 1',
                 'resend_count'   => 'INTEGER NOT NULL DEFAULT 0',
