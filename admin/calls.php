@@ -34,19 +34,19 @@ $calls = $stmt->fetchAll();
 // ===== الإحصائيات =====
 $stats = ['today' => 0, 'today_voice' => 0, 'today_video' => 0, 'today_answered' => 0, 'today_missed' => 0, 'week' => 0, 'avg_duration' => '00:00'];
 try {
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE("now","localtime")")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE('now','localtime')")->fetchColumn();
     $stats['today'] = (int)$r;
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE("now","localtime") AND call_type = 'voice'")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE('now','localtime') AND call_type = 'voice'")->fetchColumn();
     $stats['today_voice'] = (int)$r;
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE("now","localtime") AND call_type = 'video'")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE('now','localtime') AND call_type = 'video'")->fetchColumn();
     $stats['today_video'] = (int)$r;
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE("now","localtime") AND status = 'answered'")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE('now','localtime') AND status = 'answered'")->fetchColumn();
     $stats['today_answered'] = (int)$r;
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE("now","localtime") AND status = 'missed'")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE DATE(created_at) = DATE('now','localtime') AND status = 'missed'")->fetchColumn();
     $stats['today_missed'] = (int)$r;
-    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE created_at >= datetime("now","-7 days","localtime")")->fetchColumn();
+    $r = $pdo->query("SELECT COUNT(*) FROM calls WHERE created_at >= datetime('now','-7 days','localtime')")->fetchColumn();
     $stats['week'] = (int)$r;
-    $r = $pdo->query("SELECT AVG(duration) FROM calls WHERE duration IS NOT NULL AND created_at >= datetime("now","-7 days","localtime")")->fetchColumn();
+    $r = $pdo->query("SELECT AVG(duration) FROM calls WHERE duration IS NOT NULL AND created_at >= datetime('now','-7 days','localtime')")->fetchColumn();
     if ($r !== null && $r !== false) {
         $avg = (int)$r;
         $stats['avg_duration'] = gmdate('H:i:s', $avg);

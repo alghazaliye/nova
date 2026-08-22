@@ -55,7 +55,7 @@ class CallController
 
         $uuid = UuidHelper::generate();
         $this->pdo->prepare(
-            'INSERT INTO calls (uuid, caller_id, call_type, status, created_at) VALUES (?, ?, ?, "ringing", datetime("now"))'
+            "INSERT INTO calls (uuid, caller_id, call_type, status, created_at) VALUES (?, ?, ?, 'ringing', datetime('now'))"
         )->execute([$uuid, $callerId, $callType]);
         $callId = (int)$this->pdo->lastInsertId();
 
@@ -114,7 +114,7 @@ class CallController
         $payload    = json_encode($body['payload'] ?? $body);
 
         $this->pdo->prepare(
-            'INSERT INTO call_signals (call_id, sender_id, signal_type, payload, created_at) VALUES (?, ?, ?, ?, datetime("now"))'
+            "INSERT INTO call_signals (call_id, sender_id, signal_type, payload, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
         )->execute([$id, $userId, $signalType, $payload]);
 
         // Push the signal to the peer devices via FCM (high-priority data message)
@@ -203,35 +203,35 @@ class CallController
         // حتى لا تظهر مكالمات "ميتة" في واجهة الطرف الآخر.
         try {
             $this->pdo->prepare(
-                'UPDATE calls SET status = "ended", ended_at = datetime("now"),
-                        duration = (strftime("%s", "now") - strftime("%s", created_at)) * 1000
-                 WHERE status IN ("calling", "ringing")
-                   AND created_at < datetime("now", "-60 seconds")'
+"UPDATE calls SET status = 'ended', ended_at = datetime('now'),
+                            duration = (strftime('%s', 'now') - strftime('%s', created_at)) * 1000
+                     WHERE status IN ('calling', 'ringing')
+                       AND created_at < datetime('now', '-60 seconds')"
             )->execute();
             // إنهاء المكالمات "answered" المعلقة التي لا تملك ended_at
             // (سقطت دون إنهاء صريح — أكثر من 5 دقائق) حتى لا تفتح شاشة المكالمة
             // لدى المستخدمين عند كل دخول.
             $this->pdo->prepare(
-                'UPDATE calls SET status = "ended", ended_at = COALESCE(ended_at, datetime("now")),
-                        duration = COALESCE(duration, (strftime("%s", "now") - strftime("%s", started_at)) * 1000)
-                 WHERE status IN ("answered", "accepted")
-                   AND ended_at IS NULL
-                   AND created_at < datetime("now", "-300 seconds")'
+"UPDATE calls SET status = 'ended', ended_at = COALESCE(ended_at, datetime('now')),
+                            duration = COALESCE(duration, (strftime('%s', 'now') - strftime('%s', started_at)) * 1000)
+                     WHERE status IN ('answered', 'accepted')
+                       AND ended_at IS NULL
+                       AND created_at < datetime('now', '-300 seconds')"
             )->execute();
         } catch (\Throwable $e) {
             error_log('Incoming call cleanup error: ' . $e->getMessage());
         }
 
         $stmt = $this->pdo->prepare(
-            'SELECT c.id, c.uuid, c.caller_id, c.call_type, c.status, c.created_at,
-                    u.name AS caller_name, u.avatar AS caller_avatar
-             FROM calls c
-             JOIN call_participants cp ON cp.call_id = c.id AND cp.user_id = ?
-             JOIN users u ON u.id = c.caller_id
-             WHERE c.status IN ("calling", "ringing") AND c.caller_id != ?
-               AND c.created_at > datetime("now", "-60 seconds")
-             ORDER BY c.created_at DESC
-             LIMIT 1'
+"SELECT c.id, c.uuid, c.caller_id, c.call_type, c.status, c.created_at,
+                        u.name AS caller_name, u.avatar AS caller_avatar
+                 FROM calls c
+                 JOIN call_participants cp ON cp.call_id = c.id AND cp.user_id = ?
+                 JOIN users u ON u.id = c.caller_id
+                 WHERE c.status IN ('calling', 'ringing') AND c.caller_id != ?
+                   AND c.created_at > datetime('now', '-60 seconds')
+                 ORDER BY c.created_at DESC
+                 LIMIT 1"
         );
         $stmt->execute([$userId, $userId]);
         Response::success($stmt->fetchAll());
@@ -249,11 +249,11 @@ class CallController
         // إنهاء المكالمات المعلقة (answered بدون ended_at) أكثر من 5 دقائق
         try {
             $this->pdo->prepare(
-                'UPDATE calls SET status = "ended", ended_at = datetime("now"),
-                        duration = COALESCE(duration, (strftime("%s", "now") - strftime("%s", started_at)) * 1000)
-                 WHERE status IN ("answered", "accepted")
-                   AND ended_at IS NULL
-                   AND created_at < datetime("now", "-300 seconds")'
+"UPDATE calls SET status = 'ended', ended_at = datetime('now'),
+                            duration = COALESCE(duration, (strftime('%s', 'now') - strftime('%s', started_at)) * 1000)
+                     WHERE status IN ('answered', 'accepted')
+                       AND ended_at IS NULL
+                       AND created_at < datetime('now', '-300 seconds')"
             )->execute();
         } catch (\Throwable $e) {
             error_log('Stale call cleanup error: ' . $e->getMessage());
@@ -306,8 +306,8 @@ class CallController
         $userId = (int)$auth['user_id'];
 
         $this->updateCallStatus($id, $userId, 'answered');
-        $this->pdo->prepare('UPDATE calls SET started_at = datetime("now") WHERE id = ?')->execute([$id]);
-        $this->pdo->prepare('UPDATE call_participants SET joined_at = datetime("now") WHERE call_id = ? AND user_id = ?')
+        $this->pdo->prepare("UPDATE calls SET started_at = datetime('now') WHERE id = ?")->execute([$id]);
+        $this->pdo->prepare("UPDATE call_participants SET joined_at = datetime('now') WHERE call_id = ? AND user_id = ?")
                   ->execute([$id, $userId]);
 
         Response::success(null, 'تم قبول المكالمة');
@@ -339,10 +339,10 @@ class CallController
         }
 
         $this->pdo->prepare(
-            'UPDATE calls SET status = "ended", ended_at = datetime("now"), duration = ? WHERE id = ?'
+            "UPDATE calls SET status = 'ended', ended_at = datetime('now'), duration = ? WHERE id = ?"
         )->execute([$duration, $id]);
 
-        $this->pdo->prepare('UPDATE call_participants SET left_at = datetime("now") WHERE call_id = ? AND user_id = ?')
+        $this->pdo->prepare("UPDATE call_participants SET left_at = datetime('now') WHERE call_id = ? AND user_id = ?")
                   ->execute([$id, $userId]);
 
         Response::success(null, 'تم إنهاء المكالمة');
@@ -387,8 +387,8 @@ class CallController
 
             // In-app call notification (real-time polling fallback)
             $this->pdo->prepare(
-                'INSERT INTO notifications (user_id, type, title, body, data_json, created_at)
-                 VALUES (?, "incoming_call", ?, ?, ?, datetime("now"))'
+"INSERT INTO notifications (user_id, type, title, body, data_json, created_at)
+                     VALUES (?, 'incoming_call', ?, ?, ?, datetime('now'))"
             )->execute([
                 $calleeId,
                 $caller['name'],

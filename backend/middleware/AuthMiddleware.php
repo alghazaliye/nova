@@ -46,11 +46,11 @@ class AuthMiddleware
         // Verify session still exists and is not revoked
         $pdo  = Database::getInstance();
         $stmt = $pdo->prepare(
-            "SELECT s.id, s.revoked_at, u.id AS user_id, u.uuid, u.name, u.phone, u.is_blocked
-             FROM sessions s
-             JOIN users u ON u.id = s.user_id
-             WHERE s.token_hash = ? AND s.expires_at > datetime('now')
-             LIMIT 1"
+"SELECT s.id, s.revoked_at, u.id AS user_id, u.uuid, u.name, u.phone, u.is_blocked
+                 FROM sessions s
+                 JOIN users u ON u.id = s.user_id
+                 WHERE s.token_hash = ? AND s.expires_at > datetime('now')
+                 LIMIT 1"
         );
         $stmt->execute([hash('sha256', $token)]);
         $session = $stmt->fetch();

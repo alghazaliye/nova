@@ -692,9 +692,9 @@ ON CONFLICT(story_id, user_id) DO UPDATE SET reaction = excluded.reaction, creat
 
         $stats = [
             'total'           => $sql(''),
-            'active'          => $sql('WHERE s.deleted_at IS NULL AND s.deleted_by IS NULL AND s.expires_at > datetime("now")'),
+'active'          => $sql("WHERE s.deleted_at IS NULL AND s.deleted_by IS NULL AND s.expires_at > datetime('now')"),
             'today'           => $sql("WHERE DATE(s.created_at) = DATE('now','localtime')"),
-            'expired'         => $sql('WHERE s.expires_at <= datetime("now")'),
+            'expired'         => $sql("WHERE s.expires_at <= datetime('now')"),
             'deleted'         => $sql('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NULL'),
             'admin_deleted'   => $sql('WHERE s.deleted_at IS NOT NULL AND s.deleted_by IS NOT NULL'),
             'type_image'      => $sql("WHERE s.type = 'image' AND s.expires_at > datetime('now') AND s.deleted_at IS NULL AND s.deleted_by IS NULL"),

@@ -111,9 +111,9 @@ class EmailAuthController
     {
         try {
             $stmt = $this->pdo->prepare(
-                "SELECT expires_at FROM email_verification_codes
-                 WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > datetime('now'))
-                 ORDER BY id DESC LIMIT 1"
+"SELECT expires_at FROM email_verification_codes
+                     WHERE email = ? AND status IN ('pending','manual') AND (expires_at IS NULL OR expires_at > datetime('now'))
+                     ORDER BY id DESC LIMIT 1"
             );
             $stmt->execute([$email]);
             $row = $stmt->fetch();
@@ -167,8 +167,8 @@ class EmailAuthController
             // لتجنب تكرار '' بين الحسابات التي لا تملك هاتفًا
             $emailPhone = 'e_' . substr(hash('sha256', $email), 0, 26);
             $this->pdo->prepare(
-                'INSERT INTO users (uuid, email, name, phone, username, email_verified, is_verified, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, 1, 1, datetime("now"), datetime("now"))'
+"INSERT INTO users (uuid, email, name, phone, username, email_verified, is_verified, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'), datetime('now'))"
             )->execute([$uuid, $email, $displayName, $emailPhone, $emailPhone]);
             $userId = (int)$this->pdo->lastInsertId();
         } else {
@@ -177,10 +177,10 @@ class EmailAuthController
                 Response::forbidden('تم حظر هذا الحساب — يرجى التواصل مع إدارة التطبيق');
             }
             $this->pdo->prepare(
-                'UPDATE users SET email_verified = 1, updated_at = datetime("now") WHERE id = ?'
+                "UPDATE users SET email_verified = 1, updated_at = datetime('now') WHERE id = ?"
             )->execute([$userId]);
             if ($name !== null && ($user['name'] ?? '') === 'مستخدم NOVA') {
-                $this->pdo->prepare('UPDATE users SET name = ?, updated_at = datetime("now") WHERE id = ?')->execute([$name, $userId]);
+                $this->pdo->prepare("UPDATE users SET name = ?, updated_at = datetime('now') WHERE id = ?")->execute([$name, $userId]);
             }
         }
 

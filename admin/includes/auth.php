@@ -59,7 +59,7 @@ function logAudit(array $admin, string $action, string $entityType = '', int $en
     $pdo = getAdminDB();
     $pdo->prepare(
         "INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description, ip_address, user_agent, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"))"
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))"
     )->execute([
         $admin['id'], $action, $entityType, $entityId ?: null, $description,
         $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null,
