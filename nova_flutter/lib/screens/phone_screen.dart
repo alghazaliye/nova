@@ -22,18 +22,18 @@ class PhoneScreen extends StatefulWidget {
 }
 
 /// مرحلة الشاشة: اختيار الوضع (دخول/تسجيل) ثم اختيار الطريقة ثم النموذج
-enum _Mode { pickFlow, phone, email, username }
+enum _Mode { pickFlow, phone, email }
 
 enum _RegisterMethod { phone, email }
 
-enum _LoginMethod { phone, email, username }
+enum _LoginMethod { phone, email }
 
 class _PhoneScreenState extends State<PhoneScreen> {
   String _phone = '';
   String? _autoPhone;
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
+
   final TextEditingController _passwordController = TextEditingController();
   _Mode _mode = _Mode.pickFlow;
   /// طريقة الدخول المختارة عند الدخول (ليست نفس طرق التسجيل)
@@ -103,7 +103,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
   void dispose() {
     _phoneController.dispose();
     _emailController.dispose();
-    _usernameController.dispose();
+
     _passwordController.dispose();
     super.dispose();
   }
@@ -157,8 +157,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
         return _Mode.phone;
       case _LoginMethod.email:
         return _Mode.email;
-      case _LoginMethod.username:
-        return _Mode.username;
     }
   }
 
@@ -192,11 +190,10 @@ class _PhoneScreenState extends State<PhoneScreen> {
   /// طرق **الدخول** المتاحة: هاتف OTP، بريد + كلمة مرور، اسم مستخدم + كلمة مرور
   List<_LoginMethod> get _loginMethods {
     final cfg = context.read<AuthProvider>().authConfig;
-    if (cfg == null) return const [_LoginMethod.phone, _LoginMethod.email, _LoginMethod.username];
+    if (cfg == null) return const [_LoginMethod.phone, _LoginMethod.email];
     final methods = <_LoginMethod>[];
     if (cfg.phoneLogin) methods.add(_LoginMethod.phone);
     if (cfg.emailLogin) methods.add(_LoginMethod.email);
-    if (cfg.usernameLogin) methods.add(_LoginMethod.username);
     return methods;
   }
 
@@ -288,17 +285,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
     }
   }
 
-  Future<void> _doUsernameLogin() async {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text;
-    if (username.isEmpty || password.isEmpty) {
-      _showError('أدخل اسم المستخدم وكلمة المرور');
-      return;
-    }
-    final auth = context.read<AuthProvider>();
-    final ok = await auth.loginUsername(username, password);
-    if (ok && mounted) _handleLoginResult(auth);
-  }
+
 
   void _handleLoginResult(AuthProvider auth) {
     if (auth.lastLoginBypass) {
@@ -438,15 +425,14 @@ class _PhoneScreenState extends State<PhoneScreen> {
         return _phoneForm(c);
       case _Mode.email:
         return _emailForm(c);
-      case _Mode.username:
-        return _usernameForm(c);
+
     }
   }
 
   /// هل الوضع الحالي يُستخدم للدخول (وليس التسجيل)؟
   bool get _currentModeIsLogin {
     if (_mode == _Mode.pickFlow) return false;
-    if (_mode == _Mode.username) return true; // اسم المستخدم للدخول فقط
+
     if (_loginMethod != null) {
       return (_mode == _Mode.phone && _loginMethod == _LoginMethod.phone) ||
           (_mode == _Mode.email && _loginMethod == _LoginMethod.email);
@@ -672,56 +658,8 @@ class _PhoneScreenState extends State<PhoneScreen> {
     );
   }
 
-  Widget _usernameForm(NovaColors c) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _methodHeader(c, label: 'اسم المستخدم',
-            subtitle: 'الدخول باسم المستخدم وكلمة المرور'),
-        const SizedBox(height: 14),
-        TextField(
-          controller: _usernameController,
-          keyboardType: TextInputType.text,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: 'اسم المستخدم',
-            filled: true,
-            fillColor: c.surface2,
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: c.line)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: c.accent)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _passwordController,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: 'كلمة المرور',
-            filled: true,
-            fillColor: c.surface2,
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: c.line)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: c.accent)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          ),
-        ),
-        const SizedBox(height: 18),
-        _primaryButton('دخول', c, _doUsernameLogin),
-        const SizedBox(height: 10),
-        _backButton(c),
-      ],
-    );
-  }
+  // تم إزالة نموذج اسم المستخدم لتوحيد النظام
+  Widget _usernameForm(NovaColors c) => const SizedBox.shrink();
 
   Widget _methodHeader(NovaColors c, {required String label, required String subtitle}) {
     return Row(
@@ -781,7 +719,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
     switch (m) {
       case _Mode.phone: return Icons.phone_android_rounded;
       case _Mode.email: return Icons.email_rounded;
-      case _Mode.username: return Icons.person_rounded;
+
       case _Mode.pickFlow: return Icons.tune;
     }
   }
@@ -790,7 +728,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
     switch (m) {
       case _Mode.phone: return 'رقم الهاتف';
       case _Mode.email: return 'البريد الإلكتروني';
-      case _Mode.username: return 'اسم المستخدم';
+
       case _Mode.pickFlow: return 'اختيار';
     }
   }

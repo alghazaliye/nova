@@ -74,9 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: _webImage != null
                             ? Image.memory(_webImage!, fit: BoxFit.cover)
                             : NovaAvatar(
+                                letter: auth.user?.name ?? '?',
                                 imageUrl: auth.user?.avatar,
                                 size: 110,
-                                placeholderIcon: Icons.person,
                               ),
                       ),
                     ),

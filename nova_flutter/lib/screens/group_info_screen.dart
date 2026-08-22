@@ -89,7 +89,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                 TextField(
                   controller: searchCtrl,
                   decoration: InputDecoration(
-                    hintText: 'رقم، اسم مستخدم، أو بريد',
+                    hintText: 'رقم، أو بريد',
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.search),
                       onPressed: () async {
@@ -126,7 +126,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                               itemBuilder: (_, i) {
                                 final u = searchResults[i];
                                 final uid = int.parse(u['id'].toString());
-                                final name = u['display_name'] ?? u['name'] ?? u['username'] ?? u['phone'] ?? '-';
+                                final name = u['display_name'] ?? u['name'] ?? u['phone'] ?? '-';
                                 final on = selected.contains(uid);
                                 return CheckboxListTile(
                                   value: on,
@@ -183,7 +183,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
   Future<void> _removeMember(Map<String, dynamic> m) async {
     final uid = int.parse(m['user_id'].toString());
-    final name = m['name'] ?? m['username'] ?? 'المستخدم';
+    final name = m['name'] ?? 'المستخدم';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -219,7 +219,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
   Future<void> _setRole(Map<String, dynamic> m, String role) async {
     final uid = int.parse(m['user_id'].toString());
-    final name = m['name'] ?? m['username'] ?? 'المستخدم';
+    final name = m['name'] ?? 'المستخدم';
     setState(() => _busy = true);
     try {
       final res = await ApiService.put(
@@ -510,7 +510,6 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                             final role = m['role']?.toString() ?? 'member';
                             final name = m['display_name'] ??
                                 m['name'] ??
-                                m['username'] ??
                                 m['phone'] ??
                                 '-';
                             final letter = name.isNotEmpty ? name[0] : '?';

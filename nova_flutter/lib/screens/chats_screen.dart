@@ -770,7 +770,6 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                             final uid = int.parse(u['id'].toString());
                             final name = u['display_name'] ??
                                 u['name'] ??
-                                u['username'] ??
                                 u['phone'] ??
                                 '-';
                             final on = selected.contains(uid);
@@ -878,8 +877,7 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (dialogCtx, setState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
             title: const Text('جهات الاتصال الجديدة'),
             content: SizedBox(
               width: 340,
@@ -896,163 +894,115 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                         controller: phoneCtrl,
                         keyboardType: TextInputType.text,
                         decoration: const InputDecoration(
-                          hintText: 'رقم، اسم مستخدم، أو بريد',
+                          hintText: 'رقم، أو بريد',
                           labelText: 'بحث عن مستخدم',
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                       ),
                     ),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: c.accent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: () async {
-                          final query = phoneCtrl.text.trim();
-                          if (query.length < 3) {
-                            showToast(dialogCtx, 'أدخل 3 أحرف على الأقل للبحث');
-                            return;
-                          }
-                          Map<String, dynamic> searchRes;
-                          try {
-                            searchRes = await ApiService.get(
-                                '/users/search',
-                                query: {'q': query});
-                          } catch (e) {
-                            if (!dialogCtx.mounted) return;
-                            showToast(dialogCtx, 'فشل الاتصال بالخادم — حاول مجددًا');
-                            return;
-                          }
-                          if (!dialogCtx.mounted) return;
-                          // حساب محظور أو جلسة غير صالحة: الخادم يرمي 403
-                          if (searchRes['success'] != true) {
-                            final msg = searchRes['message']?.toString() ?? '';
-                            final code = searchRes['error_code']?.toString() ?? '';
-                            final forbidden = code == 'FORBIDDEN' ||
-                                msg.contains('محظور') ||
-                                msg.contains('حظر') ||
-                                msg.toLowerCase().contains('forbidden') ||
-                                msg.toLowerCase().contains('blocked');
-                            if (forbidden) {
-                              showToast(dialogCtx,
-                                  'هذا الحساب محظور — تواصل مع إدارة التطبيق لفتح الحظر');
-                            } else {
-                              showToast(
-                                  dialogCtx,
-                                  msg.isNotEmpty
-                                      ? msg
-                                      : 'لم يتم العثور على مستخدم مطابق لبحثك');
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: c.accent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            final query = phoneCtrl.text.trim();
+                            if (query.length < 3) {
+                              showToast(dialogCtx, 'أدخل 3 أحرف على الأقل للبحث');
+                              return;
                             }
-                            return;
-                          }
-                          if (searchRes['data'] is List &&
-                              (searchRes['data'] as List).isNotEmpty) {
-                            final user = Map<String, dynamic>.from(
-                                searchRes['data'][0]
-                                    as Map<String, dynamic>);
-                            Map<String, dynamic> addRes;
+                            Map<String, dynamic> searchRes;
                             try {
-                              addRes = await ApiService.post('/contacts',
-                                  body: {'contact_user_id': user['id']});
+                              searchRes = await ApiService.get('/users/search', query: {'q': query});
                             } catch (e) {
                               if (!dialogCtx.mounted) return;
                               showToast(dialogCtx, 'فشل الاتصال بالخادم — حاول مجددًا');
                               return;
                             }
                             if (!dialogCtx.mounted) return;
-                            if (addRes['success'] == true) {
-                              showToast(dialogCtx,
-                                  addRes['message'] ?? 'تمت إضافة جهة الاتصال');
-                              Navigator.pop(dialogCtx);
-                            } else {
-                              final msg = addRes['message']?.toString() ?? '';
-                              showToast(
-                                  dialogCtx,
-                                  (msg.contains('محظور') || msg.contains('حظر'))
-                                      ? 'هذا الحساب محظور — تواصل مع إدارة التطبيق لفتح الحظر'
-                                      : (msg.isNotEmpty
-                                          ? msg
-                                          : 'لم تتم إضافة جهة الاتصال — حاول مجددًا'));
+                            if (searchRes['success'] != true) {
+                              final msg = searchRes['message']?.toString() ?? '';
+                              showToast(dialogCtx, msg.isNotEmpty ? msg : 'لم يتم العثور على مستخدم مطابق لبحثك');
+                              return;
                             }
-                          } else {
-                            showToast(dialogCtx, 'لم يتم العثور على مستخدم بهذا الرقم');
-                          }
-                        },
-                        child: const Text('بحث وإضافة'),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 14),
-                  if (newContacts.isNotEmpty)
-                    Text('المضافون حديثًا (${newContacts.length})',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: c.muted,
-                            fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: (newContacts.length * 58.0).clamp(0, 232),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: newContacts.length,
-                      itemBuilder: (d, i) {
-                        final u = newContacts[i];
-                        final name = u['name'] ?? u['username'] ?? u['phone'] ?? '-';
-                        final online = u['is_online'] == true ||
-                            u['is_online'] == 1 ||
-                            u['is_online'] == '1';
-                        return ListTile(
-                          dense: true,
-                          leading: NovaAvatar(
-                              letter: name.toString().isEmpty
-                                  ? '?'
-                                  : name.toString()[0],
-                              size: 40,
-                              radius: 14,
-                              imageUrl: u['avatar'],
-                              online: online),
-                          title: Text(name.toString(),
-                              style: const TextStyle(fontSize: 14)),
-                          subtitle: Text(
-                              formatLastSeen(u['last_seen']?.toString(),
-                                  isOnline: online,
-                                  utcOffsetMinutes: context.read<AuthProvider>().timezoneOffsetMinutes),
-                              style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: online ? c.accent : c.muted)),
-                          onTap: () async {
-                            Navigator.pop(d);
-                            final convRes = await ApiService.post(
-                                '/conversations',
-                                body: {'user_id': u['id']});
-                            if (!this.mounted) return;
-                            if (convRes['success'] == true &&
-                                convRes['data'] != null) {
-                              pushScreen(
-                                  this.context,
-                                  ChatScreen(
-                                    conv: Conversation.fromJson(
-                                        Map<String, dynamic>.from(
-                                            convRes['data']
-                                                as Map<String, dynamic>)),
-                                  ));
+                            if (searchRes['data'] is List && (searchRes['data'] as List).isNotEmpty) {
+                              final user = Map<String, dynamic>.from(searchRes['data'][0] as Map<String, dynamic>);
+                              Map<String, dynamic> addRes;
+                              try {
+                                addRes = await ApiService.post('/contacts', body: {'contact_user_id': user['id']});
+                              } catch (e) {
+                                if (!dialogCtx.mounted) return;
+                                showToast(dialogCtx, 'فشل الاتصال بالخادم — حاول مجددًا');
+                                return;
+                              }
+                              if (!dialogCtx.mounted) return;
+                              if (addRes['success'] == true) {
+                                showToast(dialogCtx, addRes['message'] ?? 'تمت إضافة جهة الاتصال');
+                                Navigator.pop(dialogCtx);
+                              } else {
+                                showToast(dialogCtx, addRes['message'] ?? 'فشل الإضافة');
+                              }
                             } else {
-                              showToast(this.context,
-                                  convRes['message'] ?? 'فشل بدء المحادثة');
+                              showToast(dialogCtx, 'لم يتم العثور على مستخدم');
                             }
                           },
-                        );
-                      },
+                          child: const Text('بحث وإضافة'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 14),
+                    if (newContacts.isNotEmpty)
+                      Text('المضافون حديثًا (${newContacts.length})',
+                          style: TextStyle(fontSize: 13, color: c.muted, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: (newContacts.length * 58.0).clamp(0, 232),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: newContacts.length,
+                        itemBuilder: (d, i) {
+                          final u = newContacts[i];
+                          final name = u['name'] ?? u['phone'] ?? '-';
+                          final online = u['is_online'] == true || u['is_online'] == 1 || u['is_online'] == '1';
+                          return ListTile(
+                            dense: true,
+                            leading: NovaAvatar(
+                                letter: name.toString().isEmpty ? '?' : name.toString()[0],
+                                size: 40,
+                                radius: 14,
+                                imageUrl: u['avatar'],
+                                online: online),
+                            title: Text(name.toString(), style: const TextStyle(fontSize: 14)),
+                            subtitle: Text(
+                                formatLastSeen(u['last_seen']?.toString(),
+                                    isOnline: online,
+                                    utcOffsetMinutes: context.read<AuthProvider>().timezoneOffsetMinutes),
+                                style: TextStyle(fontSize: 11.5, color: online ? c.accent : c.muted)),
+                            onTap: () async {
+                              Navigator.pop(d);
+                              final convRes = await ApiService.post('/conversations', body: {'user_id': u['id']});
+                              if (!this.mounted) return;
+                              if (convRes['success'] == true && convRes['data'] != null) {
+                                pushScreen(
+                                    this.context,
+                                    ChatScreen(
+                                      conv: Conversation.fromJson(Map<String, dynamic>.from(convRes['data'] as Map<String, dynamic>)),
+                                    ));
+                              } else {
+                                showToast(this.context, convRes['message'] ?? 'فشل بدء المحادثة');
+                              }
+                            },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -1078,7 +1028,7 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
           child: TextField(
             controller: ctrl,
             decoration: const InputDecoration(
-                hintText: 'رقم، اسم مستخدم، أو بريد', labelText: 'بحث'),
+                hintText: 'رقم، أو بريد', labelText: 'بحث'),
           ),
         ),
         actions: [
@@ -1101,7 +1051,7 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
           Map<String, dynamic>.from(res['data'][0] as Map<String, dynamic>);
       if (!mounted) return;
       showToast(
-          context, 'جهة الاتصال: ${user['name'] ?? user['username'] ?? '-'}');
+          context, 'جهة الاتصال: ${user['name'] ?? '-'}');
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       _openChatWithUser(user);
@@ -1740,7 +1690,7 @@ class _ContactsTabState extends State<ContactsTab> {
           child: TextField(
             controller: ctrl,
             decoration: const InputDecoration(
-                hintText: 'رقم، اسم مستخدم، أو بريد', labelText: 'بحث'),
+                hintText: 'رقم، أو بريد', labelText: 'بحث'),
           ),
         ),
         actions: [
