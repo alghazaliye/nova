@@ -381,17 +381,16 @@ class EmailAuthController
                      VALUES (?, ?, 1, datetime("now"))
                      ON CONFLICT(user_id, device_uuid) DO UPDATE SET is_active = 1, last_seen = datetime("now")'
                 )->execute([$userId, $deviceUuid]);
-                $deviceId = (int)($this->pdo->lastInsertId() ?: 0) ?: null;
+                
+                // Sync with user_devices for FCM compatibility
+                $this->pdo->prepare(
+                    'INSERT INTO user_devices (user_id, device_id, fcm_token, last_active)
+                     VALUES (?, ?, ?, datetime("now"))
+                     ON CONFLICT(user_id, device_id) DO UPDATE SET
+                        fcm_token = excluded.fcm_token, last_active = datetime("now")'
+                )->execute([$userId, $deviceUuid, $fcmToken]);
             } catch (Throwable $e) {
                 error_log('Device registration error (non-fatal): ' . $e->getMessage());
-            }
-            // FCM token update on user_devices if the column exists
-            if ($fcmToken) {
-                try {
-                    $this->pdo->prepare(
-                        'UPDATE device_registrations SET device_name = ? WHERE user_id = ? AND device_uuid = ?'
-                    )->execute([substr($fcmToken, 0, 128), $userId, $deviceUuid]);
-                } catch (Throwable $e) {}
             }
         }
 
