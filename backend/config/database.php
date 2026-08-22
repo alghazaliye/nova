@@ -220,10 +220,23 @@ class Database
             }
             foreach ($columns as $column => $definition) {
                 try {
-                    self::$instance->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+                    // Idempotent column addition: check if exists first to keep logs clean
+                    $check = self::$instance->query("PRAGMA table_info({$table})")->fetchAll();
+                    $exists = false;
+                    foreach ($check as $col) {
+                        if ($col['name'] === $column) {
+                            $exists = true;
+                            break;
+                        }
+                    }
+                    if (!$exists) {
+                        self::$instance->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+                    }
                 } catch (PDOException $e) {
-                    // Column already exists or table missing — migration already applied or not needed
-                    error_log('Migration skipped: ' . $e->getMessage());
+                    // Only log if it's NOT a "duplicate column" error
+                    if (!str_contains($e->getMessage(), 'duplicate column name')) {
+                        error_log('Migration error: ' . $e->getMessage());
+                    }
                 }
             }
         }
