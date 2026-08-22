@@ -78,7 +78,7 @@ class _OtpScreenState extends State<OtpScreen> {
     final c = NovaColors.of(context);
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text('رمز التحقق', style: TextStyle(color: c.text, fontWeight: FontWeight.w800, fontFamily: 'Cairo')),
         backgroundColor: c.surface,

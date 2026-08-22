@@ -57,15 +57,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           }
         }
       }
-      // جلب قائمة المستخدمين المتاحين للإضافة
-      try {
-        final users = await ApiService.get('/users/search', query: {'q': 'a'});
-        if (mounted && users['success'] == true && users['data'] is List) {
-          _availableUsers = (users['data'] as List)
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-        }
-      } catch (_) {}
+      // لا نجلب المستخدمين مسبقًا، سنستخدم البحث داخل الـ Dialog لتقليل عدد الطلبات ودعم البحث الشامل
+      _availableUsers = [];
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -76,9 +69,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final memberIds = _members
         .map((m) => int.parse(m['user_id'].toString()))
         .toSet();
-    final candidates = _availableUsers
-        .where((u) => !memberIds.contains(int.parse(u['id'].toString())))
-        .toList();
+    
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> searchResults = [];
+    bool searching = false;
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -88,28 +83,68 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           title: const Text('إضافة أعضاء'),
           content: SizedBox(
             width: 340,
-            height: 360,
-            child: candidates.isEmpty
-                ? const Center(child: Text('لا يوجد مستخدمون متاحون'))
-                : ListView.builder(
-                    itemCount: candidates.length,
-                    itemBuilder: (_, i) {
-                      final u = candidates[i];
-                      final uid = int.parse(u['id'].toString());
-                      final name =
-                          u['name'] ?? u['username'] ?? u['phone'] ?? '-';
-                      final on = selected.contains(uid);
-                      return CheckboxListTile(
-                        value: on,
-                        activeColor: c.accent,
-                        title: Text(name, style: TextStyle(color: c.text)),
-                        onChanged: (v) => st(() {
-                          if (v == true) selected.add(uid);
-                          selected.remove(uid);
-                        }),
-                      );
-                    },
+            height: 400,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'رقم، اسم مستخدم، أو بريد',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.search),
+                      onPressed: () async {
+                        final q = searchCtrl.text.trim();
+                        if (q.length < 3) {
+                          showToast(ctx, 'أدخل 3 أحرف على الأقل');
+                          return;
+                        }
+                        st(() => searching = true);
+                        try {
+                          final res = await ApiService.get('/users/search', query: {'q': q});
+                          if (ctx.mounted && res['success'] == true && res['data'] is List) {
+                            st(() {
+                              searchResults = (res['data'] as List)
+                                  .map((e) => Map<String, dynamic>.from(e))
+                                  .where((u) => !memberIds.contains(int.parse(u['id'].toString())))
+                                  .toList();
+                            });
+                          }
+                        } catch (_) {}
+                        st(() => searching = false);
+                      },
+                    ),
                   ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: searching
+                      ? const Center(child: CircularProgressIndicator())
+                      : searchResults.isEmpty
+                          ? const Center(child: Text('ابحث عن مستخدمين لإضافتهم'))
+                          : ListView.builder(
+                              itemCount: searchResults.length,
+                              itemBuilder: (_, i) {
+                                final u = searchResults[i];
+                                final uid = int.parse(u['id'].toString());
+                                final name = u['display_name'] ?? u['name'] ?? u['username'] ?? u['phone'] ?? '-';
+                                final on = selected.contains(uid);
+                                return CheckboxListTile(
+                                  value: on,
+                                  activeColor: c.accent,
+                                  title: Text(name, style: TextStyle(color: c.text)),
+                                  onChanged: (v) => st(() {
+                                    if (v == true) {
+                                      selected.add(uid);
+                                    } else {
+                                      selected.remove(uid);
+                                    }
+                                  }),
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -473,7 +508,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                             final uid = int.parse(m['user_id'].toString());
                             final isMe = uid == ApiService.userId;
                             final role = m['role']?.toString() ?? 'member';
-                            final name = m['name'] ??
+                            final name = m['display_name'] ??
+                                m['name'] ??
                                 m['username'] ??
                                 m['phone'] ??
                                 '-';
@@ -523,7 +559,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                                                       color: c.text),
                                                 ),
                                               ),
-                                              if ((m['is_verified'] ?? 0) == 1) ...[
+                                              if (m['is_verified'] == true || (m['is_verified'] ?? 0) == 1) ...[
                                                 const SizedBox(width: 4),
                                                 const Icon(Icons.verified,
                                                     color: Colors.blue,

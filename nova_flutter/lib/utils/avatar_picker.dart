@@ -19,24 +19,13 @@ class NovaAvatarPicker {
       );
       if (img == null || !context.mounted) return;
       final bytes = await img.readAsBytes();
-      final res = await ApiService.uploadMultipart(
-        '/users/avatar',
-        [
-          http.MultipartFile.fromBytes(
-            'avatar',
-            bytes,
-            filename: img.name,
-            contentType: http.MediaType.parse('image/jpeg'),
-          ),
-        ],
-        fields: {},
-      );
+      final success = await context.read<AuthProvider>().uploadAvatar(bytes, img.name);
       if (!context.mounted) return;
-      if (res['success'] == true) {
-        context.read<AuthProvider>().fetchMe();
+      if (success) {
         showToast(context, 'تم تحديث الصورة الشخصية');
       } else {
-        showToast(context, res['message'] ?? 'فشل رفع الصورة');
+        final err = context.read<AuthProvider>().error;
+        showToast(context, err ?? 'فشل رفع الصورة');
       }
     } catch (e) {
       if (context.mounted) showToast(context, 'فشل اختيار الصورة');

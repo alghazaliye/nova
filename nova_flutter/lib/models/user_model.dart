@@ -36,13 +36,13 @@ class NovaUser {
         uuid: j['uuid'] ?? '',
         phone: j['phone'] ?? '',
         email: j['email'],
-        name: j['name'],
+        name: j['display_name'] ?? j['name'],
         username: j['username'],
         bio: j['bio'],
         avatar: j['avatar'],
-        isOnline: (j['is_online'] ?? 0) == 1,
-        isVerified: (j['is_verified'] ?? 0) == 1,
-        isBlocked: (j['is_blocked'] ?? 0) == 1,
+        isOnline: j['is_online'] == true || (j['is_online'] ?? 0) == 1,
+        isVerified: j['is_verified'] == true || (j['is_verified'] ?? 0) == 1,
+        isBlocked: j['is_blocked'] == true || (j['is_blocked'] ?? 0) == 1,
         plan: j['plan'] is Map ? Map<String, dynamic>.from(j['plan']) : null,
         activeDevicesCount: int.parse((j['active_devices_count'] ?? 0).toString()),
         maxDevicesAllowed: int.parse((j['max_devices_allowed'] ?? 1).toString()),
@@ -145,7 +145,7 @@ class Conversation {
   static bool _otherIsOnline(Map<String, dynamic> j) {
     try {
       final ou = j['other_user'];
-      if (ou is Map) return (ou['is_online'] ?? 0) == 1;
+      if (ou is Map) return ou['is_online'] == true || (ou['is_online'] ?? 0) == 1;
     } catch (_) {}
     return false;
   }
@@ -171,10 +171,10 @@ class Conversation {
   static bool _otherIsVerified(Map<String, dynamic> j) {
     try {
       // 1. تحقق من الحقل المباشر (للمجموعات أو البحث)
-      if ((j['is_verified'] ?? 0) == 1) return true;
+      if (j['is_verified'] == true || (j['is_verified'] ?? 0) == 1) return true;
       // 2. تحقق من المستخدم الآخر (للمحادثات الخاصة)
       final ou = j['other_user'];
-      if (ou is Map) return (ou['is_verified'] ?? 0) == 1;
+      if (ou is Map) return ou['is_verified'] == true || (ou['is_verified'] ?? 0) == 1;
     } catch (_) {}
     return false;
   }
@@ -236,9 +236,9 @@ class NovaMessage {
             : int.parse(j['reply_to_message_id'].toString()),
         status: j['status'] ?? 'sent',
         createdAt: j['created_at'] ?? '',
-        isEdited: (j['is_edited'] ?? 0) == 1,
+        isEdited: j['is_edited'] == true || (j['is_edited'] ?? 0) == 1,
         isDeleted: j['deleted_at'] != null || j['status'] == 'deleted',
-        isVerified: (j['is_verified'] ?? 0) == 1,
+        isVerified: j['is_verified'] == true || (j['is_verified'] ?? 0) == 1,
         filePath: j['file_path'],
         thumbnailPath: j['thumbnail_path'],
         mimeType: j['mime_type'],

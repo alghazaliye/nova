@@ -36,7 +36,7 @@ class MessageController
             "SELECT m.id, m.uuid, m.conversation_id, m.sender_id, m.reply_to_message_id,
                     m.type, m.body, m.file_id, m.client_message_id, m.status, m.disappear_after,
                     m.created_at, m.updated_at, m.deleted_at,
-                    u.name AS sender_name, u.avatar AS sender_avatar, u.is_verified AS is_verified,
+                    u.id AS user_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified,
                     a.storage_path AS file_path, a.thumbnail_path, a.mime_type, a.file_size,
                     a.width, a.height, a.duration
              FROM messages m
@@ -48,6 +48,26 @@ class MessageController
         );
         $stmt->execute($params);
         $messages = array_reverse($stmt->fetchAll());
+
+        // تطبيق الخصوصية وتحديث display_name لكل رسالة
+        require_once __DIR__ . '/UserController.php';
+        $userCtrl = new UserController();
+        foreach ($messages as &$m) {
+            $ownerId = (int)$m['sender_id'];
+            $user = [
+                'id' => $ownerId,
+                'name' => $m['name'],
+                'username' => $m['username'],
+                'phone' => $m['phone'],
+                'email' => $m['email'],
+                'avatar' => $m['avatar'],
+                'is_verified' => $m['is_verified']
+            ];
+            $filtered = $userCtrl->filterProfile($user, $userId, $ownerId);
+            $m['sender_name'] = $filtered['display_name'] ?? $filtered['name'];
+            $m['sender_avatar'] = $filtered['avatar'];
+            $m['is_verified'] = (bool)$filtered['is_verified'];
+        }
 
         // Mark unread non-deleted messages sent to this user as delivered, then mark all as read
         foreach ($messages as $m) {
@@ -536,13 +556,38 @@ class MessageController
             'SELECT m.id, m.uuid, m.conversation_id, m.sender_id, m.reply_to_message_id,
                     m.type, m.body, m.file_id, m.client_message_id, m.status, m.disappear_after,
                     m.created_at, m.updated_at, m.deleted_at,
-                    u.name AS sender_name, u.avatar AS sender_avatar, u.is_verified AS is_verified
+                    u.id AS user_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified
              FROM messages m
              JOIN users u ON u.id = m.sender_id
              WHERE m.id = ? LIMIT 1'
         );
         $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        $msg = $stmt->fetch() ?: null;
+        if ($msg) {
+            // إضافة معلومات المرسل مع تطبيق الخصوصية
+            $auth = AuthMiddleware::authenticate();
+            $viewerId = (int)$auth['user_id'];
+            $ownerId = (int)$msg['sender_id'];
+            
+            $user = [
+                'id' => $ownerId,
+                'name' => $msg['name'],
+                'username' => $msg['username'],
+                'phone' => $msg['phone'],
+                'email' => $msg['email'],
+                'avatar' => $msg['avatar'],
+                'is_verified' => $msg['is_verified']
+            ];
+            
+            require_once __DIR__ . '/UserController.php';
+            $userCtrl = new UserController();
+            $filtered = $userCtrl->filterProfile($user, $viewerId, $ownerId);
+            
+            $msg['sender_name'] = $filtered['display_name'] ?? $filtered['name'];
+            $msg['sender_avatar'] = $filtered['avatar'];
+            $msg['is_verified'] = (bool)$filtered['is_verified'];
+        }
+        return $msg;
     }
 
     private function sendMessageNotifications(int $convId, int $senderId, string $messagePreview): void

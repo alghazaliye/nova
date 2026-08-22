@@ -44,7 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final c = NovaColors.of(context);
     
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       backgroundColor: c.bg,
       appBar: AppBar(
         title: const Text('إعداد الملف الشخصي', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -73,9 +73,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: ClipOval(
                         child: _webImage != null
                             ? Image.memory(_webImage!, fit: BoxFit.cover)
-                            : auth.user?.avatar != null
-                                ? Image.network(auth.user!.avatar!, fit: BoxFit.cover)
-                                : Icon(Icons.person, color: c.muted, size: 64),
+                            : NovaAvatar(
+                                imageUrl: auth.user?.avatar,
+                                size: 110,
+                                placeholderIcon: Icons.person,
+                              ),
                       ),
                     ),
                     Positioned(
@@ -145,7 +147,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     // 1. رفع الصورة إذا تم اختيارها
                     if (_imageFile != null) {
                       final bytes = _webImage ?? await _imageFile!.readAsBytes();
-                      await auth.uploadAvatar(bytes, _imageFile!.name);
+                      final uploadOk = await auth.uploadAvatar(bytes, _imageFile!.name);
+                      if (!uploadOk) {
+                        setState(() => _busy = false);
+                        if (mounted) showToast(context, auth.error ?? 'فشل رفع الصورة');
+                        return;
+                      }
                     }
                     
                     // 2. تحديث الاسم والبريد

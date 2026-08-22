@@ -57,24 +57,32 @@ class ConversationController
             // Enrich: typing_users — المستخدمون الذين يكتبون حاليًا في هذه المحادثة
             try {
                 $tp = $this->pdo->prepare(
-"SELECT t.user_id, u.name, u.avatar
+"SELECT t.user_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified
                      FROM typing_status t
                      JOIN users u ON u.id = t.user_id
                      WHERE t.conversation_id = ? AND t.expires_at > datetime('now')"
                 );
                 $tp->execute([(int)$conv['id']]);
-                $conv['typing_users'] = array_map(function ($r) {
-                    $r['user_id'] = (int)$r['user_id'];
-                    return $r;
-                }, $tp->fetchAll());
+                $typingRows = $tp->fetchAll();
+                require_once __DIR__ . '/UserController.php';
+                $userCtrl = new UserController();
+                $conv['typing_users'] = array_map(function ($r) use ($userCtrl, $userId) {
+                    $ownerId = (int)$r['user_id'];
+                    $filtered = $userCtrl->filterProfile($r, $userId, $ownerId);
+                    return [
+                        'user_id' => $ownerId,
+                        'name' => $filtered['display_name'] ?? $filtered['name'],
+                        'avatar' => $filtered['avatar']
+                    ];
+                }, $typingRows);
             } catch (\Throwable $e) {
                 $conv['typing_users'] = [];
             }
             if ($conv['type'] === 'private') {
                 $other = $this->getOtherParticipant((int)$conv['id'], $userId);
                 if ($other) {
-                    $conv['title']  = $other['name'];
-                    $conv['avatar'] = $other['avatar'];
+                    $conv['title']      = $other['display_name'] ?? $other['name'];
+                    $conv['avatar']     = $other['avatar'];
                     $conv['other_user'] = $other;
                 }
             }
@@ -326,7 +334,7 @@ class ConversationController
             $other = $this->getOtherParticipant($id, $userId);
             if ($other) {
                 $conv['other_user'] = $other;
-                $conv['title']      = $other['name'];
+                $conv['title']      = $other['display_name'] ?? $other['name'];
                 $conv['avatar']     = $other['avatar'];
             }
         }

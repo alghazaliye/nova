@@ -122,14 +122,25 @@ class _CallsScreenState extends State<CallsScreen> {
   }
 
   void _dialFromCall(String? id, Map<String, dynamic> call, String type) async {
-    if (id != null) {
-      Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => CallScreen(callData: Map<String, dynamic>.from({
-                    ...call,
-                    'call_type': type,
-                  }))));
+    final me = context.read<AuthProvider>().user;
+    final incoming = call['caller_id'].toString() != (me?.id ?? -1).toString();
+    final targetId = incoming ? call['caller_id'] : call['callee_id'];
+    
+    if (targetId != null) {
+      final res = await ApiService.post('/calls', body: {
+        'callee_id': targetId,
+        'call_type': type,
+      });
+      if (!mounted) return;
+      if (res['success'] == true && res['data'] != null) {
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => CallScreen(callData: Map<String, dynamic>.from(
+                    res['data'] as Map<String, dynamic>))));
+      } else {
+        showToast(context, res['message'] ?? 'فشل بدء المكالمة');
+      }
     } else {
       _startCall(type);
     }
@@ -249,7 +260,7 @@ class _CallsScreenState extends State<CallsScreen> {
                           final missed = call['status'] == 'missed';
                           final label = incoming
                               ? 'مكالمة ${call['caller_name'] ?? 'واردة'}'
-                              : 'مكالمة إلى ${call['receiver_name'] ?? 'صادر'}';
+                              : 'مكالمة إلى ${call['peer_name'] ?? 'صادر'}';
                           return PressScale(
                             onTap: () => _showCallMenu(call),
                             child: Padding(

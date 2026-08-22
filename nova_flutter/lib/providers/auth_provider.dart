@@ -610,11 +610,7 @@ class AuthProvider extends ChangeNotifier {
     _loading = false;
     
     if (res['success'] == true) {
-      if (res['data'] != null && res['data'] is Map) {
-        _user = NovaUser.fromJson(Map<String, dynamic>.from(res['data']));
-      } else {
-        await fetchMe();
-      }
+      await fetchMe();
       notifyListeners();
       return true;
     } else {
@@ -636,11 +632,7 @@ class AuthProvider extends ChangeNotifier {
       _loading = false;
       
       if (res['success'] == true) {
-        if (res['data'] != null && res['data'] is Map) {
-           _user = NovaUser.fromJson(Map<String, dynamic>.from(res['data']));
-        } else {
-           await fetchMe();
-        }
+        await fetchMe(); // نستخدم fetchMe لضمان جلب كافة البيانات المحدثة بما فيها display_name
         notifyListeners();
         return true;
       } else {

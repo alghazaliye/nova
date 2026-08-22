@@ -105,7 +105,9 @@ class UserController
         $sql      = "UPDATE users SET " . implode(', ', $updates) . ", updated_at = datetime('now') WHERE id = ?";
         $this->pdo->prepare($sql)->execute($params);
 
-        Response::success($this->getUserById((int)$auth['user_id']), 'تم تحديث الملف الشخصي بنجاح');
+        $user = $this->getUserById((int)$auth['user_id']);
+        $user['display_name'] = self::_displayNameForIdentity($user);
+        Response::success($user, 'تم تحديث الملف الشخصي بنجاح');
     }
 
     // POST /api/v1/users/avatar
@@ -118,11 +120,16 @@ class UserController
         }
 
         $file     = $_FILES['avatar'];
-        $allowed  = ['image/jpeg', 'image/png', 'image/webp'];
+        $allowed  = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         $maxSize  = 5 * 1024 * 1024; // 5MB
 
-        if (!in_array($file['type'], $allowed, true)) {
-            Response::error('نوع الملف غير مسموح به. يُسمح فقط بـ JPEG, PNG, WebP', 'INVALID_FILE_TYPE', 400);
+        // فحص نوع الملف الفعلي
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $realMime = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+
+        if (!in_array($realMime, $allowed, true)) {
+            Response::error('نوع الملف غير مسموح به. يُسمح فقط بـ JPEG, PNG, WebP, GIF', 'INVALID_FILE_TYPE', 400);
         }
 
         if ($file['size'] > $maxSize) {
@@ -135,7 +142,8 @@ class UserController
             Response::error('الملف المرفوع ليس صورة صالحة', 'INVALID_IMAGE', 400);
         }
 
-        $ext      = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$file['type']];
+        $extMap   = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+        $ext      = $extMap[$realMime] ?? 'jpg';
         $fileName = UuidHelper::generate() . '.' . $ext;
         $destDir  = ($_ENV['STORAGE_PATH'] ?? __DIR__ . '/../storage') . '/avatars/';
 
@@ -147,12 +155,13 @@ class UserController
             Response::error('فشل في رفع الصورة', 'UPLOAD_FAILED', 500);
         }
 
-        $avatarUrl = rtrim($_ENV['STORAGE_URL'] ?? '', '/') . '/avatars/' . $fileName;
+        $avatarUrl = 'avatars/' . $fileName;
 
         $this->pdo->prepare("UPDATE users SET avatar = ?, updated_at = datetime('now') WHERE id = ?")
                   ->execute([$avatarUrl, $auth['user_id']]);
 
         $user = $this->getUserById((int)$auth['user_id']);
+        $user['display_name'] = self::_displayNameForIdentity($user);
         Response::success($user, 'تم تحديث الصورة الشخصية بنجاح');
     }
 
@@ -194,17 +203,19 @@ class UserController
         if ($isNumeric) {
             // تحسين البحث بالرقم: تنظيف المدخلات وتجربة عدة تنسيقات
             $cleanPhone = preg_replace('/[^0-9]/', '', $query);
-            
-            // إذا كان الرقم يبدأ بـ 7 أو 07 وهو 9 أو 10 أرقام، فهو رقم يمني أو سعودي محلي
             $localPhone = ltrim($cleanPhone, '0');
             
             $variants = [$cleanPhone, $localPhone];
-            if (strlen($localPhone) === 9) {
+            
+            // التعامل مع الأرقام الطويلة (مثل الرقم المذكور في المشكلة +9667381558611)
+            // أو الأرقام المحلية العادية
+            if (strlen($localPhone) >= 9) {
                 $variants[] = '+966' . $localPhone;
                 $variants[] = '+967' . $localPhone;
                 $variants[] = '0' . $localPhone;
             }
             
+            // البحث عن أي تطابق جزئي في الرقم لزيادة دقة النتائج
             $nameCols = ['name LIKE ?', 'username LIKE ?'];
             $params = [$like, $like];
             

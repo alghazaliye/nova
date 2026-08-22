@@ -38,8 +38,7 @@ class StoryController
         $stmt = $this->pdo->prepare(
             'SELECT s.id, s.uuid, s.user_id, s.type, s.text, s.file_id, s.privacy,
                     s.created_at, s.expires_at, s.views_count,
-                    u.name AS user_name, u.avatar AS user_avatar,
-                    u.username AS user_username, u.is_verified AS user_is_verified,
+                    u.id AS u_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified,
                     (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS view_count,
                     (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id AND sv.viewer_id = ?) AS viewed_by_me
              FROM stories s
@@ -50,6 +49,26 @@ class StoryController
         );
         $stmt->execute([$userId]);
         $rows = $stmt->fetchAll();
+
+        require_once __DIR__ . '/UserController.php';
+        $userCtrl = new UserController();
+        foreach ($rows as &$r) {
+            $ownerId = (int)$r['user_id'];
+            $user = [
+                'id' => $ownerId,
+                'name' => $r['name'],
+                'username' => $r['username'],
+                'phone' => $r['phone'],
+                'email' => $r['email'],
+                'avatar' => $r['avatar'],
+                'is_verified' => $r['is_verified']
+            ];
+            $filtered = $userCtrl->filterProfile($user, $userId, $ownerId);
+            $r['user_name'] = $filtered['display_name'] ?? $filtered['name'];
+            $r['user_avatar'] = $filtered['avatar'];
+            $r['user_username'] = $filtered['username'];
+            $r['user_is_verified'] = (bool)$filtered['is_verified'];
+        }
 
         // فلترة الخصوصية بعد الجلب (story_privacy: 0=لا أحد، 1=جهات اتصال، 2=الجميع)
         $filtered = [];

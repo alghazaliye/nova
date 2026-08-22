@@ -189,13 +189,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false, // نمنع Scaffold من تغيير حجمه عند ظهور لوحة المفاتيح لتجنب المساحات البيضاء
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
           Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 64),
-              child: IndexedStack(index: _index, children: _pages),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 64),
+                child: IndexedStack(index: _index, children: _pages),
+              ),
             ),
           ),
           if (_incomingCall != null)
@@ -737,10 +740,10 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                   SizedBox(
                     height: 240,
                     child: FutureBuilder(
-                      future: ApiService.get('/users/search',
-                          query: {'q': searchCtrl.text.length >= 2
-                              ? searchCtrl.text
-                              : 'a'}),
+                      future: searchCtrl.text.length >= 3
+                          ? ApiService.get('/users/search',
+                              query: {'q': searchCtrl.text})
+                          : Future.value({'success': true, 'data': []}),
                       builder: (context, snap) {
                         if (snap.connectionState != ConnectionState.done) {
                           return const Center(
@@ -754,15 +757,19 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                             .map((e) =>
                                 Map<String, dynamic>.from(e))
                             .toList();
-                        if (users.isEmpty) {
+                        if (users.isEmpty && searchCtrl.text.length >= 3) {
                           return const Center(child: Text('لا مستخدمين'));
+                        }
+                        if (users.isEmpty) {
+                          return const Center(child: Text('ابحث عن أعضاء لإضافتهم'));
                         }
                         return ListView.builder(
                           itemCount: users.length,
                           itemBuilder: (_, i) {
                             final u = users[i];
                             final uid = int.parse(u['id'].toString());
-                            final name = u['name'] ??
+                            final name = u['display_name'] ??
+                                u['name'] ??
                                 u['username'] ??
                                 u['phone'] ??
                                 '-';
@@ -771,8 +778,15 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                               value: on,
                               activeColor: c.accent,
                               dense: true,
-                              title: Text(name,
-                                  style: TextStyle(color: c.text)),
+                              title: Row(
+                                children: [
+                                  Flexible(child: Text(name, style: TextStyle(color: c.text))),
+                                  if (u['is_verified'] == true || (u['is_verified'] ?? 0) == 1) ...[
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.verified, color: Colors.blue, size: 14),
+                                  ],
+                                ],
+                              ),
                               subtitle: u['phone'] != null
                                   ? Text(u['phone'].toString(),
                                       style: TextStyle(
@@ -869,27 +883,27 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
             title: const Text('جهات الاتصال الجديدة'),
             content: SizedBox(
               width: 340,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: c.accent.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextField(
-                      controller: phoneCtrl,
-                      keyboardType: TextInputType.phone,
-                      textDirection: TextDirection.ltr,
-                      decoration: const InputDecoration(
-                        hintText: '+96650xxxxxxxx',
-                        labelText: 'أضف بالرقم',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: c.accent.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: TextField(
+                        controller: phoneCtrl,
+                        keyboardType: TextInputType.text,
+                        decoration: const InputDecoration(
+                          hintText: 'رقم، اسم مستخدم، أو بريد',
+                          labelText: 'بحث عن مستخدم',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                        ),
                       ),
                     ),
-                  ),
                   const SizedBox(height: 10),
                   Row(children: [
                     Expanded(
@@ -901,16 +915,16 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                               borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () async {
-                          final phone = phoneCtrl.text.trim();
-                          if (phone.length < 7) {
-                            showToast(dialogCtx, 'أدخل رقمًا صحيحًا');
+                          final query = phoneCtrl.text.trim();
+                          if (query.length < 3) {
+                            showToast(dialogCtx, 'أدخل 3 أحرف على الأقل للبحث');
                             return;
                           }
                           Map<String, dynamic> searchRes;
                           try {
                             searchRes = await ApiService.get(
                                 '/users/search',
-                                query: {'q': phone});
+                                query: {'q': query});
                           } catch (e) {
                             if (!dialogCtx.mounted) return;
                             showToast(dialogCtx, 'فشل الاتصال بالخادم — حاول مجددًا');
@@ -934,7 +948,7 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                                   dialogCtx,
                                   msg.isNotEmpty
                                       ? msg
-                                      : 'لم يتم العثور على مستخدم بهذا الرقم');
+                                      : 'لم يتم العثور على مستخدم مطابق لبحثك');
                             }
                             return;
                           }
@@ -1060,10 +1074,12 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
       builder: (c) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('بدء محادثة جديدة'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(
-              hintText: 'اسم أو رقم هاتف', labelText: 'بحث'),
+        content: SingleChildScrollView(
+          child: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(
+                hintText: 'رقم، اسم مستخدم، أو بريد', labelText: 'بحث'),
+          ),
         ),
         actions: [
           TextButton(
@@ -1715,16 +1731,17 @@ class _ContactsTabState extends State<ContactsTab> {
 
   Future<void> _showAddContactDialog() async {
     final ctrl = TextEditingController();
-    final entered = await showDialog<String>(
+        final entered = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('إضافة جهة اتصال جديدة'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-              hintText: 'رقم الهاتف (مثل +966501234567)', labelText: 'بحث'),
+        content: SingleChildScrollView(
+          child: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(
+                hintText: 'رقم، اسم مستخدم، أو بريد', labelText: 'بحث'),
+          ),
         ),
         actions: [
           TextButton(
@@ -1754,10 +1771,10 @@ class _ContactsTabState extends State<ContactsTab> {
     String? nickname,
   }) {
     final c = NovaColors.of(context);
-    final name = user['name'] ?? user['username'] ?? user['phone'] ?? '-';
+    final name = user['display_name'] ?? user['name'] ?? user['username'] ?? user['phone'] ?? '-';
     final letter = name.toString().isNotEmpty ? name.toString()[0] : '?';
     final displayName = (nickname != null && nickname.isNotEmpty)
-        ? '$nickname — ${user['name'] ?? user['username'] ?? '-'}'
+        ? '$nickname — $name'
         : name.toString();
     return PressScale(
       onTap: () => _openChatWith(user),
@@ -1788,7 +1805,7 @@ class _ContactsTabState extends State<ContactsTab> {
                                 fontWeight: FontWeight.w800,
                                 color: c.text)),
                       ),
-                      if ((user['is_verified'] ?? 0) == 1) ...[
+                      if (user['is_verified'] == true || (user['is_verified'] ?? 0) == 1) ...[
                         const SizedBox(width: 4),
                         const Icon(Icons.verified,
                             color: Colors.blue, size: 16),
@@ -1870,7 +1887,7 @@ class _ContactsTabState extends State<ContactsTab> {
                     },
                     onSubmitted: _search,
                     decoration: InputDecoration(
-                      hintText: 'ابحث باسم أو رقم',
+                      hintText: 'ابحث باسم، رقم، أو بريد',
                       hintStyle: TextStyle(color: c.muted, fontSize: 13),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),

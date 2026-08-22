@@ -92,20 +92,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (c) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('تعديل الملف الشخصي'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'الاسم (إلزامي)'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailCtrl,
-              decoration: const InputDecoration(labelText: 'البريد (اختياري)'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'الاسم (إلزامي)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'البريد (اختياري)'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -178,6 +180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final me = auth.user;
     final letter = me?.name != null && me!.name!.isNotEmpty ? me.name![0] : '?';
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: _saving
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
