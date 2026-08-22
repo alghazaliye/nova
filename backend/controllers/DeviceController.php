@@ -46,6 +46,15 @@ class DeviceController
         $stmt->execute([$userId, $fingerprint, ($model ?? '') . ' (' . ($osName ?? 'unknown') . ')', $osName, $appVersion]);
 
         $deviceId = (int)$this->pdo->lastInsertId() ?: $this->getDeviceId($userId, $fingerprint);
+
+        // Sync with user_devices table for FCM compatibility
+        $this->pdo->prepare(
+            'INSERT INTO user_devices (user_id, device_id, platform, last_active)
+             VALUES (?, ?, ?, datetime("now"))
+             ON CONFLICT(user_id, device_id) DO UPDATE SET
+                last_active = datetime("now")'
+        )->execute([$userId, $fingerprint, $platform ?? $osName]);
+
         $maxAllowed = $this->getMaxDevicesAllowed($userId);
         $activeCount = $this->getActiveDeviceCount($userId);
 
@@ -60,6 +69,33 @@ class DeviceController
             'active_devices' => $activeCount,
             'max_devices_allowed' => $maxAllowed,
         ], 'تم تسجيل الجهاز بنجاح');
+    }
+
+    public function saveFcmToken(): void
+    {
+        $user = AuthMiddleware::authenticate();
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $v    = Validator::make($body)
+            ->required('fcm_token', 'رمز الإشعارات')
+            ->required('device_fingerprint', 'معرف الجهاز');
+
+        if ($v->fails()) {
+            Response::validationError($v->errors());
+        }
+
+        $userId      = (int)$user['user_id'];
+        $fcmToken    = trim((string)$body['fcm_token']);
+        $fingerprint = trim((string)$body['device_fingerprint']);
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO user_devices (user_id, device_id, fcm_token, last_active)
+             VALUES (?, ?, ?, datetime("now"))
+             ON CONFLICT(user_id, device_id) DO UPDATE SET
+                fcm_token = excluded.fcm_token, last_active = datetime("now")'
+        );
+        $stmt->execute([$userId, $fingerprint, $fcmToken]);
+
+        Response::success(null, 'تم حفظ رمز الإشعارات بنجاح');
     }
 
     // GET /api/v1/devices

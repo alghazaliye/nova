@@ -180,7 +180,16 @@ class CallService {
       if (raw is! Map) continue;
       final type = (raw['signal_type'] ?? '').toString();
       final payload = raw['payload'];
+      final createdAt = raw['created_at']?.toString();
       if (payload == null) continue;
+      
+      if (createdAt != null) {
+        final signalTime = DateTime.tryParse(createdAt);
+        if (signalTime != null && (_lastSignalCheck == null || signalTime.isAfter(_lastSignalCheck!))) {
+          _lastSignalCheck = signalTime;
+        }
+      }
+
       Map<String, dynamic> data;
       if (payload is String) {
         try {
