@@ -124,9 +124,15 @@ class ApiService {
 
   static Map<String, dynamic> _decode(http.Response res) {
     try {
-      return jsonDecode(res.body) as Map<String, dynamic>;
+      final Map<String, dynamic> data = jsonDecode(res.body) as Map<String, dynamic>;
+      data['status_code'] = res.statusCode;
+      return data;
     } catch (_) {
-      return {'success': false, 'message': res.body};
+      return {
+        'success': false,
+        'message': res.body,
+        'status_code': res.statusCode,
+      };
     }
   }
 }

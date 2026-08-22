@@ -548,16 +548,20 @@ class AuthProvider extends ChangeNotifier {
     final err = (res['error_code'] ?? '').toString();
     
     // حساب محظور أو جلسة ملغاة
-    if (err == 'FORBIDDEN' || err == 'UNAUTHORIZED' || res['status'] == 401) {
+    if (err == 'FORBIDDEN' || err == 'UNAUTHORIZED' || res['status_code'] == 401 || res['success'] == false && (res['message']?.toString().toLowerCase().contains('unauthorized') == true)) {
       // إذا كان التوكن غير صالح، نقوم بتنظيف الجلسة محلياً فوراً لمنع التكرار
+      final wasLoggedIn = _user != null || ApiService.token != null;
+      
       _user = null;
       _appSettings = null;
       await clearToken();
       
-      _forcedLogoutReason = err == 'FORBIDDEN'
-          ? (res['message'] ?? 'تم حظر هذا الحساب من قبل إدارة التطبيق')
-          : null;
-      notifyListeners();
+      if (wasLoggedIn) {
+        _forcedLogoutReason = err == 'FORBIDDEN'
+            ? (res['message'] ?? 'تم حظر هذا الحساب من قبل إدارة التطبيق')
+            : null;
+        notifyListeners();
+      }
       return false;
     }
     if (res['success'] == true) {
@@ -591,15 +595,25 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     final token = ApiService.token;
+    
+    // 1. مسح البيانات محلياً فوراً لتحديث الواجهة ومنع أي طلبات إضافية بالتوكن القديم
     _user = null;
     _appSettings = null;
     await clearToken();
     notifyListeners();
-    
-    // إرسال طلب تسجيل الخروج للخادم كخطوة أخيرة وبدون انتظار، لمنع 401 في السجلات إذا كان التوكن قد انتهى
+
+    // 2. إرسال طلب تسجيل الخروج للخادم كخطوة خلفية غير معطلة
     if (token != null) {
       try {
-        ApiService.post('/auth/logout');
+        // نستخدم التوكن الحالي لإعلام الخادم بإنهاء الجلسة
+        // لا ننتظر الاستجابة ولا نهتم إذا فشلت بـ 401 لأننا قمنا بتسجيل الخروج محلياً بالفعل
+        http.post(
+          Uri.parse('${ApiService.baseUrl}/auth/logout'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 2)).catchError((_) => http.Response('', 500));
       } catch (_) {}
     }
   }
