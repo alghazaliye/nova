@@ -29,7 +29,7 @@ class Response
         if ($errors !== null) {
             $body['errors'] = $errors;
         }
-        if ($code >= 500) {
+        if ($code >= 500 && ($_ENV['APP_ENV'] ?? 'production') === 'development') {
             $body['trace'] = (new \Exception())->getTraceAsString();
         }
         echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

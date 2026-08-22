@@ -187,6 +187,10 @@ class UserController
     public function search(): void
     {
         $auth  = AuthMiddleware::authenticate();
+        
+        // منع هجمات Enumeration: تحديد عدد عمليات البحث (30 بحث كل 5 دقائق)
+        RateLimitMiddleware::check('search_' . $auth['user_id'], 30, 300); 
+        
         $query = trim($_GET['q'] ?? '');
 
         if (mb_strlen($query) < 2) {
