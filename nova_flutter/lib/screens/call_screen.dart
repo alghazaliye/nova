@@ -118,7 +118,12 @@ class _CallScreenState extends State<CallScreen> {
     if (callId == null || callId.isEmpty || callId == 'null') return;
     try {
       final res = await ApiService.get('/calls/$callId');
-      if (!mounted || res['success'] != true) return;
+      if (!mounted) return;
+      if (res['status_code'] == 401) {
+        _timer?.cancel();
+        return;
+      }
+      if (res['success'] != true) return;
       final data = res['data'] as Map<String, dynamic>? ?? {};
       final status = (data['status'] ?? '').toString();
       if (status.isEmpty) return;
@@ -209,18 +214,22 @@ class _CallScreenState extends State<CallScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // الفيديو البعيد (الطرف الآخر) — يملأ الشاشة بالكامل عند قبول المكالمة
+            // الفيديو البعيد (الطرف الآخر)
             if (_answered && isVideo && _svc != null)
               Positioned.fill(
-                child: RTCVideoView(
-                  _svc!.remoteRenderer,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                  mirror: false,
+                child: ValueListenableBuilder<RTCVideoRenderer>(
+                  valueListenable: ValueNotifier(_svc!.remoteRenderer),
+                  builder: (context, renderer, _) {
+                    return RTCVideoView(
+                      renderer,
+                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      mirror: false,
+                    );
+                  },
                 ),
               ),
 
-            // الفيديو المحلي (كاميرا المستخدم) — ركن صغير
-            // يظهر فور بدء WebRTC (معاينة أثناء الرنين) وبعد القبول
+            // الفيديو المحلي
             if (_webrtcStarted && isVideo && _svc != null)
               Positioned(
                 top: _answered ? 20 : null,
@@ -235,10 +244,15 @@ class _CallScreenState extends State<CallScreen> {
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
                     ),
-                    child: RTCVideoView(
-                      _svc!.localRenderer,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                      mirror: true,
+                    child: ValueListenableBuilder<RTCVideoRenderer>(
+                      valueListenable: ValueNotifier(_svc!.localRenderer),
+                      builder: (context, renderer, _) {
+                        return RTCVideoView(
+                          renderer,
+                          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                          mirror: true,
+                        );
+                      },
                     ),
                   ),
                 ),

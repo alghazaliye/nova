@@ -58,31 +58,22 @@ class CallService {
 
     // التقاط الكاميرا والميكروفون (مع إعادة المحاولة لأن المتصفح قد يرفض الطلب الأول)
     MediaStream? acquired;
-    for (var attempt = 0; attempt < 3; attempt++) {
+    // محاولة الحصول على الفيديو والصوت بأقل قيود ممكنة لضمان النجاح
+    try {
+      acquired = await navigator.mediaDevices.getUserMedia({
+        'audio': true,
+        'video': {
+          'facingMode': 'user',
+          'width': {'min': 320, 'ideal': 640, 'max': 1280},
+          'height': {'min': 240, 'ideal': 480, 'max': 720},
+        },
+      });
+    } catch (e) {
+      debugPrint('CallService: فشل الحصول على الفيديو، محاولة الصوت فقط: $e');
       try {
-        acquired = await navigator.mediaDevices.getUserMedia({
-          'audio': {'echoCancellation': true, 'noiseSuppression': true},
-          'video': {
-            'facingMode': 'user',
-            'width': {'ideal': 640},
-            'height': {'ideal': 480},
-            'frameRate': {'ideal': 24},
-          },
-        });
-        debugPrint('CallService: تم التقاط الوسائط: video=${acquired.getVideoTracks().length} audio=${acquired.getAudioTracks().length}');
-        break;
-      } catch (e) {
-        debugPrint('CallService: محاولة الكاميرا $attempt فشلت: $e');
-        if (attempt < 2) {
-          await Future.delayed(const Duration(milliseconds: 500));
-        }
-      }
-    }
-    if (acquired == null) {
-      try {
-        acquired = await navigator.mediaDevices.getUserMedia({'audio': true});
-      } catch (e) {
-        debugPrint('CallService: لا يوجد صوت ولا كاميرا: $e');
+        acquired = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+      } catch (e2) {
+        debugPrint('CallService: فشل الحصول على أي وسائط: $e2');
       }
     }
     if (acquired != null) {
@@ -105,17 +96,18 @@ class CallService {
 
     // استقبال الإشارات من الطرف الآخر
     _pc!.onTrack = (RTCTrackEvent event) {
-      debugPrint('CallService: onTrack: ${event.track.kind} streams=${event.streams.length}');
+      debugPrint('CallService: onTrack: ${event.track.kind}');
       if (event.streams.isNotEmpty) {
-        remoteRenderer.srcObject = event.streams.first;
-        debugPrint('CallService: تم ربط البث البعيد (${event.track.kind})');
-      } else {
-        debugPrint('CallService: track بدون streams: ${event.track.kind}');
+        if (remoteRenderer.srcObject?.id != event.streams.first.id) {
+          remoteRenderer.srcObject = event.streams.first;
+        }
       }
     };
     _pc!.onAddStream = (MediaStream stream) {
-      debugPrint('CallService: onAddStream');
-      remoteRenderer.srcObject = stream;
+      debugPrint('CallService: onAddStream: ${stream.id}');
+      if (remoteRenderer.srcObject?.id != stream.id) {
+        remoteRenderer.srcObject = stream;
+      }
     };
 
     // ICE candidates
@@ -173,6 +165,10 @@ class CallService {
     final res = await ApiService.get('/calls/$_callId/signals', query: {
       if (since != null && since.isNotEmpty) 'since': since,
     });
+    if (res['status_code'] == 401) {
+      await dispose();
+      return;
+    }
     _lastSignalCheck = DateTime.now();
     if (res['success'] != true) return;
     final rows = res['data'] as List? ?? [];
@@ -245,6 +241,10 @@ class CallService {
       final res = await ApiService.get('/calls/$_callId/signals', query: {
         if (since != null && since.isNotEmpty) 'since': since,
       });
+      if (res['status_code'] == 401) {
+        await dispose();
+        return;
+      }
       if (res['success'] != true) return;
       final rows = res['data'] as List? ?? [];
       for (final raw in rows) {
