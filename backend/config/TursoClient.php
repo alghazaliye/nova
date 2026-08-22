@@ -15,6 +15,12 @@ class TursoClient
     {
         // Turso URLs might be libsql://, convert to https:// for HTTP client
         $this->url = str_replace('libsql://', 'https://', $url);
+        if (strpos($this->url, '.turso.io') !== false && strpos($this->url, 'https://') === 0) {
+            // It's already an HTTPS URL for Turso
+        } else {
+             $this->url = str_replace('libsql://', 'https://', $url);
+        }
+        $this->url = rtrim($this->url, '/') ;
         $this->token = $token;
     }
 
@@ -23,16 +29,25 @@ class TursoClient
      */
     public function execute(string $sql, array $args = []): array
     {
-        $payload = [
-            'statements' => [
-                [
-                    'q' => $sql,
-                    'params' => $this->formatArgs($args)
+        if (empty($args)) {
+            $payload = [
+                'statements' => [
+                    $sql
                 ]
-            ]
-        ];
+            ];
+        } else {
+            $payload = [
+                'statements' => [
+                    [
+                        'q' => $sql,
+                        'params' => $this->formatArgs($args)
+                    ]
+                ]
+            ];
+        }
 
-        return $this->request($payload)[0] ?? [];
+        $res = $this->request($payload);
+        return $res[0] ?? [];
     }
 
     /**
@@ -59,13 +74,18 @@ class TursoClient
     {
         $formatted = [];
         foreach ($args as $key => $value) {
-            // Turso expects named parameters to have the prefix if used in query,
-            // but the HTTP API expects them as keys in the params object.
-            // If it's a list (positional), just return values.
+            $val = ['type' => 'null', 'value' => null];
+            if (is_int($value)) $val = ['type' => 'integer', 'value' => (string)$value];
+            elseif (is_float($value)) $val = ['type' => 'float', 'value' => $value];
+            elseif (is_string($value)) $val = ['type' => 'text', 'value' => $value];
+            elseif (is_bool($value)) $val = ['type' => 'integer', 'value' => $value ? '1' : '0'];
+            elseif (is_null($value)) $val = ['type' => 'null', 'value' => null];
+
             if (is_int($key)) {
-                $formatted[] = $value;
+                $formatted[] = $val;
             } else {
-                $formatted[ltrim((string)$key, ':')] = $value;
+                $val['name'] = ltrim((string)$key, ':');
+                $formatted[] = $val;
             }
         }
         return $formatted;
@@ -73,7 +93,17 @@ class TursoClient
 
     private function request(array $payload): array
     {
-        $ch = curl_init($this->url);
+        // For Turso /v2/pipeline or /v1/execute, but here we use /v1/execute behavior
+        // If it's a batch/statements request, Turso expects the path to be /v2/pipeline or similar
+        // but current implementation seems to target the base URL.
+        // Let's ensure we are hitting the right endpoint if needed.
+        $targetUrl = $this->url;
+        if (strpos($targetUrl, '/v2/pipeline') === false && strpos($targetUrl, '/v1/execute') === false) {
+             // Default to v1 execute for compatibility with existing code
+             // $targetUrl .= '/v1/execute'; 
+        }
+
+        $ch = curl_init($targetUrl);
         $jsonData = json_encode($payload);
 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -96,7 +126,7 @@ class TursoClient
         $data = json_decode($response, true);
         if ($httpCode >= 400) {
             $msg = $data['error'] ?? $data['message'] ?? 'Unknown Error';
-            throw new Exception("Turso API Error ($httpCode): " . $msg);
+            throw new Exception("Turso API Error ($httpCode): " . $msg . " URL: " . $this->url . " Response: " . $response);
         }
 
         return $data;
