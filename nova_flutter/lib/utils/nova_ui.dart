@@ -55,6 +55,17 @@ ThemeData buildNovaTheme(Brightness b, NovaColors c) {
 /* ═══════════════════════ رابط الملف الكامل ═══════════════════════ */
 String novaMediaUrl(String? path) => ApiService.mediaUrl(path);
 
+/// تحويل كود اللون (Hex) إلى كائن Color
+Color parseColor(String? hex, {Color fallback = const Color(0xFF5B5CE2)}) {
+  if (hex == null || hex.isEmpty) return fallback;
+  try {
+    final clean = hex.replaceAll('#', '');
+    if (clean.length == 6) return Color(int.parse('FF$clean', radix: 16));
+    if (clean.length == 8) return Color(int.parse(clean, radix: 16));
+  } catch (_) {}
+  return fallback;
+}
+
 /* ═══════════════════════ تحويل الزمن إلى نص عربي ═══════════════════════ */
 String timeAgoArabic(String? iso) {
   if (iso == null || iso.isEmpty) return '';

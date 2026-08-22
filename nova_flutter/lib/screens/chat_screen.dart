@@ -1970,8 +1970,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                     if (widget.conv.isVerified) ...[
                                       const SizedBox(width: 4),
-                                      const Icon(Icons.verified,
-                                          color: Color(0xFF5B6CFF), size: 14),
+                                      Icon(
+                                        Icons.verified,
+                                        color: parseColor(widget.conv.badgeColor),
+                                        size: 14,
+                                      ),
                                     ],
                                   ],
                                 ),
@@ -3102,7 +3105,11 @@ class _Bubble extends StatelessWidget {
             const SizedBox(height: 3),
             Row(mainAxisSize: MainAxisSize.min, children: [
               if (!isMine && msg.isVerified) ...[
-                const Icon(Icons.verified, color: Color(0xFF5B6CFF), size: 12),
+                                            Icon(
+                                              Icons.verified,
+                                              color: parseColor(msg.badgeColor),
+                                              size: 13,
+                                            ),
                 const SizedBox(width: 4),
               ],
               if (msg.isEdited)

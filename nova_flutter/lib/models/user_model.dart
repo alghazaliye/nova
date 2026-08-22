@@ -9,6 +9,7 @@ class NovaUser {
   final String? avatar;
   final bool isOnline;
   final bool isVerified;
+  final String? badgeColor;
   final bool isBlocked;
   final Map<String, dynamic>? plan;
   final int activeDevicesCount;
@@ -25,6 +26,7 @@ class NovaUser {
     this.avatar,
     this.isOnline = false,
     this.isVerified = false,
+    this.badgeColor,
     this.isBlocked = false,
     this.plan,
     this.activeDevicesCount = 0,
@@ -37,11 +39,12 @@ class NovaUser {
         phone: j['phone'] ?? '',
         email: j['email'],
         name: j['display_name'] ?? j['name'] ?? j['username'],
-        username: null,
+        username: j['username'],
         bio: j['bio'],
         avatar: j['avatar'],
         isOnline: j['is_online'] == true || (j['is_online'] ?? 0) == 1,
         isVerified: j['is_verified'] == true || (j['is_verified'] ?? 0) == 1,
+        badgeColor: j['badge_color']?.toString() ?? (j['plan'] != null ? j['plan']['badge_color']?.toString() : null),
         isBlocked: j['is_blocked'] == true || (j['is_blocked'] ?? 0) == 1,
         plan: j['plan'] is Map ? Map<String, dynamic>.from(j['plan']) : null,
         activeDevicesCount: int.parse((j['active_devices_count'] ?? 0).toString()),
@@ -64,6 +67,7 @@ class Conversation {
   final int unreadCount;
   final List<NovaUser> members;
   final bool isVerified;
+  final String? badgeColor;
   final String phone;
   final int otherUserId;
   final bool isOnline;
@@ -86,6 +90,7 @@ class Conversation {
     this.unreadCount = 0,
     required this.members,
     this.isVerified = false,
+    this.badgeColor,
     this.phone = '',
     this.otherUserId = 0,
     this.isOnline = false,
@@ -116,6 +121,7 @@ class Conversation {
                 .toList()
             : [],
         isVerified: _otherIsVerified(j),
+        badgeColor: _otherBadgeColor(j),
         phone: _memberPhone(j),
         otherUserId: _otherUserId(j),
         isOnline: _otherIsOnline(j),
@@ -178,6 +184,15 @@ class Conversation {
     } catch (_) {}
     return false;
   }
+
+  static String? _otherBadgeColor(Map<String, dynamic> j) {
+    try {
+      if (j['badge_color'] != null) return j['badge_color'].toString();
+      final ou = j['other_user'];
+      if (ou is Map) return ou['badge_color']?.toString();
+    } catch (_) {}
+    return null;
+  }
 }
 
 class NovaMessage {
@@ -192,6 +207,7 @@ class NovaMessage {
   final bool isEdited;
   final bool isDeleted;
   final bool isVerified;
+  final String? badgeColor;
 
   // Attachment fields
   final String? filePath;
@@ -214,6 +230,7 @@ class NovaMessage {
     this.isEdited = false,
     this.isDeleted = false,
     this.isVerified = false,
+    this.badgeColor,
     this.filePath,
     this.thumbnailPath,
     this.mimeType,
@@ -239,6 +256,7 @@ class NovaMessage {
         isEdited: j['is_edited'] == true || (j['is_edited'] ?? 0) == 1,
         isDeleted: j['deleted_at'] != null || j['status'] == 'deleted',
         isVerified: j['is_verified'] == true || (j['is_verified'] ?? 0) == 1,
+        badgeColor: j['badge_color']?.toString(),
         filePath: j['file_path'],
         thumbnailPath: j['thumbnail_path'],
         mimeType: j['mime_type'],

@@ -37,6 +37,10 @@ class MessageController
                     m.type, m.body, m.file_id, m.client_message_id, m.status, m.disappear_after,
                     m.created_at, m.updated_at, m.deleted_at,
                     u.id AS user_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified,
+                    (SELECT p.badge_color FROM user_subscriptions us 
+                     JOIN plans p ON p.id = us.plan_id 
+                     WHERE us.user_id = u.id AND us.status = 'active' 
+                     ORDER BY us.id DESC LIMIT 1) as badge_color,
                     a.storage_path AS file_path, a.thumbnail_path, a.mime_type, a.file_size,
                     a.width, a.height, a.duration
              FROM messages m
@@ -61,12 +65,14 @@ class MessageController
                 'phone' => $m['phone'],
                 'email' => $m['email'],
                 'avatar' => $m['avatar'],
-                'is_verified' => $m['is_verified']
+                'is_verified' => $m['is_verified'],
+                'badge_color' => $m['badge_color']
             ];
             $filtered = $userCtrl->filterProfile($user, $userId, $ownerId);
             $m['sender_name'] = $filtered['display_name'] ?? $filtered['name'];
             $m['sender_avatar'] = $filtered['avatar'];
             $m['is_verified'] = (bool)$filtered['is_verified'];
+            $m['badge_color'] = $filtered['badge_color'] ?? null;
         }
 
         // Mark unread non-deleted messages sent to this user as delivered, then mark all as read

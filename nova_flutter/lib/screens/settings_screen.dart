@@ -225,38 +225,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 style: TextStyle(
                                     fontSize: 19, fontWeight: FontWeight.w800, color: c.text)),
                             if (me?.isVerified == true)
-                              const Padding(padding: EdgeInsets.only(right: 6),
-                                  child: Icon(Icons.verified, color: Colors.blue, size: 16)),
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Icon(
+                                  Icons.verified,
+                                  color: parseColor(me?.badgeColor),
+                                  size: 18,
+                                ),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(me?.phone ?? '',
                             style: TextStyle(fontSize: 13, color: c.muted)),
-                        if (me?.planName != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [
-                                  const Color(0xFFB7791F).withOpacity(.18),
-                                  const Color(0xFFD69E2E).withOpacity(.12),
-                                ]),
-                                borderRadius: BorderRadius.circular(22),
-                                border: Border.all(color: const Color(0xFFB7791F).withOpacity(.45)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.workspace_premium, color: Color(0xFFB7791F), size: 16),
-                                  const SizedBox(width: 6),
-                                  Text('باقة ${me!.planName}',
-                                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
-                                          color: Color(0xFF975A16))),
-                                ],
-                              ),
-                            ),
-                          ),
                         const SizedBox(height: 12),
                         TabChip(label: 'تعديل الملف الشخصي', onTap: _updateProfile),
                       ],

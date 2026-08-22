@@ -501,12 +501,12 @@ class CallController
         ];
         
         // إذا كان هناك خادم TURN مخصص في الإعدادات
-        $turnUrl = SettingsHelper::get($this->pdo, 'turn_server_url');
+        $turnUrl = SettingsHelper::getSetting($this->pdo, 'turn_server_url');
         if ($turnUrl) {
             $servers[] = [
                 'urls'     => $turnUrl,
-                'username' => SettingsHelper::get($this->pdo, 'turn_server_user', ''),
-                'credential' => SettingsHelper::get($this->pdo, 'turn_server_pass', ''),
+                'username' => SettingsHelper::getSetting($this->pdo, 'turn_server_user', ''),
+                'credential' => SettingsHelper::getSetting($this->pdo, 'turn_server_pass', ''),
             ];
         }
 

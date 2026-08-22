@@ -239,11 +239,15 @@ class UserController
         }
 
         $cols = implode(' OR ', $nameCols);
-        $sql = 'SELECT id, uuid, name, username, phone, avatar, is_online, last_seen, is_verified
-             FROM users
+        $sql = 'SELECT u.id, u.uuid, u.name, u.username, u.phone, u.avatar, u.is_online, u.last_seen, u.is_verified,
+                           (SELECT p.badge_color FROM user_subscriptions us 
+                            JOIN plans p ON p.id = us.plan_id 
+                            WHERE us.user_id = u.id AND us.status = "active" 
+                            ORDER BY us.id DESC LIMIT 1) as badge_color
+             FROM users u
              WHERE (' . $cols . ')
-               AND id != ? AND is_blocked = 0
-               AND id NOT IN (
+               AND u.id != ? AND u.is_blocked = 0
+               AND u.id NOT IN (
                    SELECT user_id FROM blocks WHERE blocked_user_id = ?
                    UNION ALL
                    SELECT blocked_user_id FROM blocks WHERE user_id = ?
@@ -842,9 +846,14 @@ class UserController
     private function getPublicProfile(int $id, ?int $viewerId = null): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT id, uuid, name, username, phone, email, bio, avatar, status_text,
-                    is_online, last_seen, is_verified
-             FROM users WHERE id = ? AND is_blocked = 0 LIMIT 1'
+            'SELECT u.id, u.uuid, u.name, u.username, u.phone, u.email, u.bio, u.avatar, u.status_text,
+                    u.is_online, u.last_seen, u.is_verified,
+                    (SELECT p.badge_color FROM user_subscriptions us 
+                     JOIN plans p ON p.id = us.plan_id 
+                     WHERE us.user_id = u.id AND us.status = "active" 
+                     ORDER BY us.id DESC LIMIT 1) as badge_color
+             FROM users u
+             WHERE u.id = ? AND u.is_blocked = 0 LIMIT 1'
         );
         $stmt->execute([$id]);
         $profile = $stmt->fetch() ?: null;

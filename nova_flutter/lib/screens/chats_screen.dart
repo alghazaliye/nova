@@ -1285,9 +1285,11 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
                                                 ),
                                               if (conv.isVerified) ...[
                                                 const SizedBox(width: 4),
-                                                const Icon(Icons.verified,
-                                                    color: Colors.blue,
-                                                    size: 16),
+                                                Icon(
+                                                  Icons.verified,
+                                                  color: parseColor(conv.badgeColor),
+                                                  size: 16,
+                                                ),
                                               ],
                                             ],
                                           ),
@@ -1774,8 +1776,11 @@ class _ContactsTabState extends State<ContactsTab> {
                       ),
                       if (user['is_verified'] == true || (user['is_verified'] ?? 0) == 1) ...[
                         const SizedBox(width: 4),
-                        const Icon(Icons.verified,
-                            color: Colors.blue, size: 16),
+                        Icon(
+                          Icons.verified,
+                          color: user['badge_color'] != null ? NovaUI.parseColor(user['badge_color'].toString()) : Colors.blue,
+                          size: 16,
+                        ),
                       ],
                     ]),
                     const SizedBox(height: 3),

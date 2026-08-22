@@ -57,7 +57,11 @@ class ConversationController
             // Enrich: typing_users — المستخدمون الذين يكتبون حاليًا في هذه المحادثة
             try {
                 $tp = $this->pdo->prepare(
-"SELECT t.user_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified
+"SELECT t.user_id, u.name, u.username, u.phone, u.email, u.avatar, u.is_verified,
+                            (SELECT p.badge_color FROM user_subscriptions us 
+                             JOIN plans p ON p.id = us.plan_id 
+                             WHERE us.user_id = u.id AND us.status = 'active' 
+                             ORDER BY us.id DESC LIMIT 1) as badge_color
                      FROM typing_status t
                      JOIN users u ON u.id = t.user_id
                      WHERE t.conversation_id = ? AND t.expires_at > datetime('now')"
@@ -371,7 +375,11 @@ class ConversationController
     private function getOtherParticipant(int $convId, int $myId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT u.id, u.uuid, u.name, u.username, u.avatar, u.is_online, u.last_seen, u.is_verified
+            'SELECT u.id, u.uuid, u.name, u.username, u.avatar, u.is_online, u.last_seen, u.is_verified,
+                    (SELECT p.badge_color FROM user_subscriptions us 
+                     JOIN plans p ON p.id = us.plan_id 
+                     WHERE us.user_id = u.id AND us.status = "active" 
+                     ORDER BY us.id DESC LIMIT 1) as badge_color
              FROM conversation_members cm
              JOIN users u ON u.id = cm.user_id
              WHERE cm.conversation_id = ? AND cm.user_id != ? AND cm.left_at IS NULL
