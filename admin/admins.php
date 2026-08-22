@@ -105,10 +105,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // جلب البيانات
-	$admins = $pdo->query(
-	    'SELECT a.id, a.name, a.username, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
-	     FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC'
-	)->fetchAll();
+    // تحقق من وجود عمود username قبل الاستعلام
+    $checkCols = $pdo->query("PRAGMA table_info(admins)")->fetchAll();
+    $hasUsername = false;
+    foreach ($checkCols as $col) {
+        if ($col['name'] === 'username') {
+            $hasUsername = true;
+            break;
+        }
+    }
+    
+    $usernameField = $hasUsername ? "a.username" : "'' as username";
+    
+    $admins = $pdo->query(
+        "SELECT a.id, a.name, $usernameField, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
+         FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC"
+    )->fetchAll();
 
 $roles = $pdo->query(
     'SELECT r.id, r.name, r.description, COUNT(rp.permission_id) permission_count 
@@ -277,10 +289,18 @@ include __DIR__ . '/includes/sidebar.php';
 	                    <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
 	                    <td style="padding: 12px;"><?= htmlspecialchars($a['username'] ?? '-') ?></td>
 	                    <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
-	                    <td style="padding: 12px;">
-	                      <?php $roleMap = ['Super Admin'=>'مدير خارق','Admin'=>'مشرف','Moderator'=>'مراقب']; ?>
-	                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
-	                    </td>
+		                    <td style="padding: 12px;">
+		                      <?php 
+		                      $roleMap = [
+		                          'Super Admin' => 'مدير خارق',
+		                          'Admin' => 'مشرف',
+		                          'Moderator' => 'مراقب',
+		                          'Support' => 'دعم فني',
+		                          'Analyst' => 'محلل بيانات'
+		                      ]; 
+		                      ?>
+		                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
+		                    </td>
 	                    <td style="padding: 12px;">
                         <span style="padding: 5px 10px; border-radius: 4px; background: <?= $a['is_active'] ? '#d4edda' : '#f8d7da' ?>; color: <?= $a['is_active'] ? '#155724' : '#721c24' ?>; font-weight: bold;">
                             <?= $a['is_active'] ? '🟢 نشط' : '🔴 معطل' ?>
@@ -355,9 +375,17 @@ include __DIR__ . '/includes/sidebar.php';
         <tbody>
 	            <?php foreach ($roles as $r): ?>
 	                <tr style="border-bottom: 1px solid #ddd;">
-	                    <td style="padding: 12px;">
-	                      <?php $roleMap = ['Super Admin'=>'مدير خارق','Admin'=>'مشرف','Moderator'=>'مراقب']; ?>
-	                      <strong><?= $roleMap[$r['name']] ?? htmlspecialchars($r['name']) ?></strong>
+		                    <td style="padding: 12px;">
+		                      <?php 
+		                      $roleMap = [
+		                          'Super Admin' => 'مدير خارق',
+		                          'Admin' => 'مشرف',
+		                          'Moderator' => 'مراقب',
+		                          'Support' => 'دعم فني',
+		                          'Analyst' => 'محلل بيانات'
+		                      ]; 
+		                      ?>
+		                      <strong><?= $roleMap[$r['name']] ?? htmlspecialchars($r['name']) ?></strong>
 	                    </td>
                     <td style="padding: 12px;"><?= htmlspecialchars($r['description'] ?? '') ?></td>
                     <td style="padding: 12px;"><span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px; font-weight: bold;"><?= (int)$r['permission_count'] ?></span></td>

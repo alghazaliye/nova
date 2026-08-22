@@ -43,3 +43,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+dependency_overrides:
+  record_linux: ^1.2.0
