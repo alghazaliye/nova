@@ -6,7 +6,7 @@ import 'package:nova_flutter/utils/nova_web_state.dart' show novaHref, webOrigin
 /// خدمة الاتصال بخادم NOVA Messenger API
 class ApiService {
   /// لا رابط ثابت لأي بيئة سابقة — دائمًا نفس نطاق الصفحة الحالية.
-  static const String _defaultUrl = '/api/v1'; // لا يُستخدم إلا عند عدم توفر origin
+  static const String _defaultUrl = 'https://nova-wn25.onrender.com/api/v1';
 
   /// تجاوز يدوي للرابط الأساسي (يُستخدم لتغيير الخادم عند النشر)
   static String? baseUrlOverride;
