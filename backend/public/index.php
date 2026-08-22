@@ -214,8 +214,6 @@ if ($uri === '/auth/set-password' && $method === 'POST') {
 }
 if ($uri === '/auth/logout' && $method === 'POST') {
     (new AuthController())->logout();
-    file_put_contents('/tmp/nova_logout.log', date('H:i:s')." POST logout ".$_SERVER['REMOTE_ADDR']." token=".(substr(getallheaders()['Authorization'] ?? '',7,20))."
-", FILE_APPEND);
 }
 if ($uri === '/auth/me' && $method === 'GET') {
     (new AuthController())->me();

@@ -268,11 +268,14 @@ class AuthController
         require_once __DIR__ . '/../helpers/AuthConfigService.php';
         $cfg = new AuthConfigService();
         $cfg->assertLoginMethod('phone');
+        $this->assertOtpProviderAvailable();
 
         // Check user exists
+        error_log("[nova trace] Login check user: " . $phone);
         $stmt = $this->pdo->prepare('SELECT id, is_blocked FROM users WHERE phone = ? LIMIT 1');
         $stmt->execute([$phone]);
         $existing = $stmt->fetch();
+        error_log("[nova trace] User exists: " . ($existing ? 'yes' : 'no'));
         
         if (!$existing) {
             Response::error('رقم الهاتف غير مسجل. يرجى إنشاء حساب جديد أولاً.', 'USER_NOT_FOUND', 404);

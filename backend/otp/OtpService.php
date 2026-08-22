@@ -266,6 +266,7 @@ class OtpService
      */
     public function createAndSend(string $phone, ?string $name = null, string $ip = '', string $ua = '', ?string $devCode = null): array
     {
+        error_log("[nova trace] OtpService::createAndSend for: " . $phone);
         $mode = $this->getDeliveryMode();
 
         // 1. Cancel previous pending OTPs for this phone

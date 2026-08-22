@@ -27,7 +27,7 @@ class CallController
         $contactPhone = $body['contact_phone'] ?? '';
         $callType = in_array($body['call_type'] ?? '', ['voice', 'video']) ? $body['call_type'] : 'voice';
 
-        $userCtrl = new UserController($this->pdo);
+        $userCtrl = new UserController();
         if (!$calleeId && !empty($contactPhone)) {
             $stmt = $this->pdo->prepare('SELECT id FROM users WHERE phone = ? OR phone = ? OR phone = ? LIMIT 1');
             $clean = preg_replace('/[^0-9]/', '', $contactPhone);
@@ -186,7 +186,7 @@ class CallController
             $peers = $stmt->fetchAll(PDO::FETCH_COLUMN);
             if (empty($peers)) return;
 
-            $userCtrl = new UserController($this->pdo);
+            $userCtrl = new UserController();
             $stmt = $this->pdo->prepare('SELECT id, name, username, phone, email, avatar, is_verified FROM users WHERE id = ? LIMIT 1');
             $stmt->execute([$senderId]);
             $sender = $stmt->fetch();
@@ -220,6 +220,7 @@ class CallController
     // GET /api/v1/calls/incoming — المكالمات الواردة النشطة (ringing/calling) للمستخدم الحالي
     public function incoming(): void
     {
+        error_log("[nova trace] CallController::incoming");
         $auth   = AuthMiddleware::authenticate();
         $userId = (int)$auth['user_id'];
 
@@ -260,7 +261,7 @@ class CallController
         $stmt->execute([$userId, $userId]);
         $rows = $stmt->fetchAll();
         
-        $userCtrl = new UserController($this->pdo);
+        $userCtrl = new UserController();
         foreach ($rows as &$row) {
             $filtered = $userCtrl->filterProfile([
                 'id' => $row['u_id'], 'name' => $row['u_n'], 'username' => $row['u_u'],
@@ -315,7 +316,7 @@ class CallController
         $stmt->execute([$userId, $limit, $offset]);
         $rows = $stmt->fetchAll();
         
-        $userCtrl = new UserController($this->pdo);
+        $userCtrl = new UserController();
         foreach ($rows as &$row) {
             $callerF = $userCtrl->filterProfile([
                 'id' => $row['u_id'], 'name' => $row['u_n'], 'username' => $row['u_u'],
@@ -363,7 +364,7 @@ class CallController
             Response::notFound('المكالمة غير موجودة');
         }
 
-        $userCtrl = new UserController($this->pdo);
+        $userCtrl = new UserController();
         $callerF = $userCtrl->filterProfile([
             'id' => $call['u_id'], 'name' => $call['u_n'], 'username' => $call['u_u'],
             'phone' => $call['u_p'], 'email' => $call['u_e'], 'avatar' => $call['u_a'], 'is_verified' => $call['u_v']

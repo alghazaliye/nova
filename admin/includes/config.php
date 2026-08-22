@@ -35,11 +35,18 @@ function getAdminDB(): PDO
             $url   = $_ENV['TURSO_URL'] ?? '';
             $token = $_ENV['TURSO_AUTH_TOKEN'] ?? '';
             
+            if (empty($url) || empty($token)) {
+                die("Turso configuration missing. Set TURSO_URL and TURSO_AUTH_TOKEN in Render environment.");
+            }
+            
             $tursoPdoFile = realpath(__DIR__ . '/../../backend/config/TursoPdo.php');
             if ($tursoPdoFile) {
                 require_once $tursoPdoFile;
-                // TursoPdo handles SQL adaptation internally
+                // TursoPdo behaves like PDO but is not a subclass. 
+                // We cast or return it; admin panel uses $pdo->prepare/query which it supports.
                 $pdo = new TursoPdo($url, $token);
+            } else {
+                die("TursoPdo adapter file not found.");
             }
         } elseif ($dbType === 'sqlite') {
             // Share the same SQLite database as the backend

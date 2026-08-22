@@ -174,6 +174,7 @@ class Database
                 'plan_type'                 => "TEXT NOT NULL DEFAULT 'free'",
                 'enable_verification'       => 'INTEGER NOT NULL DEFAULT 0',
                 'verification_duration_days' => 'INTEGER DEFAULT NULL',
+                'badge_color'               => "TEXT DEFAULT '#007AFF'",
             ],
 	            'users' => [
 	                'verified_until' => 'DATETIME DEFAULT NULL',
@@ -196,22 +197,22 @@ class Database
             'email_verification_codes' => [
                 'seen_at' => 'DATETIME DEFAULT NULL',
             ],
-	            'payment_requests' => [
-	                'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
-	                'user_id'                => 'INTEGER NOT NULL',
-	                'plan_id'                => 'INTEGER NOT NULL',
-	                'status'                 => "TEXT NOT NULL DEFAULT 'pending'",
-	                'receipt_path'           => 'TEXT DEFAULT NULL',
-	                'admin_note'             => 'TEXT DEFAULT NULL',
-	                'reviewed_by'            => 'INTEGER DEFAULT NULL',
-	                'reviewed_at'            => 'DATETIME DEFAULT NULL',
-	                'created_at'             => 'DATETIME NOT NULL DEFAULT current_timestamp',
-	            ],
-	            'user_appeals' => [
-	                'attachment'                   => 'TEXT DEFAULT NULL',
-	                'account_status_at_submission' => 'TEXT DEFAULT NULL',
-	                'updated_at'                   => "DATETIME NOT NULL DEFAULT current_timestamp",
-	            ],
+		            'payment_requests' => [
+		                'id'                     => 'INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT',
+		                'user_id'                => 'INTEGER NOT NULL',
+		                'plan_id'                => 'INTEGER NOT NULL',
+		                'status'                 => "TEXT NOT NULL DEFAULT 'pending'",
+		                'receipt_path'           => 'TEXT DEFAULT NULL',
+		                'admin_note'             => 'TEXT DEFAULT NULL',
+		                'reviewed_by'            => 'INTEGER DEFAULT NULL',
+		                'reviewed_at'            => 'DATETIME DEFAULT NULL',
+		                'created_at'             => 'DATETIME DEFAULT NULL',
+		            ],
+		            'user_appeals' => [
+		                'attachment'                   => 'TEXT DEFAULT NULL',
+		                'account_status_at_submission' => 'TEXT DEFAULT NULL',
+		                'updated_at'                   => "DATETIME DEFAULT NULL",
+		            ],
 	            'user_subscriptions' => [
 	                'payment_method' => 'TEXT DEFAULT NULL',
 	                'payment_id'     => 'TEXT DEFAULT NULL',
@@ -321,6 +322,32 @@ class Database
     private static function migrateMissingTables(): void
     {
         $tables = [
+            'sessions' => "CREATE TABLE IF NOT EXISTS `sessions` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `user_id` integer NOT NULL,
+  `token_hash` varchar(255) NOT NULL,
+  `device_id` integer DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `device_name` varchar(255) DEFAULT NULL,
+  `platform` varchar(50) DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  `revoked_at` datetime DEFAULT NULL,
+  CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+)",
+            'user_devices' => "CREATE TABLE IF NOT EXISTS `user_devices` (
+  `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  `user_id` integer NOT NULL,
+  `device_uuid` varchar(190) NOT NULL,
+  `fcm_token` varchar(500) DEFAULT NULL,
+  `platform` varchar(50) DEFAULT NULL,
+  `last_active_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp,
+  UNIQUE (`user_id`, `device_uuid`),
+  CONSTRAINT `fk_user_devices_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+)",
             'user_bans' => "CREATE TABLE IF NOT EXISTS `user_bans` (
   `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   `user_id` integer NOT NULL,
@@ -477,6 +504,32 @@ class Database
     // Prevent cloning and unserialization
     private function __clone() {}
     public function __wakeup() { throw new \Exception('Cannot unserialize singleton.'); }
+
+    private static function migrateMissingColumns(): void
+    {
+        // 1) users table
+        try {
+            self::$instance->exec("ALTER TABLE users ADD COLUMN badge_color VARCHAR(50) DEFAULT NULL");
+        } catch (\Throwable $e) {}
+
+        // 2) plans table
+        try {
+            self::$instance->exec("ALTER TABLE plans ADD COLUMN badge_color VARCHAR(50) DEFAULT NULL");
+        } catch (\Throwable $e) {}
+
+        // 3) sessions table
+        try {
+            self::$instance->exec("ALTER TABLE sessions ADD COLUMN device_name VARCHAR(255) DEFAULT NULL");
+        } catch (\Throwable $e) {}
+        try {
+            self::$instance->exec("ALTER TABLE sessions ADD COLUMN platform VARCHAR(50) DEFAULT NULL");
+        } catch (\Throwable $e) {}
+
+        // 4) user_devices table
+        try {
+            self::$instance->exec("ALTER TABLE user_devices ADD COLUMN platform VARCHAR(50) DEFAULT NULL");
+        } catch (\Throwable $e) {}
+    }
 
     private static function migrateLinkSessionsTable(): void
     {
