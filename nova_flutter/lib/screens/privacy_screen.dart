@@ -23,12 +23,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     'contacts': 'جهات الاتصال',
     'nobody': 'لا أحد',
     'none': 'لا أحد',
-    'name_username': 'الاسم + اسم المستخدم',
-    'username': 'اسم المستخدم فقط',
-    'phone': 'رقم الهاتف فقط',
-    'email': 'البريد الإلكتروني فقط',
-    'name_phone': 'الاسم + رقم الهاتف',
-    'name_email': 'الاسم + البريد',
+    'name_username': 'الاسم الموحد',
   };
 
   @override
@@ -143,63 +138,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     }
   }
 
-  Future<void> _showIdentitySheet(String title, String key, String current) async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.42),
-      builder: (c) {
-        final cl = NovaColors.of(c);
-        return Container(
-          decoration: BoxDecoration(
-            color: cl.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-          ),
-          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.paddingOf(c).bottom + 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                    width: 42, height: 4,
-                    decoration: BoxDecoration(color: cl.line, borderRadius: BorderRadius.circular(5))),
-              ),
-              const SizedBox(height: 15),
-              Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cl.text)),
-              const SizedBox(height: 14),
-              ...['name_username', 'username', 'phone', 'email', 'name_phone', 'name_email'].map((v) => PressScale(
-                    onTap: () => Navigator.pop(c, v),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Radio<String>(
-                            value: v,
-                            groupValue: current,
-                            onChanged: null,
-                            activeColor: cl.accent,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(_labels[v]!,
-                                style: TextStyle(fontSize: 15, color: cl.text, fontWeight: FontWeight.w600)),
-                          ),
-                          if (v == current)
-                            const Icon(Icons.check, size: 18, color: Color(0xFF25D366)),
-                        ],
-                      ),
-                    ),
-                  )),
-            ],
-          ),
-        );
-      },
-    );
-    if (selected != null && selected != current && mounted) {
-      _update(key, selected);
-    }
-  }
+
 
   Widget _toggleRow({
     required IconData icon,
@@ -500,46 +439,11 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                               : 'لا يمكن العثور عليك ببريدك الإلكتروني',
                           key: 'find_by_email',
                         ),
-                        _toggleRow(
-                          icon: Icons.person_search,
-                          title: 'البحث باسم المستخدم',
-                          subtitle: _boolSetting('find_by_username')
-                              ? 'يمكن للآخرين العثور عليك باسم المستخدم'
-                              : 'لا يمكن العثور عليك باسم المستخدم',
-                          key: 'find_by_username',
-                        ),
+
                       ],
                     ),
                   ),
-                  _sectionTitle('الهوية الظاهرة'),
-                  NovaCard(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: RowItem(
-                      leading: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: c.surface2,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(Icons.badge, size: 20, color: c.text),
-                      ),
-                      title: 'الاسم الظاهر للآخرين',
-                      subtitle: 'ما يراه الآخرون بدلاً من اسمك',
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: c.accent.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                            _labels[_settings['display_identity']?.toString() ?? 'name_username'] ?? 'الاسم + اسم المستخدم',
-                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.accent)),
-                      ),
-                      onTap: () => _showIdentitySheet('الاسم الظاهر للآخرين',
-                          'display_identity', (_settings['display_identity']?.toString() ?? 'name_username')),
-                    ),
-                  ),
+
                   _sectionTitle('إعدادات أخرى'),
                   NovaCard(
                     padding: const EdgeInsets.symmetric(vertical: 4),

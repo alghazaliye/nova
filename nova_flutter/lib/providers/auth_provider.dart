@@ -546,9 +546,14 @@ class AuthProvider extends ChangeNotifier {
     await fetchAppSettings();
     final res = await ApiService.get('/auth/me');
     final err = (res['error_code'] ?? '').toString();
-    // حساب محظور أو جلسة ملغاة → تسجيل خروج فوري
-    if (err == 'FORBIDDEN' || err == 'UNAUTHORIZED') {
-      await logout();
+    
+    // حساب محظور أو جلسة ملغاة
+    if (err == 'FORBIDDEN' || err == 'UNAUTHORIZED' || res['status'] == 401) {
+      // إذا كان التوكن غير صالح، نقوم بتنظيف الجلسة محلياً فوراً لمنع التكرار
+      _user = null;
+      _appSettings = null;
+      await clearToken();
+      
       _forcedLogoutReason = err == 'FORBIDDEN'
           ? (res['message'] ?? 'تم حظر هذا الحساب من قبل إدارة التطبيق')
           : null;
@@ -585,17 +590,22 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    try {
-      await ApiService.post('/auth/logout');
-    } catch (_) {}
+    final token = ApiService.token;
     _user = null;
     _appSettings = null;
     await clearToken();
     notifyListeners();
+    
+    // إرسال طلب تسجيل الخروج للخادم كخطوة أخيرة وبدون انتظار، لمنع 401 في السجلات إذا كان التوكن قد انتهى
+    if (token != null) {
+      try {
+        ApiService.post('/auth/logout');
+      } catch (_) {}
+    }
   }
 
   /// تحديث بيانات الملف الشخصي (الاسم، البريد، إلخ)
-  Future<bool> updateProfile({String? name, String? email, String? username, String? bio}) async {
+  Future<bool> updateProfile({String? name, String? email, String? bio}) async {
     _loading = true;
     _error = null;
     notifyListeners();
@@ -603,7 +613,6 @@ class AuthProvider extends ChangeNotifier {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (email != null) body['email'] = email;
-    if (username != null) body['username'] = username;
     if (bio != null) body['bio'] = bio;
 
     final res = await ApiService.put('/users/me', body: body);

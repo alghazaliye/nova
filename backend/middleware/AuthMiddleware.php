@@ -68,11 +68,11 @@ class AuthMiddleware
                     'role' => 'user',
                 ];
             }
-            Response::unauthorized('الجلسة غير موجودة أو منتهية');
+            Response::unauthorized('الجلسة غير موجودة أو منتهية', 'UNAUTHORIZED');
         }
 
         if ($session['revoked_at'] !== null) {
-            Response::unauthorized('تم إلغاء هذه الجلسة');
+            Response::unauthorized('تم إلغاء هذه الجلسة', 'UNAUTHORIZED');
         }
 
         if ($session['is_blocked']) {

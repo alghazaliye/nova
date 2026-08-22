@@ -67,10 +67,10 @@ $filter = $_GET['filter'] ?? 'all';
 $where  = '1=1';
 $params = [];
 
-if ($search) {
-    $where   .= ' AND (name LIKE ? OR phone LIKE ? OR username LIKE ?)';
+    if ($search) {
+    $where   .= ' AND (name LIKE ? OR phone LIKE ?)';
     $s        = "%{$search}%";
-    $params   = array_merge($params, [$s, $s, $s]);
+    $params   = array_merge($params, [$s, $s]);
 }
 if ($filter === 'blocked') { $where .= ' AND is_blocked = 1'; }
 if ($filter === 'online')  { $where .= ' AND is_online = 1'; }
@@ -156,7 +156,6 @@ include __DIR__ . '/includes/sidebar.php';
             <?php endif; ?>
             <div>
               <b><?= htmlspecialchars($u['name']) ?> <?php if ((int)$u['is_verified']): ?><span style="color:#2563eb">✔</span><?php endif; ?></b>
-              <small style="display:block; color:var(--muted); font-size:11px;"><?= $u['username'] ? '@'.$u['username'] : '' ?></small>
             </div>
           </div>
         </td>

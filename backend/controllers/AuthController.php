@@ -184,10 +184,11 @@ class AuthController
             } catch (\Throwable $e) {}
             $displayName = $name ?? $collectedName ?? ($legacyOtp['name'] ?? 'مستخدم NOVA');
             $stmt = $this->pdo->prepare(
-                "INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)" .
-                 " VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))"
+                "INSERT INTO users (uuid, phone, name, username, is_verified, created_at, updated_at)" .
+                 " VALUES (?, ?, ?, ?, 0, datetime('now'), datetime('now'))"
             );
-            $stmt->execute([$uuid, $phone, $displayName]);
+            // توحيد name و username عند الإنشاء لضمان عدم وجود قيم null
+            $stmt->execute([$uuid, $phone, $displayName, $displayName]);
             $userId = (int)$this->pdo->lastInsertId();
         } else {
             $userId = (int)$user['id'];
@@ -214,8 +215,9 @@ class AuthController
 
             // Update name if provided WITHOUT auto-verifying (verification is admin-controlled)
             if ($name !== null) {
-                $stmt = $this->pdo->prepare("UPDATE users SET name = ?, updated_at = datetime('now') WHERE id = ?");
-                $stmt->execute([$name, $userId]);
+                // توحيد التحديث ليشمل name و username معاً
+                $stmt = $this->pdo->prepare("UPDATE users SET name = ?, username = ?, updated_at = datetime('now') WHERE id = ?");
+                $stmt->execute([$name, $name, $userId]);
             }
         }
 

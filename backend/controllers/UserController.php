@@ -77,7 +77,7 @@ class UserController
         $auth = AuthMiddleware::authenticate();
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        $allowed = ['name', 'username', 'bio', 'status_text', 'email'];
+        $allowed = ['name', 'bio', 'status_text', 'email'];
         $updates = [];
         $params  = [];
 
@@ -88,17 +88,28 @@ class UserController
             }
         }
 
-        if (empty($updates)) {
-            Response::error('لا توجد بيانات للتحديث', 'NO_DATA', 400);
+        // توحيد الاسم: إذا تم إرسال name، نقوم بتحديث name و username معاً لضمان التوافق
+        if (isset($body['name'])) {
+            $cleanName = htmlspecialchars(strip_tags(trim((string)$body['name'])), ENT_QUOTES, 'UTF-8');
+            
+            // التحقق من عدم وجود مستخدم آخر بنفس الاسم (كاسم مستخدم)
+            $stmt = $this->pdo->prepare('SELECT id FROM users WHERE (username = ? OR name = ?) AND id != ? LIMIT 1');
+            $stmt->execute([$cleanName, $cleanName, $auth['user_id']]);
+            if ($stmt->fetch()) {
+                Response::error('هذا الاسم مستخدم من قبل شخص آخر، يرجى اختيار اسم مختلف', 'NAME_TAKEN', 409);
+            }
+            
+            // تحديث الحقلين معاً
+            if (!in_array('name = ?', $updates)) {
+                $updates[] = "name = ?";
+                $params[] = $cleanName;
+            }
+            $updates[] = "username = ?";
+            $params[] = $cleanName;
         }
 
-        // Validate username uniqueness
-        if (isset($body['username']) && !empty($body['username'])) {
-            $stmt = $this->pdo->prepare('SELECT id FROM users WHERE username = ? AND id != ? LIMIT 1');
-            $stmt->execute([$body['username'], $auth['user_id']]);
-            if ($stmt->fetch()) {
-                Response::error('اسم المستخدم مستخدم من قبل شخص آخر', 'USERNAME_TAKEN', 409);
-            }
+        if (empty($updates)) {
+            Response::error('لا توجد بيانات للتحديث', 'NO_DATA', 400);
         }
 
         $params[] = $auth['user_id'];
@@ -197,11 +208,11 @@ class UserController
             Response::error('يجب إدخال حرفين على الأقل للبحث', 'QUERY_TOO_SHORT', 400);
         }
 
-        // فلترة البحث بحسب إعدادات find_by_* لصاحب الحساب، واستبعاد المستخدمين الذين حظرهم viewer أو حظروا viewer
+        // فلترة البحث، واستبعاد المستخدمين الذين حظرهم viewer أو حظروا viewer
         $isNumeric = preg_match('/^[0-9+\s\-()]+$/', $query) === 1 || str_starts_with($query, '+');
         $isEmail   = mb_strpos($query, '@') !== false;
-        $nameCols  = ['name LIKE ?', 'username LIKE ?'];
-        $params    = [];
+        $nameCols  = ['name LIKE ?'];
+        $params    = [$like];
         $like      = '%' . str_replace(['%','_'], ['\\%','\\_'], $query) . '%';
 
         if ($isNumeric) {
@@ -211,17 +222,11 @@ class UserController
             
             $variants = [$cleanPhone, $localPhone];
             
-            // التعامل مع الأرقام الطويلة (مثل الرقم المذكور في المشكلة +9667381558611)
-            // أو الأرقام المحلية العادية
             if (strlen($localPhone) >= 9) {
                 $variants[] = '+966' . $localPhone;
                 $variants[] = '+967' . $localPhone;
                 $variants[] = '0' . $localPhone;
             }
-            
-            // البحث عن أي تطابق جزئي في الرقم لزيادة دقة النتائج
-            $nameCols = ['name LIKE ?', 'username LIKE ?'];
-            $params = [$like, $like];
             
             foreach (array_unique($variants) as $v) {
                 if (empty($v)) continue;
@@ -229,10 +234,8 @@ class UserController
                 $params[] = '%' . $v . '%';
             }
         } elseif ($isEmail) {
-            $nameCols = ['name LIKE ?', 'email LIKE ?'];
-            $params = [$like, $like];
-        } else {
-            $params = [$like, $like];
+            $nameCols[] = 'email LIKE ?';
+            $params[] = $like;
         }
 
         $cols = implode(' OR ', $nameCols);
@@ -257,13 +260,12 @@ class UserController
         $filtered = [];
         foreach ($rows as $r) {
             $ownerId = (int)$r['id'];
-            $p = $this->pdo->prepare('SELECT find_by_phone, find_by_email, find_by_username FROM privacy_settings WHERE user_id = ? LIMIT 1');
+            $p = $this->pdo->prepare('SELECT find_by_phone, find_by_email FROM privacy_settings WHERE user_id = ? LIMIT 1');
             $p->execute([$ownerId]);
-            $ps = $p->fetch() ?: ['find_by_phone' => 1, 'find_by_email' => 1, 'find_by_username' => 1];
+            $ps = $p->fetch() ?: ['find_by_phone' => 1, 'find_by_email' => 1];
             
             if ($isNumeric && ((int)($ps['find_by_phone'] ?? 1)) === 0) continue;
             if ($isEmail && ((int)($ps['find_by_email'] ?? 1)) === 0) continue;
-            if (!$isNumeric && !$isEmail && ((int)($ps['find_by_username'] ?? 1)) === 0) continue;
 
             $r = $this->applyPresencePrivacy($r, $viewerId);
             $r = $this->filterProfile($r, $viewerId, $ownerId);
@@ -745,29 +747,17 @@ class UserController
         return self::_displayNameForIdentity($profile);
     }
 
-    /** بناء display_name من profile وفق display_identity */
+    /** بناء display_name من profile (توحيد الاسم) */
     private static function _displayNameForIdentity(array $p): ?string
     {
-        $mode = (string)($p['display_identity'] ?? 'name_username');
+        // تم توحيد اسم المستخدم والاسم الظاهر في حقل واحد
         $name = trim((string)($p['name'] ?? ''));
+        if ($name !== '') return $name;
+        
         $username = trim((string)($p['username'] ?? ''));
-        $phone = trim((string)($p['phone'] ?? ''));
-        $email = trim((string)($p['email'] ?? ''));
-        switch ($mode) {
-            case 'username':
-                return $username !== '' ? $username : ($name !== '' ? $name : null);
-            case 'phone':
-                return $phone !== '' ? $phone : ($name !== '' ? $name : null);
-            case 'email':
-                return $email !== '' ? $email : ($name !== '' ? $name : null);
-            case 'name_phone':
-                return $name !== '' ? ($phone !== '' ? $name . ' (' . $phone . ')' : $name) : ($phone !== '' ? $phone : null);
-            case 'name_email':
-                return $name !== '' ? ($email !== '' ? $name . ' (' . $email . ')' : $name) : ($email !== '' ? $email : null);
-            case 'name_username':
-            default:
-                return $name !== '' ? $name : ($username !== '' ? $username : null);
-        }
+        if ($username !== '') return $username;
+        
+        return trim((string)($p['phone'] ?? ''));
     }
 
     /** تطبيق قواعد خصوصية على profile لـ$ownerId أمام $viewerId (null = لا عرض) */
@@ -793,8 +783,7 @@ class UserController
         // إعدادات صاحب الحساب
         $stmt = $this->pdo->prepare(
             'SELECT show_last_seen, show_online_status, show_read_receipts,
-                    show_phone, show_email, show_avatar, show_status_text,
-                    display_identity
+                    show_phone, show_email, show_avatar, show_status_text
              FROM privacy_settings WHERE user_id = ? LIMIT 1'
         );
         $stmt->execute([$ownerId]);
@@ -824,6 +813,10 @@ class UserController
 
         $profile['display_name'] = self::_displayNameForIdentity($profile);
         $profile['contact_name'] = $this->contactNameDisplay($viewerId, $ownerId, $profile);
+        
+        // إزالة الحقول المكررة لتوحيد الواجهة
+        unset($profile['username']); 
+        
         return $profile;
     }
 

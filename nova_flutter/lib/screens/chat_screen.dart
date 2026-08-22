@@ -1686,8 +1686,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ],
                     ],
                   ),
-                  if (data['username'] != null)
-                    Text('@${data['username']}', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+
                   const SizedBox(height: 12),
                   const Divider(),
                   if (data['phone'] != null)
