@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 class AdminController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
     private int $standaloneAdminId = 0;
 
     public function __construct()

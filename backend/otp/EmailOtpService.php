@@ -19,7 +19,7 @@ require_once __DIR__ . '/../helpers/OtpEncryption.php';
 
 class EmailOtpService
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

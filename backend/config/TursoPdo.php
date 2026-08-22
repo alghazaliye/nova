@@ -14,6 +14,7 @@ class TursoPdo
     private TursoClient $client;
     private array $options;
     private ?string $lastInsertId = null;
+    private bool $inTransaction = false;
 
     public function __construct(string $url, string $token, array $options = [])
     {
@@ -53,17 +54,55 @@ class TursoPdo
         $this->lastInsertId = $id;
     }
 
+    public function beginTransaction(): bool
+    {
+        if ($this->inTransaction) return false;
+        $this->exec('BEGIN TRANSACTION');
+        $this->inTransaction = true;
+        return true;
+    }
+
+    public function commit(): bool
+    {
+        if (!$this->inTransaction) return false;
+        $this->exec('COMMIT');
+        $this->inTransaction = false;
+        return true;
+    }
+
+    public function rollBack(): bool
+    {
+        if (!$this->inTransaction) return false;
+        $this->exec('ROLLBACK');
+        $this->inTransaction = false;
+        return true;
+    }
+
+    public function inTransaction(): bool
+    {
+        return $this->inTransaction;
+    }
+
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        $this->options[$attribute] = $value;
+        return true;
+    }
+
     private function adaptSql(string $sql): string
     {
         // Use the adaptation logic from MysqlCompatPdo
-        $adapter = new class('sqlite::memory:') extends MysqlCompatPdo {
-            public function adapt(string $sql): string {
-                $reflection = new ReflectionClass('MysqlCompatPdo');
-                $method = $reflection->getMethod('adaptSql');
-                $method->setAccessible(true);
-                return $method->invoke($this, $sql);
-            }
-        };
+        static $adapter = null;
+        if ($adapter === null) {
+            $adapter = new class('sqlite::memory:') extends MysqlCompatPdo {
+                public function adapt(string $sql): string {
+                    $reflection = new ReflectionClass('MysqlCompatPdo');
+                    $method = $reflection->getMethod('adaptSql');
+                    $method->setAccessible(true);
+                    return $method->invoke($this, $sql);
+                }
+            };
+        }
         return $adapter->adapt($sql);
     }
 }
@@ -84,9 +123,23 @@ class TursoStatement
         $this->sql = $sql;
     }
 
-    public function execute(array $params = []): bool
+    public function bindValue(string|int $param, mixed $value, int $type = PDO::PARAM_STR): bool
     {
-        $this->params = array_merge($this->params, $params);
+        $this->params[$param] = $value;
+        return true;
+    }
+
+    public function bindParam(string|int $param, mixed &$variable, int $type = PDO::PARAM_STR, int $maxLength = 0, mixed $driverOptions = null): bool
+    {
+        $this->params[$param] = &$variable;
+        return true;
+    }
+
+    public function execute(?array $params = null): bool
+    {
+        if ($params !== null) {
+            $this->params = array_merge($this->params, $params);
+        }
         try {
             $this->result = $this->client->execute($this->sql, $this->params);
             $this->cursor = 0;
@@ -114,12 +167,31 @@ class TursoStatement
         }
 
         $row = $rows[$this->cursor++];
-        $mapped = [];
-        foreach ($cols as $i => $name) {
-            $mapped[$name] = $row[$i];
+        
+        if ($mode === PDO::FETCH_ASSOC) {
+            $mapped = [];
+            foreach ($cols as $i => $name) {
+                $mapped[$name] = $row[$i];
+            }
+            return $mapped;
+        } elseif ($mode === PDO::FETCH_NUM) {
+            return $row;
+        } elseif ($mode === PDO::FETCH_BOTH) {
+            $mapped = [];
+            foreach ($cols as $i => $name) {
+                $mapped[$name] = $row[$i];
+                $mapped[$i] = $row[$i];
+            }
+            return $mapped;
         }
 
-        return $mapped;
+        return false;
+    }
+
+    public function fetchColumn(int $column = 0): mixed
+    {
+        $row = $this->fetch(PDO::FETCH_NUM);
+        return $row !== false ? ($row[$column] ?? null) : false;
     }
 
     public function fetchAll(int $mode = PDO::FETCH_ASSOC): array

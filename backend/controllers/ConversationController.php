@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 class ConversationController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

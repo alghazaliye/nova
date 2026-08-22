@@ -22,7 +22,7 @@ class Database
         return self::$instance;
     }
 
-    private static function initSchema(PDO $db): void
+    private static function initSchema(PDO|TursoPdo $db): void
     {
         // سيتم استدعاء السكربت الخاص بإنشاء الجداول هنا إذا لزم الأمر
     }

@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 class CallController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

@@ -19,7 +19,7 @@ require_once __DIR__ . '/../otp/EmailOtpService.php';
 
 class EmailAuthController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

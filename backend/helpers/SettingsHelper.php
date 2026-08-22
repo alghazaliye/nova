@@ -17,7 +17,7 @@ class SettingsHelper
     /**
      * Fetch an app setting value (string). Returns $default when missing.
      */
-    public static function getSetting(PDO $pdo, string $key, string $default = ''): string
+    public static function getSetting(PDO|TursoPdo $pdo, string $key, string $default = ''): string
     {
         static $cache = [];
         $cacheKey = $key;
@@ -43,7 +43,7 @@ class SettingsHelper
      * allow_groups and allow_calls, so this makes the backend the
      * single source of truth (a direct POST/curl is rejected too).
      */
-    public static function enforceFeature(PDO $pdo, string $settingKey, string $featureName): void
+    public static function enforceFeature(PDO|TursoPdo $pdo, string $settingKey, string $featureName): void
     {
         $value = self::getSetting($pdo, $settingKey, '1');
         if ($value !== '1') {

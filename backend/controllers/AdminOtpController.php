@@ -35,7 +35,7 @@ require_once __DIR__ . '/../helpers/OtpEncryption.php';
 
 class AdminOtpController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

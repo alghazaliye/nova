@@ -11,7 +11,7 @@ require_once __DIR__ . '/../config/app.php';
 
 class GroupsController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

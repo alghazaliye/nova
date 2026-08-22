@@ -28,7 +28,7 @@ require_once __DIR__ . '/AdminOtpController.php'; // for global logAdminAudit()
 
 class AdminAuthController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

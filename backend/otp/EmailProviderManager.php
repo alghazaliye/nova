@@ -12,7 +12,7 @@ require_once __DIR__ . '/../helpers/OtpEncryption.php';
 
 class EmailProviderManager
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {
@@ -24,7 +24,7 @@ class EmailProviderManager
      * Auto-migrate: ensure email_providers has the columns required by this manager
      * (needed when the live SQLite DB was created from an older schema).
      */
-    private static function ensureSchema(PDO $pdo): void
+    private static function ensureSchema(PDO|TursoPdo $pdo): void
     {
         static $done = false;
         if ($done) return;

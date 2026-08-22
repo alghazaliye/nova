@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 class UserController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     public function __construct()
     {

@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 class PaymentRequestsController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
     private int $userId = 0;
 
     public function __construct()

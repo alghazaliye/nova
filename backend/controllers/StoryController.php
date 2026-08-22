@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 class StoryController
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     /** التفاعلات المسموحة على الحالات */
     private const ALLOWED_REACTIONS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];

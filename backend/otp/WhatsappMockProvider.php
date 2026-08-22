@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 class WhatsappMockProvider implements OtpProviderInterface
 {
-    private PDO $pdo;
+    private PDO|TursoPdo $pdo;
 
     private function pdo(): PDO
     {
