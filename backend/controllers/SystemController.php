@@ -24,7 +24,7 @@ class SystemController
         $start = microtime(true);
         $dbStatus = 'offline';
         $dbLatency = 0;
-        $dbType = $_ENV['DB_TYPE'] ?? 'sqlite';
+        $dbType = trim($_ENV['DB_TYPE'] ?? 'sqlite');
 
         try {
             $dbStart = microtime(true);
