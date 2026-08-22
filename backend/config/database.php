@@ -12,14 +12,34 @@ declare(strict_types=1);
 
 class Database
 {
-    private static ?PDO $instance = null;
+    private static PDO|TursoPdo|null $instance = null;
 
-    public static function getInstance(): PDO
+    public static function getInstance(): PDO|TursoPdo
     {
         if (self::$instance === null) {
             $dbType = strtolower((string)($_ENV['DB_TYPE'] ?? 'sqlite'));
 
-            if ($dbType === 'mysql') {
+            if ($dbType === 'turso') {
+                $url   = $_ENV['TURSO_URL'] ?? '';
+                $token = $_ENV['TURSO_AUTH_TOKEN'] ?? '';
+
+                if (empty($url) || empty($token)) {
+                    error_log('Turso configuration missing');
+                    http_response_code(503);
+                    echo json_encode(['success' => false, 'message' => 'إعدادات Turso غير مكتملة']);
+                    exit;
+                }
+
+                require_once __DIR__ . '/TursoPdo.php';
+                self::$instance = new TursoPdo($url, $token);
+                
+                // Initial migrations for Turso
+                self::migrateMissingColumns();
+                self::migrateMissingTables();
+                self::migrateMissingIndexes();
+                self::migrateLinkSessionsTable();
+                self::applyConfiguredTimezone();
+            } elseif ($dbType === 'mysql') {
                 $host     = $_ENV['DB_HOST']     ?? '127.0.0.1';
                 $port     = $_ENV['DB_PORT']     ?? '3306';
                 $dbName   = $_ENV['DB_NAME']     ?? 'nova_messenger';
