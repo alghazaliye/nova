@@ -184,13 +184,14 @@ $recent_activity = $pdo->query(
 	    'plan' => 'باقة',
 	    'subscription' => 'اشتراك',
 	];
+		
+	
+	include __DIR__ . '/includes/header.php';
+	include __DIR__ . '/includes/sidebar.php';
 	?>
-
-include __DIR__ . '/includes/header.php';
-include __DIR__ . '/includes/sidebar.php';
-?>
-
-<div class="pagehead">
+	
+	<div class="main-content">
+	<div class="pagehead">
     <div>
         <h2>المشرفون والصلاحيات</h2>
         <p>إدارة حسابات المشرفين والأدوار والصلاحيات</p>
@@ -480,4 +481,5 @@ setInterval(function() {
 }, 5000);
 </script>
 
-<?php include __DIR__ . '/includes/footer.php'; ?>
+	</div>
+	<?php include __DIR__ . '/includes/footer.php'; ?>

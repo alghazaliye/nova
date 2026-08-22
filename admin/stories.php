@@ -105,9 +105,13 @@ try {
     $stories = [];
     $flash = ['warn', 'تعذر جلب الحالات: ' . h((string)$e->getMessage())];
 }
-$canDelete = hasPermission($admin, 'statuses.delete');
-?>
-<style>
+	$canDelete = hasPermission($admin, 'statuses.delete');
+	
+	include __DIR__ . '/includes/header.php';
+	include __DIR__ . '/includes/sidebar.php';
+	?>
+	<div class="main-content">
+	<style>
   .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:18px; }
   .stat-card { background:var(--surface2); border-radius:14px; padding:14px; text-align:center; }
   .stat-card b { font-size:22px; display:block; }
@@ -247,4 +251,5 @@ document.getElementById('modal').addEventListener('click', function(e){ if (e.ta
 document.getElementById('deleteModal').addEventListener('click', function(e){ if (e.target === this) closeDelete(); });
 </script>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+	</div>
+	<?php require_once __DIR__ . '/includes/footer.php'; ?>
