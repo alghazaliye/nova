@@ -10,6 +10,7 @@ $action = $_GET['action'] ?? '';
 if ($action === 'get_conversation_messages') {
     requirePermission($admin, 'chats.view');
     $convId = (int)($_GET['conversation_id'] ?? 0);
+    $reportMsgId = (int)($_GET['message_id'] ?? 0);
     $limit = (int)($_GET['limit'] ?? 50);
     
     if (!$convId) {
@@ -19,19 +20,48 @@ if ($action === 'get_conversation_messages') {
     
     try {
         $pdo = getAdminDB();
-        $stmt = $pdo->prepare(
-            "SELECT m.*, u.name as sender_name 
-             FROM messages m 
-             LEFT JOIN users u ON u.id = m.sender_id 
-             WHERE m.conversation_id = ? 
-             ORDER BY m.created_at DESC 
-             LIMIT ?"
-        );
-        $stmt->execute([$convId, $limit]);
-        $messages = $stmt->fetchAll();
         
-        // Reverse to show in chronological order
-        $messages = array_reverse($messages);
+        if ($reportMsgId > 0) {
+            // Get messages around the reported message (context)
+            // 20 messages before and 10 after for context
+            $stmt = $pdo->prepare(
+                "SELECT m.*, u.name as sender_name 
+                 FROM messages m 
+                 LEFT JOIN users u ON u.id = m.sender_id 
+                 WHERE m.conversation_id = ? 
+                 AND m.created_at <= (SELECT created_at FROM messages WHERE id = ?)
+                 ORDER BY m.created_at DESC 
+                 LIMIT 30"
+            );
+            $stmt->execute([$convId, $reportMsgId]);
+            $before = $stmt->fetchAll();
+            
+            $stmt = $pdo->prepare(
+                "SELECT m.*, u.name as sender_name 
+                 FROM messages m 
+                 LEFT JOIN users u ON u.id = m.sender_id 
+                 WHERE m.conversation_id = ? 
+                 AND m.created_at > (SELECT created_at FROM messages WHERE id = ?)
+                 ORDER BY m.created_at ASC 
+                 LIMIT 10"
+            );
+            $stmt->execute([$convId, $reportMsgId]);
+            $after = $stmt->fetchAll();
+            
+            $messages = array_merge(array_reverse($before), $after);
+        } else {
+            // Just get recent messages
+            $stmt = $pdo->prepare(
+                "SELECT m.*, u.name as sender_name 
+                 FROM messages m 
+                 LEFT JOIN users u ON u.id = m.sender_id 
+                 WHERE m.conversation_id = ? 
+                 ORDER BY m.created_at DESC 
+                 LIMIT ?"
+            );
+            $stmt->execute([$convId, $limit]);
+            $messages = array_reverse($stmt->fetchAll());
+        }
         
         echo json_encode(['success' => true, 'data' => $messages]);
     } catch (Exception $e) {

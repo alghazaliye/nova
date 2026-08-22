@@ -158,24 +158,26 @@ $error_logs = $pdo->query(
 )->fetchAll() ?: [];
 
 // سجل النشاط الحديث
-$recent_activity = $pdo->query(
-    'SELECT a.id, a.admin_id, a.action, a.entity_type, a.description, a.created_at, ad.name as admin_name
-	     FROM audit_logs a
-	     LEFT JOIN admins ad ON ad.id = a.admin_id
-	     ORDER BY a.created_at DESC LIMIT 15'
-	)->fetchAll() ?: [];
-	
-	$actionMap = [
-	    'CREATE' => 'إضافة',
-	    'UPDATE' => 'تعديل',
-	    'DELETE' => 'حذف',
-	    'LOGIN' => 'دخول',
-	    'LOGOUT' => 'خروج',
-	    'REPORT_RESOLVED' => 'حل بلاغ',
-	    'REPORT_REJECTED' => 'رفض بلاغ',
-	    'REPORT_BAN_USER' => 'حظر مستخدم',
-	    'REPORT_SUSPEND_USER' => 'تعليق مستخدم',
-	];
+    $recent_activity = $pdo->query(
+	    'SELECT a.id, a.admin_id, a.action, a.entity_type, a.description, a.created_at, ad.name as admin_name
+		     FROM audit_logs a
+		     LEFT JOIN admins ad ON ad.id = a.admin_id
+		     ORDER BY a.created_at DESC LIMIT 15'
+		)->fetchAll() ?: [];
+		
+		$actionMap = [
+		    'CREATE' => 'إضافة',
+		    'UPDATE' => 'تعديل',
+		    'DELETE' => 'حذف',
+		    'LOGIN' => 'دخول',
+		    'LOGOUT' => 'خروج',
+		    'REPORT_RESOLVED' => 'حل بلاغ',
+		    'REPORT_REJECTED' => 'رفض بلاغ',
+		    'REPORT_BAN_USER' => 'حظر مستخدم',
+		    'REPORT_SUSPEND_USER' => 'تعليق مستخدم',
+		    'REPORT_REVIEWING' => 'مراجعة بلاغ',
+		    'statuses.admin_deleted' => 'حذف حالة إدارياً',
+		];
 	$entityMap = [
 	    'admin' => 'مشرف',
 	    'user' => 'مستخدم',

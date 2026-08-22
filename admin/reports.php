@@ -350,7 +350,7 @@ include __DIR__ . '/includes/sidebar.php';
 	  modal.style.display = 'block';
 	  content.innerHTML = '<div style="text-align:center; padding:20px; color:var(--muted);">جاري تحميل الرسائل...</div>';
 
-	  fetch(`api/admin_api.php?action=get_conversation_messages&conversation_id=${convId}&limit=50`)
+	  fetch(`api/admin_api.php?action=get_conversation_messages&conversation_id=${convId}&message_id=${highlightMsgId}&limit=50`)
 	    .then(r => r.json())
 	    .then(data => {
 	      if (data.success && data.data) {
