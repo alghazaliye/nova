@@ -73,11 +73,13 @@ class _CallsScreenState extends State<CallsScreen> {
     });
     if (!mounted) return;
     if (res['success'] == true && res['data'] != null) {
+      final call = Map<String, dynamic>.from(res['data'] as Map);
+      call['is_outgoing'] = true;
+      call['caller_id'] = ApiService.userId;
       Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (_) => CallScreen(callData: Map<String, dynamic>.from(
-                  res['data'] as Map<String, dynamic>))));
+              builder: (_) => CallScreen(callData: call)));
     } else {
       showToast(context, res['message'] ?? 'فشل بدء المكالمة');
     }

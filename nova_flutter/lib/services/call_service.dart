@@ -46,11 +46,20 @@ class CallService {
     // Removed widget-specific callbacks (mounted/setState) from service.
     // CallScreen handles its own renderer listeners.
     
+    // جلب إعدادات STUN/TURN من الـ API لضمان تجاوز جدران الحماية
+    List<Map<String, dynamic>> iceServers = [
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+    ];
+    try {
+      final iceRes = await ApiService.get('/calls/ice-servers');
+      if (iceRes['success'] == true && iceRes['data'] is List) {
+        iceServers = List<Map<String, dynamic>>.from(iceRes['data']);
+      }
+    } catch (_) {}
+
     _pc = await createPeerConnection({
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'},
-      ],
+      'iceServers': iceServers,
       'sdpSemantics': 'unified-plan',
     }, {
       'mandatory': {},

@@ -486,4 +486,30 @@ class CallController
             error_log('Call FCM notification error: ' . $e->getMessage());
         }
     }
+
+    // GET /api/v1/calls/ice-servers
+    public function iceServers(): void
+    {
+        AuthMiddleware::authenticate();
+        // إعدادات افتراضية (يمكن مستقبلاً جلبها من لوحة التحكم أو Xirsys/Twilio)
+        $servers = [
+            ['urls' => 'stun:stun.l.google.com:19302'],
+            ['urls' => 'stun:stun1.l.google.com:19302'],
+            ['urls' => 'stun:stun2.l.google.com:19302'],
+            ['urls' => 'stun:stun3.l.google.com:19302'],
+            ['urls' => 'stun:stun4.l.google.com:19302'],
+        ];
+        
+        // إذا كان هناك خادم TURN مخصص في الإعدادات
+        $turnUrl = SettingsHelper::get($this->pdo, 'turn_server_url');
+        if ($turnUrl) {
+            $servers[] = [
+                'urls'     => $turnUrl,
+                'username' => SettingsHelper::get($this->pdo, 'turn_server_user', ''),
+                'credential' => SettingsHelper::get($this->pdo, 'turn_server_pass', ''),
+            ];
+        }
+
+        Response::success($servers);
+    }
 }

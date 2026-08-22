@@ -413,6 +413,9 @@ if ($uri === '/calls' && $method === 'GET') {
 if ($uri === '/calls/incoming' && $method === 'GET') {
     (new CallController())->incoming();
 }
+if ($uri === '/calls/ice-servers' && $method === 'GET') {
+    (new CallController())->iceServers();
+}
 if (preg_match('#^/calls/(\d+)$#', $uri, $m) && $method === 'GET') {
     (new CallController())->show((int)$m[1]);
 }

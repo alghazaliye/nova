@@ -536,6 +536,7 @@ class _ChatsTabState extends State<ChatsTab> with WidgetsBindingObserver {
       if (res['success'] == true && res['data'] is Map) {
         final call = Map<String, dynamic>.from(res['data'] as Map);
         call['is_outgoing'] = true;
+        call['caller_id'] = ApiService.userId;
         await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => CallScreen(callData: call)));
       } else {

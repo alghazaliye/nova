@@ -111,6 +111,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'خطأ في حفظ الإعدادات: ' . $e->getMessage();
         }
     }
+
+    // حفظ إعدادات WebRTC
+    elseif ($action === 'save_webrtc') {
+        $turn_server_url = trim($_POST['turn_server_url'] ?? '');
+        $turn_server_user = trim($_POST['turn_server_user'] ?? '');
+        $turn_server_pass = trim($_POST['turn_server_pass'] ?? '');
+
+        try {
+            // التأكد من وجود المفاتيح في قاعدة البيانات أولاً
+            $keys = ['turn_server_url', 'turn_server_user', 'turn_server_pass'];
+            foreach ($keys as $key) {
+                $check = $pdo->prepare('SELECT COUNT(*) FROM app_settings WHERE setting_key = ?');
+                $check->execute([$key]);
+                if ($check->fetchColumn() == 0) {
+                    $pdo->prepare('INSERT INTO app_settings (setting_key, setting_value) VALUES (?, "")')->execute([$key]);
+                }
+            }
+
+            $stmt = $pdo->prepare('UPDATE app_settings SET setting_value = ? WHERE setting_key = ?');
+            $stmt->execute([$turn_server_url, 'turn_server_url']);
+            $stmt->execute([$turn_server_user, 'turn_server_user']);
+            $stmt->execute([$turn_server_pass, 'turn_server_pass']);
+
+            $message = 'تم حفظ إعدادات WebRTC بنجاح';
+            logAudit($admin, 'UPDATE', 'settings', 0, 'تحديث إعدادات WebRTC');
+
+            $settings['turn_server_url'] = $turn_server_url;
+            $settings['turn_server_user'] = $turn_server_user;
+            $settings['turn_server_pass'] = $turn_server_pass;
+        } catch (Exception $e) {
+            $error = 'خطأ في حفظ الإعدادات: ' . $e->getMessage();
+        }
+    }
 }
 
 $activeTab = in_array($_GET['tab'] ?? '', ['otp', 'email', 'general'], true) ? $_GET['tab'] : 'general';
@@ -276,6 +309,35 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
 
         <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">حفظ إعدادات FCM</button>
+    </form>
+</div>
+
+<!-- إعدادات WebRTC / TURN -->
+<div class="card panel" style="margin: 0 0 20px; padding: 20px;">
+    <h3>إعدادات خادم المكالمات (WebRTC / TURN)</h3>
+    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">إعداد خادم TURN ضروري لضمان عمل المكالمات خلف جدران الحماية والشبكات المقيدة.</p>
+    <form method="POST" style="display: grid; gap: 15px;">
+        <input type="hidden" name="_csrf" value="<?= htmlspecialchars(csrfToken()) ?>">
+        <input type="hidden" name="action" value="save_webrtc">
+
+        <div>
+            <label for="turn_server_url">رابط خادم TURN/STUN:</label>
+            <input type="text" id="turn_server_url" name="turn_server_url" placeholder="مثال: turn:openrelay.metered.ca:80" value="<?= htmlspecialchars($settings['turn_server_url'] ?? '') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <small style="color: #888;">ابدأ بـ turn: أو turns: أو stun:</small>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+                <label for="turn_server_user">اسم المستخدم:</label>
+                <input type="text" id="turn_server_user" name="turn_server_user" placeholder="username" value="<?= htmlspecialchars($settings['turn_server_user'] ?? '') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div>
+                <label for="turn_server_pass">كلمة المرور / السر:</label>
+                <input type="text" id="turn_server_pass" name="turn_server_pass" placeholder="password" value="<?= htmlspecialchars($settings['turn_server_pass'] ?? '') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+        </div>
+
+        <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">حفظ إعدادات المكالمات</button>
     </form>
 </div>
 
