@@ -105,10 +105,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // جلب البيانات
-$admins = $pdo->query(
-    'SELECT a.id, a.name, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
-     FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC'
-)->fetchAll();
+	$admins = $pdo->query(
+	    'SELECT a.id, a.name, a.username, a.email, a.is_active, a.last_login_at, a.created_at, r.name role_name 
+	     FROM admins a JOIN roles r ON r.id = a.role_id ORDER BY a.created_at DESC'
+	)->fetchAll();
 
 $roles = $pdo->query(
     'SELECT r.id, r.name, r.description, COUNT(rp.permission_id) permission_count 
@@ -148,10 +148,31 @@ $error_logs = $pdo->query(
 // سجل النشاط الحديث
 $recent_activity = $pdo->query(
     'SELECT a.id, a.admin_id, a.action, a.entity_type, a.description, a.created_at, ad.name as admin_name
-     FROM audit_logs a
-     LEFT JOIN admins ad ON ad.id = a.admin_id
-     ORDER BY a.created_at DESC LIMIT 15'
-)->fetchAll() ?: [];
+	     FROM audit_logs a
+	     LEFT JOIN admins ad ON ad.id = a.admin_id
+	     ORDER BY a.created_at DESC LIMIT 15'
+	)->fetchAll() ?: [];
+	
+	$actionMap = [
+	    'CREATE' => 'إضافة',
+	    'UPDATE' => 'تعديل',
+	    'DELETE' => 'حذف',
+	    'LOGIN' => 'دخول',
+	    'LOGOUT' => 'خروج',
+	    'REPORT_RESOLVED' => 'حل بلاغ',
+	    'REPORT_REJECTED' => 'رفض بلاغ',
+	    'REPORT_BAN_USER' => 'حظر مستخدم',
+	    'REPORT_SUSPEND_USER' => 'تعليق مستخدم',
+	];
+	$entityMap = [
+	    'admin' => 'مشرف',
+	    'user' => 'مستخدم',
+	    'report' => 'بلاغ',
+	    'message' => 'رسالة',
+	    'plan' => 'باقة',
+	    'subscription' => 'اشتراك',
+	];
+	?>
 
 include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php';
@@ -241,22 +262,26 @@ include __DIR__ . '/includes/sidebar.php';
     <table class="table" style="width: 100%; border-collapse: collapse;">
         <thead>
             <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الاسم</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">اسم المستخدم</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">البريد</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الحالة</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">آخر دخول</th>
-                <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراءات</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الاسم</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">اسم المستخدم</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">البريد</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الدور</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الحالة</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">آخر دخول</th>
+	                <th style="padding: 12px; text-align: right; font-weight: bold;">الإجراءات</th>
             </tr>
         </thead>
         <tbody>
-            <?php foreach ($admins as $a): ?>
-                <tr style="border-bottom: 1px solid #ddd; hover: background: #f9f9f9;">
-                    <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
-                    <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
-                    <td style="padding: 12px;"><span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px;"><?= htmlspecialchars($a['role_name']) ?></span></td>
-                    <td style="padding: 12px;">
+	            <?php foreach ($admins as $a): ?>
+	                <tr style="border-bottom: 1px solid #ddd; hover: background: #f9f9f9;">
+	                    <td style="padding: 12px;"><?= htmlspecialchars($a['name']) ?></td>
+	                    <td style="padding: 12px;"><?= htmlspecialchars($a['username'] ?? '-') ?></td>
+	                    <td style="padding: 12px;"><?= htmlspecialchars($a['email']) ?></td>
+	                    <td style="padding: 12px;">
+	                      <?php $roleMap = ['Super Admin'=>'مدير خارق','Admin'=>'مشرف','Moderator'=>'مراقب']; ?>
+	                      <span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px;"><?= $roleMap[$a['role_name']] ?? htmlspecialchars($a['role_name']) ?></span>
+	                    </td>
+	                    <td style="padding: 12px;">
                         <span style="padding: 5px 10px; border-radius: 4px; background: <?= $a['is_active'] ? '#d4edda' : '#f8d7da' ?>; color: <?= $a['is_active'] ? '#155724' : '#721c24' ?>; font-weight: bold;">
                             <?= $a['is_active'] ? '🟢 نشط' : '🔴 معطل' ?>
                         </span>
@@ -303,10 +328,10 @@ include __DIR__ . '/includes/sidebar.php';
                                 $action = $activity['action'];
                                 echo ($action === 'CREATE') ? '#d4edda' : (($action === 'UPDATE') ? '#cfe2ff' : '#f8d7da');
                             ?>; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;">
-                                <?= htmlspecialchars($activity['action']) ?>
-                            </span>
-                        </td>
-                        <td style="padding: 10px;"><small><?= htmlspecialchars($activity['entity_type'] ?? '-') ?></small></td>
+	                                <?= $actionMap[$activity['action']] ?? htmlspecialchars($activity['action']) ?>
+	                            </span>
+	                        </td>
+	                        <td style="padding: 10px;"><small><?= $entityMap[$activity['entity_type']] ?? htmlspecialchars($activity['entity_type'] ?? '-') ?></small></td>
                         <td style="padding: 10px;"><small><?= htmlspecialchars($activity['description'] ?? '-') ?></small></td>
                     </tr>
                 <?php endforeach; ?>
@@ -328,9 +353,12 @@ include __DIR__ . '/includes/sidebar.php';
             </tr>
         </thead>
         <tbody>
-            <?php foreach ($roles as $r): ?>
-                <tr style="border-bottom: 1px solid #ddd;">
-                    <td style="padding: 12px;"><strong><?= htmlspecialchars($r['name']) ?></strong></td>
+	            <?php foreach ($roles as $r): ?>
+	                <tr style="border-bottom: 1px solid #ddd;">
+	                    <td style="padding: 12px;">
+	                      <?php $roleMap = ['Super Admin'=>'مدير خارق','Admin'=>'مشرف','Moderator'=>'مراقب']; ?>
+	                      <strong><?= $roleMap[$r['name']] ?? htmlspecialchars($r['name']) ?></strong>
+	                    </td>
                     <td style="padding: 12px;"><?= htmlspecialchars($r['description'] ?? '') ?></td>
                     <td style="padding: 12px;"><span style="background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 3px; font-weight: bold;"><?= (int)$r['permission_count'] ?></span></td>
                 </tr>

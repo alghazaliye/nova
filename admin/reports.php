@@ -192,9 +192,10 @@ include __DIR__ . '/includes/sidebar.php';
         <?php $labelMap = ['pending'=>'معلق','reviewing'=>'مراجعة','resolved'=>'محلول','rejected'=>'مرفوض','closed'=>'مغلق','action_taken'=>'تمت معاقبة']; ?>
         <span class="status <?= $detail['status'] === 'pending' ? 'warn' : ($detail['status'] === 'resolved' ? 'online' : ($detail['status'] === 'rejected' ? 'blocked' : 'online')) ?>"><?= $labelMap[$detail['status']] ?? $detail['status'] ?></span>
       </p>
-      <p><b>الأولوية:</b>
-        <span class="badge-<?= $detail['priority'] ?? 'medium' ?>"><?= $detail['priority'] ?? 'medium' ?></span>
-      </p>
+	      <p><b>الأولوية:</b>
+	        <?php $prioMap = ['high'=>'عالية','medium'=>'متوسطة','low'=>'منخفضة']; ?>
+	        <span class="badge-<?= $detail['priority'] ?? 'medium' ?>"><?= $prioMap[$detail['priority']] ?? 'متوسطة' ?></span>
+	      </p>
       <p><b>التاريخ:</b> <?= htmlspecialchars($detail['created_at']) ?></p>
       <?php if ($detail['ban']): ?>
       <p style="background:#fff3f3;padding:10px;border-radius:6px;border:1px solid #f5c6cb;"><b>حالة الحظر الحالية:</b>
@@ -228,9 +229,12 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
       </div>
       <?php endif; ?>
-      <?php if (!empty($detail['conversation_id'])): ?>
-      <p><a class="btn sm" href="chats.php?conversation_id=<?= (int)$detail['conversation_id'] ?>">فتح محادثة البلاغ في سجل المحادثات</a></p>
-      <?php endif; ?>
+	      <?php if (!empty($detail['conversation_id'])): ?>
+	      <p>
+	        <button class="btn sm" onclick="openReportChat(<?= (int)$detail['conversation_id'] ?>, <?= (int)($detail['message_id'] ?? 0) ?>)">👁️ عرض المحادثة في نافذة منبثقة</button>
+	      </p>
+	      <p><a class="btn sm" href="chats.php?conversation_id=<?= (int)$detail['conversation_id'] ?>">فتح المحادثة الكاملة</a></p>
+	      <?php endif; ?>
     </div>
   </div>
 
@@ -295,7 +299,10 @@ include __DIR__ . '/includes/sidebar.php';
         <td><?= htmlspecialchars($r['reporter_name']) ?></td>
         <td><a href="?id=<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['reported_name']) ?></a></td>
         <td><?= htmlspecialchars(mb_substr($r['reason'], 0, 50)) ?></td>
-        <td><span class="badge-<?= $r['priority'] ?? 'medium' ?>"><?= $r['priority'] ?? 'medium' ?></span></td>
+	        <td>
+	          <?php $prioMap = ['high'=>'عالية','medium'=>'متوسطة','low'=>'منخفضة']; ?>
+	          <span class="badge-<?= $r['priority'] ?? 'medium' ?>"><?= $prioMap[$r['priority']] ?? 'متوسطة' ?></span>
+	        </td>
         <td>
           <?php $badgeMap = ['pending'=>'status warn','reviewing'=>'status online','resolved'=>'status online','rejected'=>'status blocked','closed'=>'status blocked','action_taken'=>'status online'];
                 $labelMap = ['pending'=>'معلق','reviewing'=>'مراجعة','resolved'=>'محلول','rejected'=>'مرفوض','closed'=>'مغلق','action_taken'=>'عوقب']; ?>
@@ -322,5 +329,54 @@ include __DIR__ . '/includes/sidebar.php';
 <?php endif; ?>
 
 <?php endif; ?>
+
+	<!-- Modal for Conversation Preview -->
+	<div id="reportChatModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; padding:20px;">
+	  <div class="card panel" style="max-width:800px; margin:50px auto; background:var(--surface); height:80vh; display:flex; flex-direction:column;">
+	    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:10px;">
+	      <h3 style="margin:0;">معاينة المحادثة المبلغ عنها</h3>
+	      <button onclick="document.getElementById('reportChatModal').style.display='none'" style="font-size:24px;">&times;</button>
+	    </div>
+	    <div id="reportChatContent" style="flex:1; overflow:auto; padding:10px; background:var(--bg); border-radius:8px;">
+	      <div style="text-align:center; padding:20px; color:var(--muted);">جاري تحميل الرسائل...</div>
+	    </div>
+	  </div>
+	</div>
+
+	<script>
+	function openReportChat(convId, highlightMsgId) {
+	  const modal = document.getElementById('reportChatModal');
+	  const content = document.getElementById('reportChatContent');
+	  modal.style.display = 'block';
+	  content.innerHTML = '<div style="text-align:center; padding:20px; color:var(--muted);">جاري تحميل الرسائل...</div>';
+
+	  fetch(`api/admin_api.php?action=get_conversation_messages&conversation_id=${convId}&limit=50`)
+	    .then(r => r.json())
+	    .then(data => {
+	      if (data.success && data.data) {
+	        let html = '';
+	        data.data.forEach(msg => {
+	          const isHighlight = msg.id == highlightMsgId;
+	          html += `
+	            <div style="margin-bottom:10px; padding:10px; border-radius:10px; background:${isHighlight ? '#fff3cd' : 'white'}; border:1px solid ${isHighlight ? '#ffeeba' : '#eee'};">
+	              <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+	                <b style="font-size:12px; color:var(--primary);">${msg.sender_name || 'مستخدم'}</b>
+	                <small style="color:#999; font-size:10px;">${msg.created_at}</small>
+	              </div>
+	              <div style="font-size:13px; color:var(--text);">${msg.content || (msg.file_id ? '[وسائط]' : '')}</div>
+	              ${isHighlight ? '<div style="font-size:9px; color:#856404; margin-top:4px; font-weight:bold;">⚠️ هذه هي الرسالة المبلغ عنها</div>' : ''}
+	            </div>
+	          `;
+	        });
+	        content.innerHTML = html || '<div style="text-align:center; padding:20px;">لا توجد رسائل</div>';
+	      } else {
+	        content.innerHTML = '<div style="text-align:center; padding:20px; color:var(--bad);">فشل تحميل الرسائل: ' + (data.message || 'خطأ غير معروف') + '</div>';
+	      }
+	    })
+	    .catch(err => {
+	      content.innerHTML = '<div style="text-align:center; padding:20px; color:var(--bad);">خطأ في الاتصال بالخادم</div>';
+	    });
+	}
+	</script>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
