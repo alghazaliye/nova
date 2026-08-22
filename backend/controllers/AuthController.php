@@ -484,11 +484,12 @@ class AuthController
         if (!$user) {
             $uuid = UuidHelper::generate();
             $stmt = $this->pdo->prepare(
-                "INSERT INTO users (uuid, phone, name, is_verified, created_at, updated_at)" .
-                 " VALUES (?, ?, ?, 0, datetime('now'), datetime('now'))"
+                "INSERT INTO users (uuid, phone, name, username, is_verified, created_at, updated_at)" .
+                 " VALUES (?, ?, ?, ?, 0, datetime('now'), datetime('now'))"
             );
             $name = isset($name) && trim($name) !== '' ? trim($name) : 'مستخدم NOVA';
-            $stmt->execute([$uuid, $phone, $name]);
+            // توحيد name و username لضمان التوافق مع الهيكل القديم
+            $stmt->execute([$uuid, $phone, $name, $name]);
             $userId = (int)$this->pdo->lastInsertId();
         } else {
             $userId = (int)$user['id'];

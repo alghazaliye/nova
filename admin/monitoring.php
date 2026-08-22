@@ -86,7 +86,7 @@ $error_logs = $pdo->query(
 
 // أنشط المستخدمين
 $active_users = $pdo->query(
-    "SELECT u.id, u.name, u.username, u.avatar, u.last_seen, (SELECT COUNT(*) FROM messages m WHERE m.sender_id = u.id AND date(m.created_at) = date('now')) as message_count
+    "SELECT u.id, u.name, u.avatar, u.last_seen, (SELECT COUNT(*) FROM messages m WHERE m.sender_id = u.id AND date(m.created_at) = date('now')) as message_count
      FROM users u
      ORDER BY u.last_seen DESC NULLS LAST LIMIT 20"
 )->fetchAll() ?: [];
@@ -263,8 +263,7 @@ include __DIR__ . '/includes/sidebar.php';
                                         <?= strtoupper(substr($user['name'], 0, 1)) ?>
                                     </div>
                                     <div>
-                                        <strong><?= htmlspecialchars($user['name']) ?></strong><br>
-                                        <small style="color: #666;">@<?= htmlspecialchars($user['username'] ?? '-') ?></small>
+                                        <strong><?= htmlspecialchars($user['name']) ?></strong>
                                     </div>
                                 </div>
                             </td>

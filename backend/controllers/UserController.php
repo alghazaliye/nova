@@ -355,8 +355,6 @@ class UserController
             'groups_from'          => self::_visibilityForInt((int)($row['groups_from'] ?? 1)),
             'find_by_phone'        => ((int)($row['find_by_phone'] ?? 1)) === 1,
             'find_by_email'        => ((int)($row['find_by_email'] ?? 1)) === 1,
-            'find_by_username'     => ((int)($row['find_by_username'] ?? 1)) === 1,
-            'display_identity'     => (string)($row['display_identity'] ?? 'name_username'),
             'story_privacy'        => (int)($row['story_privacy'] ?? 1),
             'allow_by_phone'       => ((int)($row['allow_by_phone'] ?? 1)) === 1,
         ]);
@@ -400,19 +398,10 @@ class UserController
             $params[] = filter_var($body['read_receipts'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
         }
         // find_by_*: bool
-        foreach (['find_by_phone', 'find_by_email', 'find_by_username'] as $f) {
+        foreach (['find_by_phone', 'find_by_email'] as $f) {
             if (array_key_exists($f, $body)) {
                 $sets[] = "{$f} = ?";
                 $params[] = filter_var($body[$f], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
-            }
-        }
-        // display_identity: name_username|username|phone|email|name_phone|name_email
-        if (array_key_exists('display_identity', $body)) {
-            $valid = ['name_username', 'username', 'phone', 'email', 'name_phone', 'name_email'];
-            $val   = in_array((string)$body['display_identity'], $valid, true) ? (string)$body['display_identity'] : null;
-            if ($val !== null) {
-                $sets[] = 'display_identity = ?';
-                $params[] = $val;
             }
         }
         // story_privacy: 1=all 2=contacts 3=share_with 4=nobody (numbers)
@@ -750,14 +739,12 @@ class UserController
     /** بناء display_name من profile (توحيد الاسم) */
     private static function _displayNameForIdentity(array $p): ?string
     {
-        // تم توحيد اسم المستخدم والاسم الظاهر في حقل واحد
+        // تم توحيد النظام لاستخدام حقل الاسم فقط
         $name = trim((string)($p['name'] ?? ''));
         if ($name !== '') return $name;
         
-        $username = trim((string)($p['username'] ?? ''));
-        if ($username !== '') return $username;
-        
-        return trim((string)($p['phone'] ?? ''));
+        // Fallback to phone if name is missing
+        return trim((string)($p['phone'] ?? 'مستخدم نوفا'));
     }
 
     /** تطبيق قواعد خصوصية على profile لـ$ownerId أمام $viewerId (null = لا عرض) */

@@ -177,10 +177,9 @@ include __DIR__ . '/includes/sidebar.php';
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
     <div>
-      <p><b>المُبلِّغ:</b> <?= htmlspecialchars($detail['reporter_name']) ?>
-         <?= $detail['reporter_phone'] ? '(' . htmlspecialchars($detail['reporter_phone']) . ')' : '' ?>
-         <?php if ($detail['reporter_username']) { ?><span style="color:var(--muted)">@<?= htmlspecialchars($detail['reporter_username']) ?></span><?php } ?>
-      </p>
+	      <p><b>المُبلِّغ:</b> <?= htmlspecialchars($detail['reporter_name']) ?>
+	         <?= $detail['reporter_phone'] ? '(' . htmlspecialchars($detail['reporter_phone']) . ')' : '' ?>
+	      </p>
       <p><b>المُبلَّغ عنه:</b> <?= htmlspecialchars($detail['reported_name']) ?>
          <?= $detail['reported_phone'] ? '(' . htmlspecialchars($detail['reported_phone']) . ')' : '' ?>
          <?= $detail['reported_blocked'] ? '<span class="status blocked">محظور</span>' : '' ?>
